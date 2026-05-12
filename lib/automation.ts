@@ -56,12 +56,16 @@ function detectCategory(text: string, sourceCategory: string): string {
   return best && best[1] > 0 ? best[0] : sourceCategory;
 }
 
-async function fetchArticleText(url: string): Promise<string> {
+async function tryFetchArticleText(url: string): Promise<string> {
   try {
     const res = await fetch(url, {
-      headers: { "User-Agent": "FinCNews-Bot/1.0" },
-      signal: AbortSignal.timeout(5000),
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+        "Accept": "text/html,application/xhtml+xml",
+      },
+      signal: AbortSignal.timeout(8000),
     });
+    if (!res.ok) return "";
     const html = await res.text();
     return html
       .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
@@ -211,13 +215,18 @@ export async function runAutomation(maxArticles = 3): Promise<AutomationResult> 
   const newItems = fresh.filter((i) => !seen.has(i.link!));
 
   const toProcess = newItems.slice(0, maxArticles);
-  const skipped = fresh.length - toProcess.length;
+  // skipped = already in processed_urls (deduped)
+  const skipped = fresh.length - newItems.length;
   const details: AutomationResult["details"] = [];
 
   for (const item of toProcess) {
     try {
-      const bodyText = await fetchArticleText(item.link!);
-      const category = detectCategory(`${item.title} ${item.contentSnippet}`, item.sourceCategory);
+      // RSS excerpt is always available — use full scrape as bonus if site allows it
+      const rssText = item.contentSnippet ?? "";
+      const scraped = await tryFetchArticleText(item.link!);
+      const bodyText = scraped.length > 300 ? scraped : rssText;
+
+      const category = detectCategory(`${item.title} ${rssText}`, item.sourceCategory);
       const article = await callClaude({ title: item.title ?? "Untitled", pubDate: item.pubDate }, bodyText, category);
 
       const en = (article.translations as Record<string, Record<string, string>>)?.en;
