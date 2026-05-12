@@ -1,44 +1,100 @@
-# Content Factory — Master Prompt & System Specification
+# FinCNews — Content Factory Master Spec
 
-## Role
-You are a senior full-stack developer building a **production-ready, automated finance news content factory**.
-Stack: Next.js 14 + Sanity CMS + n8n + Claude API + Telegram Bot API.
-Niche: **Finance** (crypto, macro, markets, fintech, regulation).
-Primary language: **English**. Site also supports ua/ru/pl via existing i18n.
+## Current Stack
+- **Frontend**: Next.js 14 (App Router) → deployed on **Vercel** at `fin-c-news.vercel.app`
+- **CMS**: Sanity (project `x55aaanw`, dataset `production`) → Studio at `fincnews.sanity.studio`
+- **Automation**: n8n + Claude API + Telegram Bot
+- **Language**: English only
+- **Niche**: Finance (crypto, markets, macro, fintech, policy, corporate)
 
 ---
 
-## System Architecture
+## Architecture
 
 ```
-[News Sources] → [n8n: Monitor] → [n8n: Filter & Deduplicate]
-                                          ↓
-                              [n8n: Claude API — Generate Cluster]
-                                          ↓
-                    ┌─────────────────────┼──────────────────────┐
-                    ↓                     ↓                      ↓
-             [POST /api/publish]   [Telegram Bot]    [Google Indexing API]
-                    ↓
-             [Sanity CMS]
-                    ↓
-             [Next.js Site — SEO]
+[RSS Sources] → [n8n: Monitor 15min] → [n8n: Deduplicate]
+                                               ↓
+                                   [n8n: Fetch full article text]
+                                               ↓
+                                   [n8n: Claude API — generate article JSON]
+                                               ↓
+                              ┌────────────────┼─────────────────┐
+                              ↓                ↓                 ↓
+                     [POST /api/publish]  [Pexels image]  [Telegram post]
+                              ↓
+                       [Sanity CMS]
+                              ↓
+                    [Next.js ISR — 60s revalidate]
+                              ↓
+                    [Google Indexing API — submit URL]
 ```
 
-### Key constraint
-`/api/publish` already exists and validates:
-- `slug`, `category` (must be in allowed list), `translations` with `title/excerpt/body` for all locales.
-- Allowed categories: `tech | finance | crypto | world | ukraine | lifestyle | sport | auto | health`
-- Locales: `en | ua | ru | pl`
+---
+
+## Route Structure
+
+```
+/                          → homepage (hero + market bar + trending + grid)
+/[category]                → category page (crypto, markets, economy, fintech, policy, companies)
+/[category]/[slug]         → article page
+/terms-and-conditions      → legal
+/privacy-policy            → legal
+/api/publish               → POST endpoint for n8n (Bearer auth)
+/api/feed                  → RSS feed
+/sitemap.xml               → auto-generated
+/robots.txt                → auto-generated
+/opengraph-image           → default OG image (Edge runtime)
+/studio                    → REMOVED — use fincnews.sanity.studio instead
+```
+
+---
+
+## Categories
+
+| Slug | Label | Trigger Keywords |
+|------|-------|-----------------|
+| `crypto` | Crypto | bitcoin, ethereum, solana, ETF, hack, exploit, fork, airdrop, listing, DeFi, NFT |
+| `markets` | Markets | S&P, nasdaq, dow, gold, oil, futures, earnings, IPO, index |
+| `economy` | Economy | Fed, rate, CPI, GDP, inflation, recession, FOMC, Powell, ECB |
+| `fintech` | Fintech | payment, neobank, stablecoin, CBDC, banking, stripe, revolut |
+| `policy` | Policy | SEC, regulation, ban, law, congress, CFTC, MiCA, compliance |
+| `companies` | Companies | earnings, revenue, acquisition, merger, layoffs, IPO, quarterly |
+
+---
+
+## /api/publish Payload
+
+```json
+{
+  "slug": "kebab-case-slug-max-60-chars",
+  "category": "crypto",
+  "tags": ["bitcoin", "etf", "institutional"],
+  "sourceUrl": "https://coindesk.com/...",
+  "translations": {
+    "en": {
+      "title": "SEO title 50-60 chars with primary keyword",
+      "excerpt": "2-3 sentence summary with primary keyword",
+      "body": "Full article text. Paragraphs separated by \\n\\n",
+      "metaTitle": "Meta title 50-60 chars",
+      "metaDescription": "Meta description 150-160 chars with CTA",
+      "telegramText": "Telegram post text (Post 1 ||| Post 2 ||| Post 3)"
+    }
+  }
+}
+```
+
+**Auth**: `Authorization: Bearer fincnews_secret_2026`
+**Endpoint (prod)**: `https://fin-c-news.vercel.app/api/publish`
+**Validation**: only `translations.en` is required (title + excerpt + body)
 
 ---
 
 ## n8n Workflows
 
-### Workflow 1 — News Monitor (trigger: every 15 min)
+### Workflow 1 — RSS Monitor (Cron: every 15 min)
 
-**Nodes:**
-1. **Cron** — every 15 minutes
-2. **RSS Feed** (parallel, one node per source):
+1. **Cron** — trigger every 15 min
+2. **RSS Feed nodes** (run in parallel):
    - `https://www.coindesk.com/arc/outboundfeeds/rss/`
    - `https://cointelegraph.com/rss`
    - `https://theblock.co/rss.xml`
@@ -46,248 +102,222 @@ Primary language: **English**. Site also supports ua/ru/pl via existing i18n.
    - `https://beincrypto.com/feed/`
    - `https://www.newsbtc.com/feed/`
    - `https://bitcoinmagazine.com/feed`
-3. **Merge** — combine all RSS items
-4. **Code (JS)** — filter by recency (< 2h old), deduplicate by URL using n8n static data store
-5. **Filter** — keep items where title/description contains trigger keywords:
+   - `https://cryptoslate.com/feed/`
+3. **Merge** — combine all items
+4. **Code (JS)** — filter `pubDate < 2h ago`, deduplicate by URL via n8n static store
+5. **Filter** — keep if title/description matches:
    ```
-   hack|exploit|partnership|regulation|ban|launch|listing|ETF|rate|fed|SEC|crash|pump|bankruptcy|merge|fork|upgrade|airdrop|settlement
+   hack|exploit|ETF|regulation|ban|launch|listing|rate|fed|SEC|crash|bankruptcy|fork|upgrade|airdrop|merger|earnings|IPO|stablecoin|CBDC
    ```
-6. **HTTP Request** → Workflow 2 (via n8n webhook)
+6. **HTTP Request** → trigger Workflow 2 webhook
 
-### Workflow 2 — Content Generator (trigger: webhook from Workflow 1)
+### Workflow 2 — Content Generator (Webhook)
 
-**Input:** `{ title, description, url, pubDate, source }`
+**Input**: `{ title, description, url, pubDate, source }`
 
-**Nodes:**
-1. **Webhook** — receive article seed
-2. **HTTP Request: Fetch Source** — GET source URL, extract body text (use cheerio via Code node)
-3. **HTTP Request: Claude API** — generate full content cluster (see Claude Prompts section)
-4. **Code (JS)** — parse Claude JSON response, build `/api/publish` payload
-5. **HTTP Request: POST /api/publish** — publish to Sanity
-6. **IF** — on success → Workflow 3 (Telegram) + Workflow 4 (Indexer)
+1. **Webhook** — receive trigger
+2. **HTTP Request** — `GET {url}` → extract `<article>` body text via Code node (cheerio or regex)
+3. **HTTP Request** — Claude API (see prompt below)
+4. **Code (JS)** — parse Claude JSON → validate → build `/api/publish` payload
+5. **HTTP Request** — `POST https://fin-c-news.vercel.app/api/publish`
+6. **HTTP Request** — Pexels API → fetch cover image → upload to Sanity → patch article
+7. **IF success** → trigger Workflow 3 (Telegram) + Workflow 4 (Google Index)
 
 ### Workflow 3 — Telegram Distributor
 
-**Input:** `{ slug, category, translations.en }`
+**Input**: `{ slug, category, en.title, en.telegramText }`
 
-**Nodes:**
-1. **Wait** — 5 minutes after publish (Google needs to crawl first)
-2. **Telegram: Send Post 1** — value post (use `translations.en.telegramText` field, part 1)
-3. **Wait** — 3 hours
-4. **Telegram: Send Post 2** — expert take ("how to profit/protect from this")
-5. **Wait** — 6 hours
-6. **Telegram: Send Post 3** — affiliate offer (append partner link)
+1. **Split telegramText** by `|||` → 3 posts
+2. **Send Post 1** immediately (value post)
+3. **Wait** 3h
+4. **Send Post 2** (expert analysis)
+5. **Wait** 6h
+6. **Send Post 3** (affiliate offer)
 
-**Telegram message format:**
+**Message format:**
 ```
-📌 *{headline}*
+*{title}*
 
-{2-3 sentence summary}
+{post text}
 
-👉 Full analysis: https://fincnews.com/{locale}/{category}/{slug}
+👉 https://fin-c-news.vercel.app/{category}/{slug}
 
-#finance #{category} #{tag1} #{tag2}
+#{category} #{tag1} #{tag2}
 ```
 
 ### Workflow 4 — Google Indexer
 
-**Nodes:**
-1. **HTTP Request** — POST to Google Indexing API
-   - URL: `https://indexing.googleapis.com/v3/urlNotifications:publish`
-   - Body: `{ "url": "https://fincnews.com/en/{category}/{slug}", "type": "URL_UPDATED" }`
-   - Auth: Google Service Account JWT
-2. **Repeat** for each locale: en, ua, ru, pl
+1. **HTTP Request** → `POST https://indexing.googleapis.com/v3/urlNotifications:publish`
+   ```json
+   { "url": "https://fin-c-news.vercel.app/{category}/{slug}", "type": "URL_UPDATED" }
+   ```
+2. Auth: Google Service Account JWT (Bearer)
+3. Limit: max 200 URLs/day per quota
 
 ---
 
-## Claude API Prompts
+## Claude API Prompt
 
-### Master Prompt — Full Cluster Generation
-
-Use model: `claude-opus-4-7` (or `claude-sonnet-4-6` for cost savings).
-Response must be **valid JSON** — use `max_tokens: 8000`.
+**Model**: `claude-sonnet-4-6` (cost) or `claude-opus-4-7` (quality)
+**Max tokens**: 4000
+**Response**: strict JSON only
 
 ```
-You are a senior financial journalist with 15 years of experience covering global markets, crypto, and fintech. You write for institutional and retail investors. Your writing is factual, precise, and SEO-optimized.
+You are a senior financial journalist with 15 years covering crypto, markets, and macroeconomics. You write for institutional and retail investors. Writing is factual, precise, data-driven, and SEO-optimized.
 
-INPUT NEWS:
+INPUT:
 Title: {title}
 Source: {source}
 Published: {pubDate}
-Original text: {scrapedBody}
+Article text: {scrapedBody}
 
-TASK:
-Analyze the above news and generate a full content cluster as a JSON object with this exact structure:
+TASK: Generate a finance news article as a single valid JSON object:
 
 {
-  "slug": "kebab-case-url-slug-max-60-chars",
-  "category": "one of: finance | crypto | tech",
+  "slug": "kebab-case-max-60-chars-with-primary-keyword",
+  "category": "one of: crypto | markets | economy | fintech | policy | companies",
   "tags": ["tag1", "tag2", "tag3", "tag4"],
-  "sourceUrl": "{original_url}",
+  "sourceUrl": "{url}",
   "translations": {
     "en": {
-      "title": "SEO title, 50-60 chars, contains primary keyword",
-      "metaTitle": "Meta title 50-60 chars",
-      "metaDescription": "Meta description 150-160 chars with CTA",
-      "excerpt": "2-3 sentence summary, contains primary keyword naturally",
-      "body": "FULL HUB ARTICLE — see format below",
-      "telegramText": "TELEGRAM 3-POST SEQUENCE — see format below"
-    },
-    "ua": { same structure, translated to Ukrainian },
-    "ru": { same structure, translated to Russian },
-    "pl": { same structure, translated to Polish }
+      "title": "50-60 chars, primary keyword first, no clickbait",
+      "metaTitle": "50-60 chars for Google SERP",
+      "metaDescription": "150-160 chars, includes CTA like 'Full analysis inside'",
+      "excerpt": "2-3 sentences, includes primary keyword naturally, under 300 chars",
+      "body": "FULL ARTICLE — see format below",
+      "telegramText": "3-POST SEQUENCE — see format below"
+    }
   }
 }
 
-HUB ARTICLE FORMAT (body field, 1500+ words, plain text with \n\n between paragraphs):
-- H2: What Happened (factual recap from 2-3 angles)
-- H2: Why This Matters for Investors (market impact, historical context)
-- H2: Expert Analysis (write as "Based on my analysis of the on-chain data..." — first person, authoritative)
-- H2: What Could Happen Next (3 scenarios: bull / base / bear)
-- H2: How to Position (actionable advice, NOT financial advice disclaimer at end)
-- Add naturally: 3-4 LSI keywords, 1-2 internal link placeholders as [INTERNAL: related topic], 1 external authority link to primary source
+BODY FORMAT (plain text, paragraphs separated by \n\n, 800-1200 words):
+Para 1: What happened — factual, specific numbers, named entities, dates
+Para 2: Why it matters — market impact, historical context, comparison
+Para 3: Expert analysis — write as "Based on my analysis of [specific data]..." — authoritative first person
+Para 4: Three scenarios — Bull case / Base case / Bear case with specific price targets or metrics
+Para 5: How to act — actionable takeaway. End with: "This is not financial advice. Always do your own research."
 
-TELEGRAM 3-POST SEQUENCE (telegramText field, all 3 posts separated by "|||"):
-Post 1 (Value): 150-200 words. Explain the news plainly. End with article link placeholder [ARTICLE_URL].
-Post 2 (Expert take): 100-150 words. "Here's what this means for your portfolio" framing. 1 rhetorical question.
-Post 3 (Offer): 80-100 words. Natural affiliate bridge — "I use [SERVICE] to track/trade/protect against exactly this kind of event." End with [AFFILIATE_URL] placeholder.
+TELEGRAM 3-POST SEQUENCE (telegramText — join with " ||| "):
+Post 1 (150-200 words): Plain English recap of the news. End with "[ARTICLE_URL]"
+Post 2 (100-150 words): "Here's what this means for your portfolio..." Expert framing. One rhetorical question.
+Post 3 (80-100 words): Natural affiliate bridge. "I use [SERVICE] for exactly this situation." End with "[AFFILIATE_URL]"
 
-QUALITY RULES:
-- Verify: only include facts present in the source text. Mark speculation clearly as "analysts expect" or "could potentially".
-- No clickbait. No ALL CAPS. No invented quotes.
-- Google E-E-A-T: include specific numbers, dates, named entities.
-- Each translation must be culturally adapted, not word-for-word translation.
-```
-
-### Quick Satellite Prompt (for Reddit/Quora posts)
-
-```
-You are a finance expert answering a specific question on Reddit r/investing or r/CryptoCurrency.
-
-NEWS CONTEXT: {excerpt from hub article}
-MICRO-QUERY: {specific question, e.g. "Is my {exchange} funds safe after this hack?"}
-
-Write a 300-400 word Reddit-style answer:
-- Start with direct answer (no fluff)
-- Give 2-3 supporting points with data
-- End with "I wrote a deeper breakdown here: [ARTICLE_URL]"
-- Tone: helpful expert, not promotional
-- No markdown headers — use plain paragraphs
+RULES:
+- Only use facts present in the source text
+- Mark speculation as "analysts expect" or "could potentially"
+- No invented quotes. No ALL CAPS. No emoji in body.
+- Include at least 3 specific numbers/dates/names
+- slug must be unique and descriptive, max 60 chars
 ```
 
 ---
 
-## Environment Variables Required
+## Image Pipeline (Pexels)
+
+In Workflow 2, after publishing to Sanity:
+
+```
+Pexels API: GET https://api.pexels.com/v1/search?query={keyword}&per_page=1&orientation=landscape
+Header: Authorization: {PEXELS_API_KEY}
+→ extract photos[0].src.large2x
+→ fetch image as Buffer
+→ POST to Sanity assets API
+→ PATCH article._id with coverImage reference
+```
+
+Keywords per category:
+- `crypto` → `"bitcoin cryptocurrency blockchain"`
+- `markets` → `"stock market trading finance"`
+- `economy` → `"federal reserve central bank economy"`
+- `fintech` → `"mobile payment technology fintech"`
+- `policy` → `"law regulation government finance"`
+- `companies` → `"corporate office business earnings"`
+
+---
+
+## Environment Variables
 
 ```env
-# Sanity
-SANITY_PROJECT_ID=
-SANITY_DATASET=production
-SANITY_TOKEN=
+# Vercel / Next.js
+NEXT_PUBLIC_BASE_URL=https://fin-c-news.vercel.app
+NEXT_PUBLIC_SANITY_PROJECT_ID=x55aaanw
+NEXT_PUBLIC_SANITY_DATASET=production
 
-# Automation
-N8N_SECRET=                     # Bearer token for /api/publish auth
+# Sanity (server-side)
+SANITY_PROJECT_ID=x55aaanw
+SANITY_DATASET=production
+SANITY_TOKEN=sk...
+
+# n8n auth
+N8N_SECRET=fincnews_secret_2026
 
 # Telegram
 TELEGRAM_BOT_TOKEN=
-TELEGRAM_CHANNEL_ID=            # e.g. @fincnews or -100xxxxxxxxxx
+TELEGRAM_CHANNEL_ID=   # @fincnews or -100xxxxxxx
 
 # Claude API
 ANTHROPIC_API_KEY=
 
-# Google Indexing
+# Images
+PEXELS_API_KEY=
+
+# Google Indexing (optional)
 GOOGLE_SERVICE_ACCOUNT_EMAIL=
-GOOGLE_PRIVATE_KEY=             # JSON escaped
-
-# Affiliate (Finance niche defaults)
-AFFILIATE_BINANCE=
-AFFILIATE_OKEX=
-AFFILIATE_TRADINGVIEW=
-AFFILIATE_NORDVPN=
+GOOGLE_PRIVATE_KEY=
 ```
 
 ---
 
-## Content Strategy — Finance Niche
+## What Is Already Built ✅
 
-### Priority Categories
-| Category | Trigger Keywords | Affiliate Match |
-|----------|-----------------|-----------------|
-| `crypto` | hack, exploit, listing, ETF, fork, upgrade | Binance, OKX, Ledger |
-| `finance` | Fed, rate, CPI, GDP, earnings, bankruptcy | TradingView, Wise |
-| `tech` | AI launch, SaaS funding, acquisition | Semrush, HubSpot |
+### Site (Next.js on Vercel)
+- [x] Homepage: PriceTicker (live CoinGecko) + MarketBar (6 crypto) + HeroSection + Trending sidebar
+- [x] Category pages: `/crypto`, `/markets`, `/economy`, `/fintech`, `/policy`, `/companies`
+- [x] Article pages: breadcrumbs, JSON-LD NewsArticle, reading time, share buttons (Telegram/X/copy), tags, related articles
+- [x] Header: sticky, mobile menu (hamburger → dropdown)
+- [x] Footer: sections, social links, RSS, legal links
+- [x] `/api/publish` — n8n → Sanity write endpoint (Bearer auth)
+- [x] `/api/feed` — RSS feed
+- [x] `/sitemap.xml` — auto-generated from Sanity articles
+- [x] `/robots.txt`
+- [x] `/opengraph-image` — default branded OG image (Edge runtime)
+- [x] `/terms-and-conditions` — adapted legal page
+- [x] `/privacy-policy` — GDPR-compliant with AI disclosure
 
-### Content Cluster Structure per Story
-```
-HUB (Medium/LinkedIn) ← NOT built yet, future expansion
-  ├── Main article on site (/en/crypto/{slug})
-  │     └── Internal links to 2 older articles
-  ├── Satellite 1: Reddit r/CryptoCurrency — micro-query answer
-  ├── Satellite 2: Quora — "What does X mean for Y?"
-  └── Telegra.ph — ultra-short briefing (for backlinks)
-        ↓ all link back to main article
-              ↓
-        Telegram Channel (3-post funnel)
-              ↓
-        Affiliate conversion
-```
-
-### Slug Convention
-`{primary-keyword}-{year}-{month}` → e.g. `bitcoin-etf-approval-2026-05`
-
-### Publish Cadence
-- **Breaking news**: immediately, within 30 min of source
-- **Analysis**: 1-2 per day
-- **Evergreen**: 3 per week (manually or scheduled n8n)
+### CMS
+- [x] Sanity project `x55aaanw` connected
+- [x] Sanity Studio deployed at `fincnews.sanity.studio`
+- [x] Article schema: slug, category, translations.en (title/excerpt/body/metaTitle/metaDescription/telegramText), coverImage, tags, sourceUrl, publishedAt
+- [x] 11 test articles published with cover images
 
 ---
 
-## Implementation Checklist
+## What Needs to Be Built 🔲
 
-### Phase 1 — Core Pipeline (Week 1)
-- [ ] Deploy n8n (self-hosted via Docker or n8n.cloud)
-- [ ] Build Workflow 1: RSS Monitor with deduplication
-- [ ] Build Workflow 2: Claude content generator
-- [ ] Test `/api/publish` end-to-end with mock payload
-- [ ] Configure `.env` with all secrets
+### n8n Automation
+- [ ] Deploy n8n (n8n.cloud or self-hosted Docker)
+- [ ] Workflow 1: RSS Monitor + deduplication (15-min cron)
+- [ ] Workflow 2: Claude content generator + Pexels image + `/api/publish`
+- [ ] Workflow 3: Telegram 3-post funnel with delays
+- [ ] Workflow 4: Google Indexing API submission (optional)
 
-### Phase 2 — Distribution (Week 2)
-- [ ] Create Telegram bot + channel
-- [ ] Build Workflow 3: 3-post Telegram funnel with delays
-- [ ] Build Workflow 4: Google Indexing API submission
-- [ ] Add `sitemap.xml` generation to Next.js
+### Monetization
+- [ ] Create Telegram channel + bot
+- [ ] Set affiliate links (Binance, TradingView, OKX, NordVPN)
+- [ ] Wire affiliate placeholders in Workflow 3 Post 3
+- [ ] Add newsletter signup (Beehiiv embed)
 
-### Phase 3 — SEO & Quality (Week 3)
-- [ ] Add `robots.txt`, canonical tags, OG meta to Next.js pages
-- [ ] Implement structured data (Article schema, BreadcrumbList)
-- [ ] Add reading time, author entity (even if "FinCNews Editorial Team")
-- [ ] Add RSS feed for the site itself (`/feed.xml`)
-- [ ] Set up Reddit/Quora satellite posting (manual first, then automate)
-
-### Phase 4 — Monetization (Week 4)
-- [ ] Integrate affiliate links into Telegram Post 3 template
-- [ ] A/B test Telegram CTA copy
-- [ ] Add newsletter capture (Beehiiv or ConvertKit embed)
-- [ ] Set up Plausible or Umami (privacy-first analytics)
+### Analytics
+- [ ] Add Plausible or Umami (privacy-first, no cookie banner needed)
 
 ---
 
-## Code Conventions for This Project
+## Anti-patterns
 
-- All API routes live in `app/api/`
-- Sanity client: always import from `lib/sanity.ts`
-- i18n config (locales, categories): always import from `lib/i18n.ts`
-- n8n communicates via `Bearer ${N8N_SECRET}` header
-- Body field in Sanity accepts both plain string (n8n sends text) and PortableTextBlock[] — the `/api/publish` route normalizes both
-- Never hardcode locale strings — always use `locales` array from `lib/i18n.ts`
-
----
-
-## Anti-patterns to Avoid
-
-- Do NOT generate content without source URL — always cite
-- Do NOT publish if Claude returns non-JSON (add try/catch + n8n error branch)
-- Do NOT post to Telegram before article is live on site (use the 5-min delay)
-- Do NOT use `dangerouslyAllowBrowser: true` in Sanity client — server-side only
-- Do NOT translate with simple word-for-word prompts — instruct Claude to culturally adapt
-- Do NOT index more than 200 URLs/day via Google Indexing API (quota limit)
+- Never publish without `sourceUrl` — always cite
+- Never post to Telegram before article is live on site (add 5-min delay or check 200 status)
+- If Claude returns non-JSON, log the error and skip — do NOT retry blindly
+- Do not exceed 200 Google Indexing API requests/day
+- `SANITY_TOKEN` is server-side only — never expose via `NEXT_PUBLIC_`
+- N8N_SECRET must be ASCII only — Cyrillic or special chars break curl/n8n auth headers
+- Pexels requires `Authorization` header (not query param)
