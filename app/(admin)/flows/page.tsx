@@ -123,7 +123,6 @@ export default async function FlowsPage() {
                     </tr>
                   ) : (
                     logs.map((log) => {
-                      const d = log.details as unknown as Record<string, number> & typeof log.details;
                       return (
                         <tr key={log.id} className="transition hover:bg-white/[0.02]">
                           <td className="px-3 py-3 text-xs tabular-nums text-zinc-400">{timeAgo(log.started_at)}</td>
