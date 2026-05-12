@@ -7,24 +7,58 @@ type FeedEntry = {
   contentSnippet?: string;
 };
 
-function extractTag(xml: string, tag: string): string {
-  const m = xml.match(new RegExp(`<${tag}[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/${tag}>`, "i"));
-  return m ? m[1].trim() : "";
+function extractCdata(xml: string, tag: string): string {
+  // Handle CDATA: <tag><![CDATA[text]]></tag>
+  const cdataRe = new RegExp(`<${tag}[^>]*>\\s*<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>\\s*<\\/${tag}>`, "i");
+  const cdataMatch = xml.match(cdataRe);
+  if (cdataMatch) return cdataMatch[1].trim();
+
+  // Plain text: <tag>text</tag>
+  const plainRe = new RegExp(`<${tag}[^>]*>([^<]*)<\\/${tag}>`, "i");
+  const plainMatch = xml.match(plainRe);
+  if (plainMatch) return plainMatch[1].trim();
+
+  return "";
+}
+
+function extractLink(itemXml: string): string {
+  // Try <link>url</link>
+  const plain = itemXml.match(/<link>([^<]+)<\/link>/i);
+  if (plain) return plain[1].trim();
+  // Try <link href="url" .../>
+  const attr = itemXml.match(/<link[^>]+href=["']([^"']+)["']/i);
+  if (attr) return attr[1].trim();
+  // Fallback to guid
+  return extractCdata(itemXml, "guid");
 }
 
 async function parseFeed(url: string): Promise<FeedEntry[]> {
   const res = await fetch(url, {
     headers: { "User-Agent": "FinCNews-Bot/1.0" },
-    signal: AbortSignal.timeout(6000),
+    // no-store: skip Next.js cache so we always get fresh RSS
+    cache: "no-store",
+    signal: AbortSignal.timeout(8000),
   });
   if (!res.ok) return [];
   const xml = await res.text();
-  const items = xml.match(/<item[\s\S]*?<\/item>/gi) ?? [];
-  return items.slice(0, 20).map((item) => ({
-    title: extractTag(item, "title"),
-    link: extractTag(item, "link") || extractTag(item, "guid"),
-    pubDate: extractTag(item, "pubDate"),
-    contentSnippet: extractTag(item, "description").replace(/<[^>]+>/g, " ").slice(0, 300),
+
+  // Support both RSS <item> and Atom <entry>
+  const itemRe = /<(item|entry)[\s>][\s\S]*?<\/(item|entry)>/gi;
+  const items: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = itemRe.exec(xml)) !== null && items.length < 20) {
+    items.push(m[0]);
+  }
+
+  return items.map((item) => ({
+    title: extractCdata(item, "title"),
+    link: extractLink(item),
+    pubDate: extractCdata(item, "pubDate") || extractCdata(item, "published") || extractCdata(item, "updated"),
+    contentSnippet: extractCdata(item, "description")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 400),
   }));
 }
 
@@ -250,6 +284,7 @@ export type AutomationResult = {
   articlesPublished: number;
   articlesSkipped: number;
   durationMs: number;
+  sampleTitles: string[];   // first 3 raw titles for debug
   details: DetailEntry[];
 };
 
@@ -258,7 +293,7 @@ export async function runAutomation(maxArticles = 3): Promise<AutomationResult> 
   const db = supabaseAdmin();
 
   const { data: sources } = await db.from("rss_sources").select("*").eq("enabled", true);
-  if (!sources?.length) return { articlesFound: 0, articlesAfterKeywords: 0, articlesAfterUrlDedup: 0, articlesAfterSemanticDedup: 0, articlesPublished: 0, articlesSkipped: 0, durationMs: Date.now() - start, details: [] };
+  if (!sources?.length) return { articlesFound: 0, articlesAfterKeywords: 0, articlesAfterUrlDedup: 0, articlesAfterSemanticDedup: 0, articlesPublished: 0, articlesSkipped: 0, durationMs: Date.now() - start, sampleTitles: [], details: [] };
 
   type FeedItem = { title?: string; link?: string; pubDate?: string; contentSnippet?: string; sourceCategory: string; sourceName: string };
   const allItems: FeedItem[] = [];
@@ -275,13 +310,14 @@ export async function runAutomation(maxArticles = 3): Promise<AutomationResult> 
     }
   }
 
-  // Filter: < 48h old and contains keywords
+  // Filter: link required, < 48h old, contains finance keywords
   const cutoff = Date.now() - 48 * 60 * 60 * 1000;
   const fresh = allItems.filter((item) => {
-    if (!item.link || !item.title) return false;
+    if (!item.link) return false;                                    // must have URL
     const age = new Date(item.pubDate ?? 0).getTime();
-    if (item.pubDate && age < cutoff) return false;
-    const text = `${item.title} ${item.contentSnippet ?? ""}`.toLowerCase();
+    if (item.pubDate && age > 0 && age < cutoff) return false;      // too old
+    const text = `${item.title ?? ""} ${item.contentSnippet ?? ""}`.toLowerCase();
+    if (text.trim().length < 10) return false;                       // no usable text
     return KEYWORDS.some((kw) => text.includes(kw.toLowerCase()));
   });
 
@@ -364,6 +400,7 @@ export async function runAutomation(maxArticles = 3): Promise<AutomationResult> 
     articlesPublished: details.filter((d) => d.status === "published").length,
     articlesSkipped: skipped,
     durationMs: Date.now() - start,
+    sampleTitles: allItems.slice(0, 5).map((i) => i.title ?? "(empty)"),
     details,
   };
 }
