@@ -1,6 +1,6 @@
 import { createClient } from "@sanity/client";
 import { NextRequest, NextResponse } from "next/server";
-import { categories, locales } from "@/lib/i18n";
+import { isCategory } from "@/lib/i18n";
 import type { PortableTextBlock } from "@/lib/sanity";
 
 type IncomingArticle = {
@@ -10,17 +10,16 @@ type IncomingArticle = {
   sourceUrl?: string;
   coverImage?: unknown;
   tags?: string[];
-  translations?: Record<
-    string,
-    {
+  translations?: {
+    en?: {
       title?: string;
       excerpt?: string;
       body?: string | PortableTextBlock[];
       metaTitle?: string;
       metaDescription?: string;
       telegramText?: string;
-    }
-  >;
+    };
+  };
 };
 
 export async function POST(req: NextRequest) {
@@ -35,11 +34,8 @@ export async function POST(req: NextRequest) {
   }
 
   const article = (await req.json()) as IncomingArticle;
-  const validationError = validateArticle(article);
-
-  if (validationError) {
-    return NextResponse.json({ error: validationError }, { status: 400 });
-  }
+  const error = validate(article);
+  if (error) return NextResponse.json({ error }, { status: 400 });
 
   const sanity = createClient({
     projectId: process.env.SANITY_PROJECT_ID,
@@ -49,88 +45,51 @@ export async function POST(req: NextRequest) {
     useCdn: false,
   });
 
+  const en = article.translations!.en!;
+
   const doc = await sanity.create({
     _type: "article",
-    ...article,
     slug: {
       _type: "slug",
       current: typeof article.slug === "string" ? article.slug : article.slug?.current,
     },
     category: article.category,
-    translations: normalizeTranslations(article.translations ?? {}),
     publishedAt: article.publishedAt ?? new Date().toISOString(),
+    sourceUrl: article.sourceUrl,
+    coverImage: article.coverImage,
+    tags: article.tags,
+    translations: {
+      en: {
+        ...en,
+        body: normalizeBody(en.body),
+      },
+    },
   });
 
   return NextResponse.json({ success: true, id: doc._id });
 }
 
-function validateArticle(article: IncomingArticle) {
+function validate(article: IncomingArticle): string | null {
   const slug = typeof article.slug === "string" ? article.slug : article.slug?.current;
-
-  if (!slug) {
-    return "Missing slug";
-  }
-
-  if (!article.category || !categories.includes(article.category as never)) {
-    return "Invalid category";
-  }
-
-  if (!article.translations) {
-    return "Missing translations";
-  }
-
-  for (const locale of locales) {
-    const translation = article.translations[locale];
-
-    if (!translation?.title || !translation.excerpt || !translation.body) {
-      return `Missing required translation fields for ${locale}`;
-    }
-  }
-
+  if (!slug) return "Missing slug";
+  if (!article.category || !isCategory(article.category)) return "Invalid category";
+  const en = article.translations?.en;
+  if (!en?.title || !en.excerpt || !en.body) return "Missing translations.en fields";
   return null;
 }
 
-function normalizeTranslations(translations: NonNullable<IncomingArticle["translations"]>) {
-  return Object.fromEntries(
-    locales.map((locale) => {
-      const translation = translations[locale];
-
-      return [
-        locale,
-        {
-          ...translation,
-          body: normalizeBody(translation?.body),
-        },
-      ];
-    }),
-  );
-}
-
 function normalizeBody(body: string | PortableTextBlock[] | undefined): PortableTextBlock[] {
-  if (Array.isArray(body)) {
-    return body;
-  }
-
-  if (!body) {
-    return [];
-  }
-
+  if (Array.isArray(body)) return body;
+  if (!body) return [];
   return body
     .split(/\n{2,}/)
-    .map((paragraph) => paragraph.trim())
+    .map((t) => t.trim())
     .filter(Boolean)
-    .map((paragraph, index) => ({
-      _type: "block",
-      _key: `paragraph-${index}`,
+    .map((text, i) => ({
+      _type: "block" as const,
+      _key: `p-${i}`,
       style: "normal",
       markDefs: [],
-      children: [
-        {
-          _type: "span",
-          _key: `paragraph-${index}-span`,
-          text: paragraph,
-          marks: [],
-        },
-      ],
+      children: [{ _type: "span" as const, _key: `s-${i}`, text, marks: [] }],
     }));
 }

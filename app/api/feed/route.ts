@@ -3,21 +3,15 @@ import { sanity } from "@/lib/sanity";
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? "https://fincnews.com";
 
-type FeedArticle = {
-  slug: string;
-  category: string;
-  publishedAt: string;
-  translations: { en?: { title: string; excerpt: string } };
-};
-
 export async function GET() {
-  const articles: FeedArticle[] = sanity
-    ? await sanity.fetch(
+  const articles = sanity
+    ? await sanity.fetch<{ slug: string; category: string; publishedAt: string; title: string; excerpt: string }[]>(
         `*[_type == "article" && defined(translations.en.title)] | order(publishedAt desc)[0...20] {
           "slug": slug.current,
           category,
           publishedAt,
-          "translations": { "en": { "title": translations.en.title, "excerpt": translations.en.excerpt } }
+          "title": translations.en.title,
+          "excerpt": translations.en.excerpt
         }`,
         {},
         { next: { revalidate: 300 } },
@@ -25,18 +19,16 @@ export async function GET() {
     : [];
 
   const items = articles
-    .map((article) => {
-      const t = article.translations.en;
-      if (!t) return "";
-      const url = `${BASE_URL}/en/${article.category}/${article.slug}`;
+    .map((a) => {
+      const url = `${BASE_URL}/${a.category}/${a.slug}`;
       return `
     <item>
-      <title><![CDATA[${t.title}]]></title>
-      <description><![CDATA[${t.excerpt}]]></description>
+      <title><![CDATA[${a.title}]]></title>
+      <description><![CDATA[${a.excerpt}]]></description>
       <link>${url}</link>
       <guid isPermaLink="true">${url}</guid>
-      <pubDate>${new Date(article.publishedAt).toUTCString()}</pubDate>
-      <category>${article.category}</category>
+      <pubDate>${new Date(a.publishedAt).toUTCString()}</pubDate>
+      <category>${a.category}</category>
     </item>`;
     })
     .join("");
@@ -45,7 +37,7 @@ export async function GET() {
 <rss version="2.0">
   <channel>
     <title>FinCNews — Finance &amp; Crypto Intelligence</title>
-    <link>${BASE_URL}/en</link>
+    <link>${BASE_URL}</link>
     <description>Fast AI-powered finance news: crypto, markets, macro, fintech.</description>
     <language>en</language>
     <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>

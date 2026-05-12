@@ -1,5 +1,5 @@
 import { createClient } from "@sanity/client";
-import type { Category, Locale } from "@/lib/i18n";
+import type { Category } from "@/lib/i18n";
 
 export type ArticleTranslation = {
   title: string;
@@ -29,12 +29,9 @@ export type Article = {
   category: Category;
   publishedAt?: string;
   sourceUrl?: string;
-  coverImage?: {
-    url?: string;
-    alt?: string;
-  };
+  coverImage?: { url?: string; alt?: string };
   tags?: string[];
-  translations: Partial<Record<Locale, ArticleTranslation>>;
+  en: ArticleTranslation;
 };
 
 const projectId = process.env.SANITY_PROJECT_ID;
@@ -49,54 +46,39 @@ export const sanity = projectId
     })
   : null;
 
-const articleProjection = `
+const projection = `
   _id,
   "slug": slug.current,
   category,
   publishedAt,
   sourceUrl,
   tags,
-  "coverImage": {
-    "url": coverImage.asset->url,
-    "alt": coverImage.alt
-  },
-  translations
+  "coverImage": { "url": coverImage.asset->url, "alt": coverImage.alt },
+  "en": translations.en
 `;
 
-export async function getArticles(locale: Locale, category?: Category) {
-  if (!sanity) {
-    return [];
-  }
-
-  const query = category
-    ? `*[_type == "article" && category == $category && defined(translations[$locale].title)] | order(publishedAt desc)[0...24] {${articleProjection}}`
-    : `*[_type == "article" && defined(translations[$locale].title)] | order(publishedAt desc)[0...24] {${articleProjection}}`;
-
-  return sanity.fetch<Article[]>(
-    query,
-    { locale, category },
-    { next: { revalidate: 60 } },
-  );
-}
-
-export async function getArticle(slug: string, locale: Locale) {
-  if (!sanity) {
-    return null;
-  }
-
-  return sanity.fetch<Article | null>(
-    `*[_type == "article" && slug.current == $slug && defined(translations[$locale].title)][0] {${articleProjection}}`,
-    { slug, locale },
-    { next: { revalidate: 60 } },
-  );
-}
-
-export async function getRelatedArticles(slug: string, category: Category, locale: Locale) {
+export async function getArticles(category?: Category): Promise<Article[]> {
   if (!sanity) return [];
+  const query = category
+    ? `*[_type == "article" && category == $category && defined(translations.en.title)] | order(publishedAt desc)[0...24] {${projection}}`
+    : `*[_type == "article" && defined(translations.en.title)] | order(publishedAt desc)[0...24] {${projection}}`;
+  return sanity.fetch<Article[]>(query, { category }, { next: { revalidate: 60 } });
+}
 
+export async function getArticle(slug: string): Promise<Article | null> {
+  if (!sanity) return null;
+  return sanity.fetch<Article | null>(
+    `*[_type == "article" && slug.current == $slug && defined(translations.en.title)][0] {${projection}}`,
+    { slug },
+    { next: { revalidate: 60 } },
+  );
+}
+
+export async function getRelatedArticles(slug: string, category: Category): Promise<Article[]> {
+  if (!sanity) return [];
   return sanity.fetch<Article[]>(
-    `*[_type == "article" && category == $category && slug.current != $slug && defined(translations[$locale].title)] | order(publishedAt desc)[0...3] {${articleProjection}}`,
-    { category, slug, locale },
+    `*[_type == "article" && category == $category && slug.current != $slug && defined(translations.en.title)] | order(publishedAt desc)[0...3] {${projection}}`,
+    { category, slug },
     { next: { revalidate: 300 } },
   );
 }
@@ -107,6 +89,16 @@ export function readingTime(body: PortableTextBlock[] | string | undefined): num
     typeof body === "string"
       ? body
       : body.map((b) => b.children?.map((c) => c.text).join(" ") ?? "").join(" ");
-  const words = text.trim().split(/\s+/).filter(Boolean).length;
-  return Math.max(1, Math.ceil(words / 200));
+  return Math.max(1, Math.ceil(text.trim().split(/\s+/).filter(Boolean).length / 200));
+}
+
+export function timeAgo(dateStr?: string): string {
+  if (!dateStr) return "";
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
 }
