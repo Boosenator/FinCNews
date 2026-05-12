@@ -16,7 +16,17 @@
       "Bash(rm -f \"messages/ua.json\" \"messages/ru.json\" \"messages/pl.json\" \"messages/en.json\")",
       "Bash(rmdir messages *)",
       "Bash(mkdir -p \"c:/GameDev/SEOtoTG/app/[category]\")",
-      "Bash(mkdir -p \"c:/GameDev/SEOtoTG/app/[category]/[slug]\")"
+      "Bash(mkdir -p \"c:/GameDev/SEOtoTG/app/[category]/[slug]\")",
+      "Bash(npm install *)",
+      "Bash(mkdir -p \"c:/GameDev/SEOtoTG/app/studio/[[...tool]]\")",
+      "Bash(mkdir -p \"c:/GameDev/SEOtoTG/app/\\(site\\)/[category]/[slug]\")",
+      "Bash(cp \"c:/GameDev/SEOtoTG/app/[category]/page.tsx\" \"c:/GameDev/SEOtoTG/app/\\(site\\)/[category]/page.tsx\")",
+      "Bash(cp \"c:/GameDev/SEOtoTG/app/[category]/[slug]/page.tsx\" \"c:/GameDev/SEOtoTG/app/\\(site\\)/[category]/[slug]/page.tsx\")",
+      "Bash(cd \"c:/GameDev/SEOtoTG\" && rm -rf \"app/page.tsx\" \"app/[category]\" && echo \"Done\")"
+    ],
+    "additionalDirectories": [
+      "c:\\GameDev\\SEOtoTG\\app\\studio",
+      "C:\\GameDev\\SEOtoTG\\app\\[category]"
     ]
   }
 }

@@ -1,9 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
-import Header from "@/components/Header";
-import Footer from "@/components/Footer";
-import PriceTicker from "@/components/PriceTicker";
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -26,16 +23,8 @@ export const metadata: Metadata = {
   description:
     "Fast AI-powered finance news. Bitcoin, Ethereum, markets, macro and fintech — breaking stories as they happen.",
   metadataBase: new URL(BASE_URL),
-  openGraph: {
-    siteName: "FinCNews",
-    type: "website",
-    locale: "en_US",
-  },
-  twitter: {
-    card: "summary_large_image",
-    site: "@fincnews",
-    creator: "@fincnews",
-  },
+  openGraph: { siteName: "FinCNews", type: "website", locale: "en_US" },
+  twitter: { card: "summary_large_image", site: "@fincnews", creator: "@fincnews" },
   robots: {
     index: true,
     follow: true,
@@ -47,10 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className="scroll-smooth">
       <body className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-zinc-950 text-zinc-100 antialiased`}>
-        <PriceTicker />
-        <Header />
         {children}
-        <Footer />
       </body>
     </html>
   );

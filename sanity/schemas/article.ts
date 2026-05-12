@@ -52,9 +52,9 @@ export default {
     { name: "tags", title: "Tags", type: "array", of: [{ type: "string" }] },
   ],
   preview: {
-    select: { title: "translations.en.title", category: "category", media: "coverImage" },
-    prepare({ title, category, media }: { title?: string; category?: string; media?: unknown }) {
-      return { title: title ?? "Untitled", subtitle: category, media };
+    select: { title: "translations.en.title", category: "category" },
+    prepare({ title, category }: { title?: string; category?: string }) {
+      return { title: title ?? "Untitled", subtitle: category };
     },
   },
 };

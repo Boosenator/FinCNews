@@ -11,10 +11,13 @@
   "dependencies": {
     "@portabletext/react": "^6.2.0",
     "@sanity/client": "^7.22.0",
+    "@sanity/vision": "^5.25.0",
     "next": "14.2.23",
     "next-intl": "^4.11.2",
+    "next-sanity": "^12.4.5",
     "react": "^18",
-    "react-dom": "^18"
+    "react-dom": "^18",
+    "sanity": "^5.25.0"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.19",
