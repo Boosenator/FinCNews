@@ -3,6 +3,7 @@ import { supabaseAdmin, type RssSource, type RunLog } from "@/lib/supabase";
 import RunButton from "./_components/RunButton";
 import ToggleSource from "./_components/ToggleSource";
 import AddSourceForm from "./_components/AddSourceForm";
+import AutoRefresh from "./_components/AutoRefresh";
 
 function badge(status: RunLog["status"]) {
   const map = {
@@ -78,6 +79,9 @@ export default async function FlowsPage() {
             <p className="mt-1 text-sm text-zinc-500">
               Automation pipeline — RSS → Claude → Sanity → Telegram
             </p>
+            <div className="mt-2">
+              <AutoRefresh intervalMs={20000} />
+            </div>
           </div>
           <RunButton />
         </div>

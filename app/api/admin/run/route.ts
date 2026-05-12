@@ -11,23 +11,29 @@ export async function POST(req: NextRequest) {
 
   const db = supabaseAdmin();
   const { data: log } = await db.from("run_logs").insert({ status: "running" }).select().single();
+  if (!log) return NextResponse.json({ error: "Failed to create log" }, { status: 500 });
 
   try {
     const result = await runAutomation(3);
     const hasError = result.details.some((d) => d.status === "error");
     const status = result.articlesPublished > 0 ? "success" : hasError ? "partial" : "success";
 
+    // Core fields — always exist in schema
     await db.from("run_logs").update({
       status,
       finished_at: new Date().toISOString(),
       articles_found: result.articlesFound,
-      articles_after_keywords: result.articlesAfterKeywords,
-      articles_after_url_dedup: result.articlesAfterUrlDedup,
-      articles_after_semantic_dedup: result.articlesAfterSemanticDedup,
       articles_published: result.articlesPublished,
       articles_skipped: result.articlesSkipped,
       duration_ms: result.durationMs,
       details: result.details,
+    }).eq("id", log.id);
+
+    // Extended fields — only if migration_001 was applied
+    void db.from("run_logs").update({
+      articles_after_keywords: result.articlesAfterKeywords,
+      articles_after_url_dedup: result.articlesAfterUrlDedup,
+      articles_after_semantic_dedup: result.articlesAfterSemanticDedup,
     }).eq("id", log.id);
 
     return NextResponse.json(result);
