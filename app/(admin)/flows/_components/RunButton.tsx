@@ -47,7 +47,8 @@ export default function RunButton() {
       const dedup = (r.itemsAfterDedup as number) ?? 0;
       const debug = r.debug as Record<string, unknown> | undefined;
       const sample = (debug?.sampleTitles as string[] | undefined)?.slice(0, 2).join(" | ") ?? "";
-      return `Queued ${r.itemsQueued ?? 0} | Raw:${r.itemsFound ?? 0} → Keywords:${kw} → Dedup:${dedup} | Sample: ${sample || "(none)"}`;
+      const err = debug?.insertError ? ` ⚠ INSERT ERROR: ${debug.insertError}` : "";
+      return `Queued ${r.itemsQueued ?? 0} | Raw:${r.itemsFound ?? 0} → Keywords:${kw} → Dedup:${dedup}${err} | Sample: ${sample || "(none)"}`;
     }
     if (action === "generate") return `✓ Published ${result.articlesPublished ?? 0} from queue of ${result.queueSize ?? 0}`;
     return `✓ Published ${result.articlesPublished ?? 0}`;
