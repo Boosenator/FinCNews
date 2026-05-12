@@ -11,10 +11,12 @@
   "dependencies": {
     "@portabletext/react": "^6.2.0",
     "@sanity/client": "^7.22.0",
+    "@supabase/supabase-js": "^2.105.4",
     "next": "14.2.23",
     "next-intl": "^4.11.2",
     "react": "^18",
-    "react-dom": "^18"
+    "react-dom": "^18",
+    "rss-parser": "^3.13.0"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.19",

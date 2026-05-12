@@ -1,0 +1,33 @@
+import { createClient } from "@supabase/supabase-js";
+
+// Server-side admin client — lazy, never call at module level
+export function supabaseAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error("Supabase env vars not configured");
+  return createClient(url, key, { auth: { persistSession: false } });
+}
+
+export type RssSource = {
+  id: string;
+  name: string;
+  url: string;
+  category: string;
+  enabled: boolean;
+  last_fetched_at: string | null;
+  articles_published: number;
+  created_at: string;
+};
+
+export type RunLog = {
+  id: string;
+  started_at: string;
+  finished_at: string | null;
+  status: "running" | "success" | "error" | "partial";
+  articles_found: number;
+  articles_published: number;
+  articles_skipped: number;
+  duration_ms: number | null;
+  error_text: string | null;
+  details: Array<{ url: string; slug?: string; title?: string; status: string; error?: string }>;
+};
