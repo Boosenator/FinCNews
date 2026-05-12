@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { runGenerate } from "@/lib/automation";
 import { supabaseAdmin } from "@/lib/supabase";
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 function isAuthed(req: NextRequest) {
   return process.env.CRON_SECRET && req.headers.get("authorization") === `Bearer ${process.env.CRON_SECRET}`;
