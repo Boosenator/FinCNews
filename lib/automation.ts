@@ -288,7 +288,7 @@ export type AutomationResult = {
   details: DetailEntry[];
 };
 
-export async function runAutomation(maxArticles = 3): Promise<AutomationResult> {
+export async function runAutomation(maxArticles = 2): Promise<AutomationResult> {
   const start = Date.now();
   const db = supabaseAdmin();
 
@@ -296,19 +296,26 @@ export async function runAutomation(maxArticles = 3): Promise<AutomationResult> 
   if (!sources?.length) return { articlesFound: 0, articlesAfterKeywords: 0, articlesAfterUrlDedup: 0, articlesAfterSemanticDedup: 0, articlesPublished: 0, articlesSkipped: 0, durationMs: Date.now() - start, sampleTitles: [], details: [] };
 
   type FeedItem = { title?: string; link?: string; pubDate?: string; contentSnippet?: string; sourceCategory: string; sourceName: string };
-  const allItems: FeedItem[] = [];
 
-  for (const source of sources) {
-    try {
+  // Fetch all sources in parallel — ~8s max instead of 10×8s=80s
+  const results = await Promise.allSettled(
+    sources.map(async (source) => {
       const entries = await parseFeed(source.url);
-      for (const item of entries) {
-        allItems.push({ ...item, sourceCategory: source.category, sourceName: source.name });
-      }
-      await db.from("rss_sources").update({ last_fetched_at: new Date().toISOString() }).eq("id", source.id);
-    } catch {
-      // source unreachable — skip silently
-    }
-  }
+      // update last_fetched_at in background, don't await
+      void db.from("rss_sources")
+        .update({ last_fetched_at: new Date().toISOString() })
+        .eq("id", source.id);
+      return entries.map((item) => ({
+        ...item,
+        sourceCategory: source.category,
+        sourceName: source.name,
+      }));
+    })
+  );
+
+  const allItems: FeedItem[] = results
+    .filter((r): r is PromiseFulfilledResult<FeedItem[]> => r.status === "fulfilled")
+    .flatMap((r) => r.value);
 
   // Filter: link required, < 48h old, contains finance keywords
   const cutoff = Date.now() - 48 * 60 * 60 * 1000;
