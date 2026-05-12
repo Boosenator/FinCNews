@@ -131,6 +131,68 @@ Rules: facts only, no invented quotes, include specific numbers/dates, slug max 
   return JSON.parse(jsonMatch[0]);
 }
 
+// Returns 0–1: fraction of significant words in common
+function titleSimilarity(a: string, b: string): number {
+  const words = (s: string) =>
+    s.toLowerCase().split(/\W+/).filter((w) => w.length > 3);
+  const wa = words(a);
+  const wb = new Set(words(b));
+  const intersection = wa.filter((w) => wb.has(w)).length;
+  const allWords = new Set([...wa, ...words(b)]);
+  const union = allWords.size;
+  return union === 0 ? 0 : intersection / union;
+}
+
+async function attachPexelsImage(sanityDocId: string, slug: string, category: string): Promise<void> {
+  const pexelsKey = process.env.PEXELS_API_KEY;
+  if (!pexelsKey) return;
+
+  const queryMap: Record<string, string> = {
+    crypto: "bitcoin cryptocurrency blockchain",
+    markets: "stock market trading finance chart",
+    economy: "federal reserve central bank economy",
+    fintech: "mobile payment technology fintech",
+    policy: "law regulation government finance",
+    companies: "corporate office business earnings",
+  };
+  const query = queryMap[category] ?? "finance business";
+
+  try {
+    const search = await fetch(
+      `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=5&orientation=landscape`,
+      { headers: { Authorization: pexelsKey }, signal: AbortSignal.timeout(5000) },
+    );
+    if (!search.ok) return;
+    const { photos } = await search.json();
+    const photoUrl: string = photos?.[0]?.src?.large2x;
+    if (!photoUrl) return;
+
+    const imgRes = await fetch(photoUrl, { signal: AbortSignal.timeout(10000) });
+    if (!imgRes.ok) return;
+    const buffer = Buffer.from(await imgRes.arrayBuffer());
+
+    const { createClient } = await import("@sanity/client");
+    const sanity = createClient({
+      projectId: process.env.SANITY_PROJECT_ID ?? process.env.NEXT_PUBLIC_SANITY_PROJECT_ID!,
+      dataset: process.env.SANITY_DATASET ?? "production",
+      token: process.env.SANITY_TOKEN!,
+      apiVersion: "2024-01-01",
+      useCdn: false,
+    });
+
+    const asset = await sanity.assets.upload("image", buffer, {
+      filename: `${slug}.jpg`,
+      contentType: "image/jpeg",
+    });
+
+    await sanity.patch(sanityDocId).set({
+      coverImage: { _type: "image", asset: { _type: "reference", _ref: asset._id } },
+    }).commit();
+  } catch {
+    // image is optional — never fail article publish because of it
+  }
+}
+
 async function publishToSanity(article: Record<string, unknown>): Promise<string> {
   const base = process.env.NEXT_PUBLIC_BASE_URL ?? "https://fin-c-news.vercel.app";
   const res = await fetch(`${base}/api/publish`, {
@@ -208,11 +270,27 @@ export async function runAutomation(maxArticles = 3): Promise<AutomationResult> 
     return KEYWORDS.some((kw) => text.includes(kw.toLowerCase()));
   });
 
-  // Deduplicate
+  // Deduplicate by URL
   const urls = fresh.map((i) => i.link!).filter(Boolean);
-  const { data: existing } = await db.from("processed_urls").select("url").in("url", urls);
+  const { data: existing } = await db.from("processed_urls").select("url, title").in("url", urls);
   const seen = new Set((existing ?? []).map((r: { url: string }) => r.url));
-  const newItems = fresh.filter((i) => !seen.has(i.link!));
+
+  // Semantic dedup: skip if similar title already processed in last 24h
+  const { data: recentTitles } = await db
+    .from("processed_urls")
+    .select("title")
+    .gte("published_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+    .not("title", "is", null);
+  const recentTitleList = (recentTitles ?? []).map((r: { title: string }) => r.title);
+
+  const newItems = fresh.filter((item) => {
+    if (seen.has(item.link!)) return false;
+    // skip if any recent article covers the same story (>50% word overlap)
+    const isDupe = recentTitleList.some(
+      (t) => titleSimilarity(item.title ?? "", t) > 0.5
+    );
+    return !isDupe;
+  });
 
   const toProcess = newItems.slice(0, maxArticles);
   // skipped = already in processed_urls (deduped)
@@ -235,7 +313,10 @@ export async function runAutomation(maxArticles = 3): Promise<AutomationResult> 
       // Add sourceUrl
       article.sourceUrl = item.link;
 
-      await publishToSanity(article);
+      const sanityId = await publishToSanity(article);
+
+      // Attach cover image from Pexels (non-blocking)
+      void attachPexelsImage(sanityId, article.slug as string, category);
 
       await db.from("processed_urls").insert({
         url: item.link,
