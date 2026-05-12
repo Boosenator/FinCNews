@@ -2,9 +2,7 @@
   "installCommand": "npm install --legacy-peer-deps",
   "framework": "nextjs",
   "crons": [
-    {
-      "path": "/api/cron",
-      "schedule": "*/15 * * * *"
-    }
+    { "path": "/api/cron/collect",  "schedule": "*/5 * * * *"  },
+    { "path": "/api/cron/generate", "schedule": "*/10 * * * *" }
   ]
 }

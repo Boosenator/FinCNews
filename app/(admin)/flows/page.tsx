@@ -40,22 +40,25 @@ async function getData() {
     .eq("status", "running")
     .lt("started_at", new Date(Date.now() - 5 * 60 * 1000).toISOString());
 
-  const [{ data: sources }, { data: logs }, { count: totalProcessed }] = await Promise.all([
+  const [{ data: sources }, { data: logs }, { count: totalProcessed }, { data: queue }] = await Promise.all([
     db.from("rss_sources").select("*").order("name"),
     db.from("run_logs").select("*").order("started_at", { ascending: false }).limit(20),
     db.from("processed_urls").select("*", { count: "exact", head: true }),
+    db.from("article_queue").select("status"),
   ]);
   return {
     sources: (sources ?? []) as RssSource[],
     logs: (logs ?? []) as RunLog[],
     totalProcessed: totalProcessed ?? 0,
+    queuePending: (queue ?? []).filter((q: { status: string }) => q.status === "pending").length,
+    queueTotal: (queue ?? []).length,
   };
 }
 
 export const dynamic = "force-dynamic";
 
 export default async function FlowsPage() {
-  const { sources, logs, totalProcessed } = await getData();
+  const { sources, logs, totalProcessed, queuePending, queueTotal } = await getData();
 
   const lastRun = logs[0];
   const todayPublished = logs
@@ -100,6 +103,7 @@ export default async function FlowsPage() {
             { label: "Last run", value: lastRun ? timeAgo(lastRun.started_at) : "Never", sub: lastRun?.status ?? "—", color: lastRun?.status === "success" ? "text-emerald-400" : "text-zinc-500" },
             { label: "Published today", value: String(todayPublished), sub: "articles", color: "text-white" },
             { label: "Active sources", value: String(activeSources), sub: `of ${sources.length} total`, color: "text-white" },
+            { label: "Queue (pending)", value: String(queuePending), sub: `of ${queueTotal} total`, color: queuePending > 0 ? "text-amber-400" : "text-white" },
             { label: "Total processed", value: String(totalProcessed), sub: "unique URLs", color: "text-white" },
           ].map((stat) => (
             <div key={stat.label} className="rounded-xl border border-white/[0.06] bg-zinc-900/40 p-4">
