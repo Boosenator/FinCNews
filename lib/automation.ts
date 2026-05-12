@@ -425,3 +425,158 @@ export async function runAutomation(maxArticles = 2): Promise<AutomationResult> 
     details,
   };
 }
+
+// ─── Variant B: split collect / generate ──────────────────────────────────
+
+export type CollectResult = {
+  sourcesChecked: number;
+  itemsFound: number;
+  itemsQueued: number;
+  itemsSkipped: number;
+  durationMs: number;
+};
+
+export async function runCollect(): Promise<CollectResult> {
+  const start = Date.now();
+  const db = supabaseAdmin();
+
+  const { data: sources } = await db.from("rss_sources").select("*").eq("enabled", true);
+  if (!sources?.length) {
+    return { sourcesChecked: 0, itemsFound: 0, itemsQueued: 0, itemsSkipped: 0, durationMs: Date.now() - start };
+  }
+
+  type FeedItem = { title?: string; link?: string; pubDate?: string; contentSnippet?: string; sourceCategory: string; sourceName: string };
+
+  const results = await Promise.allSettled(
+    sources.map(async (source) => {
+      const entries = await parseFeed(source.url);
+      void db.from("rss_sources").update({ last_fetched_at: new Date().toISOString() }).eq("id", source.id);
+      return entries.map((e) => ({ ...e, sourceCategory: source.category, sourceName: source.name }));
+    }),
+  );
+
+  const allItems: FeedItem[] = results
+    .filter((r): r is PromiseFulfilledResult<FeedItem[]> => r.status === "fulfilled")
+    .flatMap((r) => r.value);
+
+  const cutoff = Date.now() - 48 * 60 * 60 * 1000;
+  const fresh = allItems.filter((item) => {
+    if (!item.link) return false;
+    const age = new Date(item.pubDate ?? 0).getTime();
+    if (item.pubDate && age > 0 && age < cutoff) return false;
+    const text = `${item.title ?? ""} ${item.contentSnippet ?? ""}`;
+    return text.trim().length >= 10 && hasKeyword(text);
+  });
+
+  if (!fresh.length) {
+    return { sourcesChecked: sources.length, itemsFound: allItems.length, itemsQueued: 0, itemsSkipped: 0, durationMs: Date.now() - start };
+  }
+
+  const urls = fresh.map((i) => i.link!);
+
+  // Dedup: already published OR already in queue
+  const [{ data: processed }, { data: queued }] = await Promise.all([
+    db.from("processed_urls").select("url").in("url", urls),
+    db.from("article_queue").select("url").in("url", urls),
+  ]);
+  const seen = new Set([
+    ...(processed ?? []).map((r: { url: string }) => r.url),
+    ...(queued ?? []).map((r: { url: string }) => r.url),
+  ]);
+
+  // Semantic dedup against recent 48h titles
+  const { data: recentTitles } = await db
+    .from("processed_urls")
+    .select("title")
+    .gte("published_at", new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString())
+    .not("title", "is", null);
+  const recentTitleList = (recentTitles ?? []).map((r: { title: string }) => r.title);
+
+  const newItems = fresh.filter((item) => {
+    if (seen.has(item.link!)) return false;
+    return !recentTitleList.some((t) => titleSimilarity(item.title ?? "", t) > 0.5);
+  });
+
+  if (!newItems.length) {
+    return { sourcesChecked: sources.length, itemsFound: allItems.length, itemsQueued: 0, itemsSkipped: fresh.length, durationMs: Date.now() - start };
+  }
+
+  const { data: inserted } = await db.from("article_queue").insert(
+    newItems.map((item) => ({
+      url: item.link,
+      title: item.title,
+      snippet: item.contentSnippet,
+      source_category: item.sourceCategory,
+      source_name: item.sourceName,
+      pub_date: item.pubDate,
+    })),
+  ).select("id");
+
+  return {
+    sourcesChecked: sources.length,
+    itemsFound: allItems.length,
+    itemsQueued: inserted?.length ?? 0,
+    itemsSkipped: fresh.length - newItems.length,
+    durationMs: Date.now() - start,
+  };
+}
+
+export type GenerateResult = {
+  queueSize: number;
+  articlesPublished: number;
+  durationMs: number;
+  details: DetailEntry[];
+};
+
+export async function runGenerate(maxArticles = 2): Promise<GenerateResult> {
+  const start = Date.now();
+  const db = supabaseAdmin();
+
+  const { data: items } = await db
+    .from("article_queue")
+    .select("*")
+    .eq("status", "pending")
+    .order("queued_at")
+    .limit(maxArticles);
+
+  if (!items?.length) {
+    return { queueSize: 0, articlesPublished: 0, durationMs: Date.now() - start, details: [] };
+  }
+
+  const details: DetailEntry[] = [];
+
+  for (const item of items) {
+    await db.from("article_queue").update({ status: "processing" }).eq("id", item.id);
+    try {
+      const scraped = await tryFetchArticleText(item.url);
+      const bodyText = scraped.length > 300 ? scraped : (item.snippet ?? "");
+      const category = detectCategory(`${item.title ?? ""} ${item.snippet ?? ""}`, item.source_category);
+      const article = await callClaude({ title: item.title ?? "Untitled", pubDate: item.pub_date }, bodyText, category);
+
+      const en = (article.translations as Record<string, Record<string, string>>)?.en;
+      if (!en?.title || !en.excerpt || !en.body) throw new Error("Claude returned incomplete article");
+
+      article.sourceUrl = item.url;
+      const sanityId = await publishToSanity(article);
+      void attachPexelsImage(sanityId, article.slug as string, category);
+
+      await db.from("processed_urls").insert({ url: item.url, slug: article.slug, title: en.title, category });
+      await db.from("article_queue").update({ status: "done", processed_at: new Date().toISOString() }).eq("id", item.id);
+
+      const articleUrl = `${process.env.NEXT_PUBLIC_BASE_URL ?? "https://fin-c-news.vercel.app"}/${category}/${article.slug}`;
+      await sendTelegram(en.title, articleUrl, en.telegramText ?? "");
+
+      details.push({ url: item.url, title: en.title, slug: article.slug as string, category, excerpt: en.excerpt, bodyPreview: (typeof en.body === "string" ? en.body : "").slice(0, 400), imageAttached: !!process.env.PEXELS_API_KEY, status: "published" });
+    } catch (e) {
+      await db.from("article_queue").update({ status: "error", error_text: String(e), processed_at: new Date().toISOString() }).eq("id", item.id);
+      details.push({ url: item.url, title: item.title, status: "error", error: String(e) });
+    }
+  }
+
+  return {
+    queueSize: items.length,
+    articlesPublished: details.filter((d) => d.status === "published").length,
+    durationMs: Date.now() - start,
+    details,
+  };
+}
