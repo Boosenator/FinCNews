@@ -447,9 +447,16 @@ export async function runAutomation(maxArticles = 2): Promise<AutomationResult> 
 export type CollectResult = {
   sourcesChecked: number;
   itemsFound: number;
+  itemsAfterKeywords: number;
+  itemsAfterDedup: number;
   itemsQueued: number;
   itemsSkipped: number;
   durationMs: number;
+  debug: {
+    sampleTitles: string[];          // first 5 raw titles before filter
+    sampleAfterKeywords: string[];   // first 5 titles that passed keyword filter
+    insertError?: string;
+  };
 };
 
 export async function runCollect(): Promise<CollectResult> {
@@ -457,8 +464,9 @@ export async function runCollect(): Promise<CollectResult> {
   const db = supabaseAdmin();
 
   const { data: sources } = await db.from("rss_sources").select("*").eq("enabled", true);
+  const emptyDebug = { sampleTitles: [], sampleAfterKeywords: [] };
   if (!sources?.length) {
-    return { sourcesChecked: 0, itemsFound: 0, itemsQueued: 0, itemsSkipped: 0, durationMs: Date.now() - start };
+    return { sourcesChecked: 0, itemsFound: 0, itemsAfterKeywords: 0, itemsAfterDedup: 0, itemsQueued: 0, itemsSkipped: 0, durationMs: Date.now() - start, debug: emptyDebug };
   }
 
   type FeedItem = { title?: string; link?: string; pubDate?: string; contentSnippet?: string; sourceCategory: string; sourceName: string };
@@ -475,6 +483,8 @@ export async function runCollect(): Promise<CollectResult> {
     .filter((r): r is PromiseFulfilledResult<FeedItem[]> => r.status === "fulfilled")
     .flatMap((r) => r.value);
 
+  const sampleTitles = allItems.slice(0, 5).map((i) => `[${i.sourceCategory}] ${i.title ?? "(empty)"} | link:${i.link ? "✓" : "✗"} | snippet:${i.contentSnippet ? i.contentSnippet.slice(0, 40) : "(empty)"}`);
+
   const cutoff = Date.now() - 48 * 60 * 60 * 1000;
   const fresh = allItems.filter((item) => {
     if (!item.link) return false;
@@ -484,8 +494,10 @@ export async function runCollect(): Promise<CollectResult> {
     return text.trim().length >= 10 && hasKeyword(text);
   });
 
+  const sampleAfterKeywords = fresh.slice(0, 5).map((i) => i.title ?? "(empty)");
+
   if (!fresh.length) {
-    return { sourcesChecked: sources.length, itemsFound: allItems.length, itemsQueued: 0, itemsSkipped: 0, durationMs: Date.now() - start };
+    return { sourcesChecked: sources.length, itemsFound: allItems.length, itemsAfterKeywords: 0, itemsAfterDedup: 0, itemsQueued: 0, itemsSkipped: 0, durationMs: Date.now() - start, debug: { sampleTitles, sampleAfterKeywords } };
   }
 
   const urls = fresh.map((i) => i.link!);
@@ -514,7 +526,7 @@ export async function runCollect(): Promise<CollectResult> {
   });
 
   if (!newItems.length) {
-    return { sourcesChecked: sources.length, itemsFound: allItems.length, itemsQueued: 0, itemsSkipped: fresh.length, durationMs: Date.now() - start };
+    return { sourcesChecked: sources.length, itemsFound: allItems.length, itemsAfterKeywords: fresh.length, itemsAfterDedup: 0, itemsQueued: 0, itemsSkipped: fresh.length, durationMs: Date.now() - start, debug: { sampleTitles, sampleAfterKeywords } };
   }
 
   // Filter out any items with no URL (defensive) and build clean rows
@@ -530,7 +542,7 @@ export async function runCollect(): Promise<CollectResult> {
     }));
 
   if (!rows.length) {
-    return { sourcesChecked: sources.length, itemsFound: allItems.length, itemsQueued: 0, itemsSkipped: fresh.length, durationMs: Date.now() - start };
+    return { sourcesChecked: sources.length, itemsFound: allItems.length, itemsAfterKeywords: fresh.length, itemsAfterDedup: newItems.length, itemsQueued: 0, itemsSkipped: fresh.length, durationMs: Date.now() - start, debug: { sampleTitles, sampleAfterKeywords } };
   }
 
   // upsert with ignoreDuplicates — safe even if URL already exists (race condition)
@@ -547,9 +559,16 @@ export async function runCollect(): Promise<CollectResult> {
   return {
     sourcesChecked: sources.length,
     itemsFound: allItems.length,
+    itemsAfterKeywords: fresh.length,
+    itemsAfterDedup: newItems.length,
     itemsQueued: inserted?.length ?? 0,
     itemsSkipped: fresh.length - newItems.length,
     durationMs: Date.now() - start,
+    debug: {
+      sampleTitles,
+      sampleAfterKeywords,
+      insertError: insertError?.message,
+    },
   };
 }
 
