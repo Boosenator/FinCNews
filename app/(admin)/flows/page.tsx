@@ -33,15 +33,22 @@ function timeAgo(dateStr: string) {
 
 async function getData() {
   const db = supabaseAdmin();
-  const [{ data: sources }, { data: logs }, { data: stats }] = await Promise.all([
+
+  // Mark stale "running" logs (>5min old) as error
+  void db.from("run_logs")
+    .update({ status: "error", error_text: "Timed out", finished_at: new Date().toISOString() })
+    .eq("status", "running")
+    .lt("started_at", new Date(Date.now() - 5 * 60 * 1000).toISOString());
+
+  const [{ data: sources }, { data: logs }, { count: totalProcessed }] = await Promise.all([
     db.from("rss_sources").select("*").order("name"),
     db.from("run_logs").select("*").order("started_at", { ascending: false }).limit(20),
-    db.from("processed_urls").select("id", { count: "exact", head: true }),
+    db.from("processed_urls").select("*", { count: "exact", head: true }),
   ]);
   return {
     sources: (sources ?? []) as RssSource[],
     logs: (logs ?? []) as RunLog[],
-    totalProcessed: stats ?? 0,
+    totalProcessed: totalProcessed ?? 0,
   };
 }
 
@@ -213,8 +220,6 @@ export default async function FlowsPage() {
                   <tr className="border-b border-white/[0.06] bg-zinc-900/60">
                     <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-zinc-600">Source</th>
                     <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-zinc-600">Cat</th>
-                    <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-zinc-600">Published</th>
-                    <th className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-zinc-600">Test</th>
                     <th className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-zinc-600">On</th>
                   </tr>
                 </thead>
@@ -223,14 +228,13 @@ export default async function FlowsPage() {
                     <tr key={src.id} className={`transition hover:bg-white/[0.02] ${!src.enabled ? "opacity-40" : ""}`}>
                       <td className="px-4 py-2.5">
                         <p className="text-xs font-medium text-zinc-200">{src.name}</p>
-                        <p className="text-[10px] text-zinc-600 truncate max-w-[160px]">{src.url.replace(/^https?:\/\//, "")}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <p className="text-[10px] text-zinc-600 truncate max-w-[140px]">{src.url.replace(/^https?:\/\//, "")}</p>
+                          <TestSourceButton id={src.id} name={src.name} />
+                        </div>
                       </td>
                       <td className="px-4 py-2.5">
                         <span className="rounded bg-white/[0.05] px-1.5 py-0.5 text-[10px] font-semibold text-zinc-400">{src.category}</span>
-                      </td>
-                      <td className="px-4 py-2.5 tabular-nums text-xs text-zinc-500">{src.articles_published}</td>
-                      <td className="px-4 py-2.5">
-                        <TestSourceButton id={src.id} name={src.name} />
                       </td>
                       <td className="px-4 py-2.5 text-center">
                         <ToggleSource id={src.id} enabled={src.enabled} />
