@@ -4,20 +4,31 @@ import { supabaseAdmin } from "@/lib/supabase";
 
 export const maxDuration = 60;
 
-export async function POST(req: NextRequest) {
+function isAuthed(req: NextRequest) {
   const auth = req.headers.get("authorization");
-  if (!process.env.CRON_SECRET || auth !== `Bearer ${process.env.CRON_SECRET}`) {
+  return process.env.CRON_SECRET && auth === `Bearer ${process.env.CRON_SECRET}`;
+}
+
+async function handle(req: NextRequest) {
+  if (!isAuthed(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const db = supabaseAdmin();
-  const { data: log } = await db.from("run_logs").insert({ status: "running" }).select().single();
+  const { data: log } = await db
+    .from("run_logs")
+    .insert({ status: "running" })
+    .select()
+    .single();
 
   try {
     const result = await runAutomation(3);
-    const status = result.articlesPublished > 0
-      ? "success"
-      : result.details.some((d) => d.status === "error") ? "partial" : "success";
+    const status =
+      result.articlesPublished > 0
+        ? "success"
+        : result.details.some((d) => d.status === "error")
+        ? "partial"
+        : "success";
 
     await db.from("run_logs").update({
       status,
@@ -39,3 +50,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
 }
+
+// Vercel Cron calls GET
+export const GET = handle;
+// Manual trigger from admin panel calls POST
+export const POST = handle;
