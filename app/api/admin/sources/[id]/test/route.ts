@@ -6,12 +6,17 @@ function isAuthed(req: NextRequest) {
 }
 
 const KEYWORDS = [
-  "bitcoin","ethereum","solana","ETF","hack","exploit","listing","regulation",
-  "ban","fork","upgrade","airdrop","stablecoin","CBDC","DeFi",
-  "Fed","rate","CPI","inflation","recession","FOMC",
-  "SEC","CFTC","MiCA","compliance",
-  "earnings","IPO","merger","acquisition","bankruptcy",
-  "payment","neobank","fintech",
+  "bitcoin","ethereum","solana","crypto","blockchain","altcoin","defi","nft",
+  "token","wallet","exchange","staking","yield","liquidity","protocol","web3",
+  "mining","validator","airdrop","stablecoin","CBDC","memecoin","layer2",
+  "ETF","ETFs","hack","exploit","listing","fork","upgrade","halving",
+  "regulation","SEC","CFTC","MiCA","compliance","sanctions","ban",
+  "Fed","Federal Reserve","rate hike","rate cut","CPI","inflation","recession",
+  "FOMC","ECB","GDP","unemployment","stagflation",
+  "earnings","IPO","merger","acquisition","bankruptcy","layoffs","buyback",
+  "stock","stocks","market","rally","crash","correction","bull","bear",
+  "gold","silver","oil","commodity","futures","bonds","treasury","yield curve",
+  "payment","neobank","fintech","PayPal","Stripe","Revolut","SWIFT","IBAN",
 ];
 
 function extractCdata(xml: string, tag: string): string {
@@ -73,9 +78,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         .slice(0, 200);
 
       const text = `${title} ${snippet}`;
-      const matched = KEYWORDS.filter((kw) =>
-        new RegExp(`\\b${kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(text)
-      );
+      const matched = KEYWORDS.filter((kw) => {
+        if (kw.length <= 5) {
+          return new RegExp(`\\b${kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(text);
+        }
+        return text.toLowerCase().includes(kw.toLowerCase());
+      });
 
       return { title, link, pubDate, snippet, matchedKeywords: matched };
     });
