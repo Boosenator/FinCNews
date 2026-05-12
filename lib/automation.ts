@@ -63,22 +63,38 @@ async function parseFeed(url: string): Promise<FeedEntry[]> {
 }
 
 const KEYWORDS = [
-  "bitcoin","ethereum","solana","ETF","hack","exploit","listing","regulation",
-  "ban","fork","upgrade","airdrop","stablecoin","CBDC","DeFi",
-  "Fed","rate","CPI","inflation","recession","FOMC",
-  "SEC","CFTC","MiCA","compliance",
-  "earnings","IPO","merger","acquisition","bankruptcy",
-  "payment","neobank","fintech",
+  // Crypto — core terms (substring match ok for these, they're unambiguous)
+  "bitcoin","ethereum","solana","crypto","blockchain","altcoin","defi","nft",
+  "token","wallet","exchange","staking","yield","liquidity","protocol","web3",
+  "mining","validator","airdrop","stablecoin","CBDC","memecoin","layer2",
+  // Crypto events
+  "ETF","ETFs","hack","exploit","listing","fork","upgrade","halving",
+  // Policy / regulation
+  "regulation","SEC","CFTC","MiCA","compliance","sanctions","ban",
+  // Macro / economy
+  "Fed","Federal Reserve","rate hike","rate cut","CPI","inflation","recession",
+  "FOMC","ECB","GDP","unemployment","stagflation",
+  // Markets
+  "earnings","IPO","merger","acquisition","bankruptcy","layoffs","buyback",
+  "stock","stocks","market","rally","crash","correction","bull","bear",
+  "gold","silver","oil","commodity","futures","bonds","treasury","yield curve",
+  // Fintech
+  "payment","neobank","fintech","PayPal","Stripe","Revolut","SWIFT","IBAN",
 ];
 
-// Escape special regex chars (e.g. "S&P" → "S\&P")
+// Escape special regex chars
 function escapeRe(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-// Word-boundary match — "ban" won't match "bank" or "urban"
+// Word boundary for short/ambiguous words, substring for long unique ones
 function matchesKeyword(text: string, kw: string): boolean {
-  return new RegExp(`\\b${escapeRe(kw)}\\b`, "i").test(text);
+  // Short words (≤5 chars) use word boundary to avoid "ban"→"bank"
+  // Long words (>5 chars) use simple includes — they're specific enough
+  if (kw.length <= 5) {
+    return new RegExp(`\\b${escapeRe(kw)}\\b`, "i").test(text);
+  }
+  return text.toLowerCase().includes(kw.toLowerCase());
 }
 
 function hasKeyword(text: string): boolean {
