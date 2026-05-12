@@ -72,8 +72,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         .trim()
         .slice(0, 200);
 
-      const text = `${title} ${snippet}`.toLowerCase();
-      const matched = KEYWORDS.filter((kw) => text.includes(kw.toLowerCase()));
+      const text = `${title} ${snippet}`;
+      const matched = KEYWORDS.filter((kw) =>
+        new RegExp(`\\b${kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(text)
+      );
 
       return { title, link, pubDate, snippet, matchedKeywords: matched };
     });

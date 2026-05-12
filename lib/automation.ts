@@ -71,6 +71,20 @@ const KEYWORDS = [
   "payment","neobank","fintech",
 ];
 
+// Escape special regex chars (e.g. "S&P" → "S\&P")
+function escapeRe(s: string) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Word-boundary match — "ban" won't match "bank" or "urban"
+function matchesKeyword(text: string, kw: string): boolean {
+  return new RegExp(`\\b${escapeRe(kw)}\\b`, "i").test(text);
+}
+
+function hasKeyword(text: string): boolean {
+  return KEYWORDS.some((kw) => matchesKeyword(text, kw));
+}
+
 const CATEGORY_KEYWORDS: Record<string, string[]> = {
   crypto:    ["bitcoin","ethereum","solana","ETF","crypto","blockchain","DeFi","NFT","token","hack","exploit","listing","fork","airdrop"],
   markets:   ["stock","S&P","nasdaq","dow","gold","oil","futures","earnings","IPO","index","rally","selloff"],
@@ -84,7 +98,7 @@ function detectCategory(text: string, sourceCategory: string): string {
   const lower = text.toLowerCase();
   const scores: Record<string, number> = {};
   for (const [cat, kws] of Object.entries(CATEGORY_KEYWORDS)) {
-    scores[cat] = kws.filter((kw) => lower.includes(kw.toLowerCase())).length;
+    scores[cat] = kws.filter((kw) => matchesKeyword(lower, kw)).length;
   }
   const best = Object.entries(scores).sort((a, b) => b[1] - a[1])[0];
   return best && best[1] > 0 ? best[0] : sourceCategory;
@@ -323,9 +337,9 @@ export async function runAutomation(maxArticles = 2): Promise<AutomationResult> 
     if (!item.link) return false;                                    // must have URL
     const age = new Date(item.pubDate ?? 0).getTime();
     if (item.pubDate && age > 0 && age < cutoff) return false;      // too old
-    const text = `${item.title ?? ""} ${item.contentSnippet ?? ""}`.toLowerCase();
-    if (text.trim().length < 10) return false;                       // no usable text
-    return KEYWORDS.some((kw) => text.includes(kw.toLowerCase()));
+    const text = `${item.title ?? ""} ${item.contentSnippet ?? ""}`;
+    if (text.trim().length < 10) return false;
+    return hasKeyword(text);
   });
 
   // Step 1: URL dedup
