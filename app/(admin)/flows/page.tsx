@@ -34,8 +34,8 @@ function timeAgo(dateStr: string) {
 async function getData() {
   const db = supabaseAdmin();
 
-  // Mark stale "running" logs (>5min old) as error
-  void db.from("run_logs")
+  // Mark stale "running" logs (>5min old) as error — await so page shows correct state
+  await db.from("run_logs")
     .update({ status: "error", error_text: "Timed out", finished_at: new Date().toISOString() })
     .eq("status", "running")
     .lt("started_at", new Date(Date.now() - 5 * 60 * 1000).toISOString());
