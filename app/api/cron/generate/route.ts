@@ -15,7 +15,7 @@ async function handle(req: NextRequest) {
   const { data: log } = await db.from("run_logs").insert({ status: "running" }).select().single();
 
   try {
-    const result = await runGenerate(2);
+    const result = await runGenerate(1);
     const hasError = result.details.some((d) => d.status === "error");
     const status = result.articlesPublished > 0 ? "success" : hasError ? "partial" : "success";
 

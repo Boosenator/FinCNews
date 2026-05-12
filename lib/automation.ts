@@ -583,6 +583,12 @@ export async function runGenerate(maxArticles = 2): Promise<GenerateResult> {
   const start = Date.now();
   const db = supabaseAdmin();
 
+  // Reset stuck "processing" items older than 10 min back to pending
+  void db.from("article_queue")
+    .update({ status: "pending" })
+    .eq("status", "processing")
+    .lt("queued_at", new Date(Date.now() - 10 * 60 * 1000).toISOString());
+
   const { data: items } = await db
     .from("article_queue")
     .select("*")
