@@ -1,16 +1,16 @@
 {
   "home": {
-    "kicker": "Automated newsroom",
-    "title": "Top stories in English and three more languages",
-    "subtitle": "A fast news site powered by Sanity, n8n, Claude API and Telegram publishing for every locale.",
-    "telegramTitle": "Telegram distribution",
-    "telegramText": "Every article includes a dedicated short channel text, so posts feel editorial instead of robotic.",
+    "kicker": "Finance Intelligence",
+    "title": "Markets, Crypto & Macro — As It Happens",
+    "subtitle": "AI-powered finance news in real time. Crypto, markets, fintech and macro — sourced, verified and published in minutes.",
+    "telegramTitle": "Get alerts on Telegram",
+    "telegramText": "Breaking finance news, market analysis and actionable insights — straight to your phone before the market moves.",
     "emptyTitle": "No articles yet",
-    "emptyText": "Add Sanity variables to .env.local or send the first article through /api/publish."
+    "emptyText": "Configure Sanity in .env.local or publish the first article via /api/publish."
   },
   "category": {
-    "kicker": "Category",
-    "empty": "There are no articles in this category yet."
+    "kicker": "Section",
+    "empty": "No articles in this section yet."
   },
   "categories": {
     "all": "All",
@@ -23,5 +23,16 @@
     "sport": "Sport",
     "auto": "Auto",
     "health": "Health"
+  },
+  "article": {
+    "by": "FinCNews Editorial",
+    "readTime": "min read",
+    "source": "Source",
+    "share": "Share",
+    "related": "Related Articles",
+    "tags": "Topics"
+  },
+  "trending": {
+    "title": "Trending"
   }
 }

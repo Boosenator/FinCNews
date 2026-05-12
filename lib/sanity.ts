@@ -90,3 +90,23 @@ export async function getArticle(slug: string, locale: Locale) {
     { next: { revalidate: 60 } },
   );
 }
+
+export async function getRelatedArticles(slug: string, category: Category, locale: Locale) {
+  if (!sanity) return [];
+
+  return sanity.fetch<Article[]>(
+    `*[_type == "article" && category == $category && slug.current != $slug && defined(translations[$locale].title)] | order(publishedAt desc)[0...3] {${articleProjection}}`,
+    { category, slug, locale },
+    { next: { revalidate: 300 } },
+  );
+}
+
+export function readingTime(body: PortableTextBlock[] | string | undefined): number {
+  if (!body) return 1;
+  const text =
+    typeof body === "string"
+      ? body
+      : body.map((b) => b.children?.map((c) => c.text).join(" ") ?? "").join(" ");
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
+  return Math.max(1, Math.ceil(words / 200));
+}

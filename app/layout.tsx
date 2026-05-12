@@ -14,20 +14,27 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "SEOtoTG News",
-  description: "Multilingual automated news powered by Sanity, n8n and Telegram.",
+  title: {
+    default: "FinCNews — Finance & Crypto Intelligence",
+    template: "%s | FinCNews",
+  },
+  description:
+    "Fast AI-powered finance news: crypto, markets, macro and fintech. Breaking stories in English, Ukrainian, Russian and Polish.",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL ?? "https://fincnews.com"),
+  openGraph: {
+    siteName: "FinCNews",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    site: "@fincnews",
+  },
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ua">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
+    <html lang="en">
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         {children}
       </body>
     </html>
