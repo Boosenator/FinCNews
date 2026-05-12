@@ -161,7 +161,7 @@ OUTPUT JSON structure:
     "en": {
       "title": "SEO title 50-60 chars",
       "excerpt": "2-3 sentences with primary keyword, under 280 chars",
-      "body": "800-1000 word article. Paragraphs separated by \\n\\n. Structure: What happened → Why it matters → Expert analysis (first person 'Based on my analysis...') → 3 scenarios (bull/base/bear) → How to act. End with: Not financial advice.",
+      "body": "500-700 word article. Paragraphs separated by \\n\\n. Structure: What happened (facts+numbers) → Why it matters → Expert take (first person 'Based on my analysis...') → How to act. End with: Not financial advice.",
       "metaTitle": "50-60 char meta title",
       "metaDescription": "150-160 char meta description with CTA",
       "telegramText": "Post1 (150w recap + [ARTICLE_URL]) ||| Post2 (100w portfolio impact) ||| Post3 (80w affiliate bridge + [AFFILIATE_URL])"
@@ -180,10 +180,10 @@ Rules: facts only, no invented quotes, include specific numbers/dates, slug max 
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-6",
-      max_tokens: 3000,
+      max_tokens: 2000,
       messages: [{ role: "user", content: prompt }],
     }),
-    signal: AbortSignal.timeout(30000),
+    signal: AbortSignal.timeout(55000),
   });
 
   if (!res.ok) throw new Error(`Claude API error: ${res.status}`);
