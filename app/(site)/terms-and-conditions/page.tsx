@@ -24,7 +24,7 @@ export default function TermsPage() {
         <p><strong>Company</strong> — FinCNews Ltd., the legal entity operating this news portal.</p>
         <p><strong>News Portal</strong> — The news portal operated by the Company and available at <a href="https://fin-c-news.vercel.app">fincnews.com</a>.</p>
         <p><strong>FinCNews</strong> — Collective name referring to either or both the Company or the News Portal.</p>
-        <p><strong>Terms and Conditions</strong> — The latest version of the Company's Terms and Conditions as published on this page.</p>
+        <p><strong>Terms and Conditions</strong> — The latest version of the Company&apos;s Terms and Conditions as published on this page.</p>
         <p><strong>Visitor</strong> — An individual person who visits the News Portal.</p>
         <p><strong>Content</strong> — All information, articles, data, prices, and other material displayed, used or transmitted on the News Portal.</p>
         <p><strong>AI-Assisted Content</strong> — Content that is generated or processed with the assistance of artificial intelligence tools and reviewed for publication.</p>
@@ -44,7 +44,7 @@ export default function TermsPage() {
         <p>The Company makes no representation as to the accuracy, completeness, or timeliness of any market data displayed on the News Portal.</p>
 
         <h2>5. Limitation of Liability</h2>
-        <p>The services and information available on the News Portal are provided on a strictly "as is," "where is," and "where available" basis. The Company does not provide any warranties, express or implied, with respect to the information provided.</p>
+        <p>The services and information available on the News Portal are provided on a strictly &ldquo;as is,&rdquo; &ldquo;where is,&rdquo; and &ldquo;where available&rdquo; basis. The Company does not provide any warranties, express or implied, with respect to the information provided.</p>
         <p>The Company expressly disclaims any implied warranties, including but not limited to warranties of title, non-infringement, merchantability, or fitness for a particular purpose.</p>
         <p>The Company, its affiliates, directors, officers, employees, and any third-party providers of content or technology will not be liable for any loss or damage — direct, indirect, special, consequential, or incidental — arising from:</p>
         <ul>

@@ -6,7 +6,7 @@ https://www.theblock.co/
 
 https://decrypt.co/
 
-https://beincrypto.com/
+https://beincrypto.com/ 111
 
 https://cryptoslate.com/
 

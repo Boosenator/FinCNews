@@ -53,7 +53,7 @@ export default function PrivacyPage() {
         <p>Where analytics tools set cookies or collect identifiable data, explicit consent will be requested via a cookie banner in compliance with the ePrivacy Directive.</p>
 
         <h2>5. Telegram Channel</h2>
-        <p>FinCNews operates a Telegram channel. If you subscribe to the channel, your Telegram username and profile data are handled by Telegram in accordance with <a href="https://telegram.org/privacy" target="_blank" rel="noreferrer">Telegram's own Privacy Policy</a>. FinCNews does not separately store or process your Telegram personal data.</p>
+        <p>FinCNews operates a Telegram channel. If you subscribe to the channel, your Telegram username and profile data are handled by Telegram in accordance with <a href="https://telegram.org/privacy" target="_blank" rel="noreferrer">Telegram&apos;s own Privacy Policy</a>. FinCNews does not separately store or process your Telegram personal data.</p>
 
         <h2>6. Cookies</h2>
         <p>FinCNews uses the following types of cookies:</p>
