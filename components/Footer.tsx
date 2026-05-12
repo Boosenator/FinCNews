@@ -86,9 +86,18 @@ export default function Footer() {
                   Sitemap
                 </Link>
               </li>
+              <li>
+                <Link href="/terms-and-conditions" className="transition hover:text-white">
+                  Terms &amp; Conditions
+                </Link>
+              </li>
+              <li>
+                <Link href="/privacy-policy" className="transition hover:text-white">
+                  Privacy Policy
+                </Link>
+              </li>
               <li className="pt-2 text-xs text-zinc-700">Not financial advice</li>
               <li className="text-xs text-zinc-700">AI-assisted content</li>
-              <li className="text-xs text-zinc-700">Sources cited per article</li>
             </ul>
           </div>
         </div>
