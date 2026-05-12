@@ -109,32 +109,38 @@ export default async function FlowsPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-white/[0.06] bg-zinc-900/60">
-                    {["Time", "Status", "Found", "Published", "Duration"].map((h) => (
-                      <th key={h} className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-zinc-600">{h}</th>
+                    {["Time", "Status", "Raw", "Keywords", "New URLs", "Unique", "Published", "Dur"].map((h) => (
+                      <th key={h} className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-zinc-600">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/[0.04]">
                   {logs.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-4 py-8 text-center text-zinc-600">
+                      <td colSpan={8} className="px-4 py-8 text-center text-zinc-600">
                         No runs yet. Click &ldquo;Run Now&rdquo; to start.
                       </td>
                     </tr>
                   ) : (
-                    logs.map((log) => (
-                      <tr key={log.id} className="transition hover:bg-white/[0.02]">
-                        <td className="px-4 py-3 text-xs tabular-nums text-zinc-400">{timeAgo(log.started_at)}</td>
-                        <td className="px-4 py-3">
-                          <span className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase ${badge(log.status)}`}>
-                            {log.status}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 tabular-nums text-zinc-300">{log.articles_found}</td>
-                        <td className="px-4 py-3 tabular-nums text-emerald-400 font-semibold">{log.articles_published}</td>
-                        <td className="px-4 py-3 tabular-nums text-zinc-500 text-xs">{fmt(log.duration_ms)}</td>
-                      </tr>
-                    ))
+                    logs.map((log) => {
+                      const d = log.details as unknown as Record<string, number> & typeof log.details;
+                      return (
+                        <tr key={log.id} className="transition hover:bg-white/[0.02]">
+                          <td className="px-3 py-3 text-xs tabular-nums text-zinc-400">{timeAgo(log.started_at)}</td>
+                          <td className="px-3 py-3">
+                            <span className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase ${badge(log.status)}`}>
+                              {log.status}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3 tabular-nums text-zinc-500">{log.articles_found}</td>
+                          <td className="px-3 py-3 tabular-nums text-zinc-400">{(log as unknown as Record<string,number>).articles_after_keywords ?? "—"}</td>
+                          <td className="px-3 py-3 tabular-nums text-zinc-400">{(log as unknown as Record<string,number>).articles_after_url_dedup ?? "—"}</td>
+                          <td className="px-3 py-3 tabular-nums text-zinc-300">{(log as unknown as Record<string,number>).articles_after_semantic_dedup ?? "—"}</td>
+                          <td className="px-3 py-3 tabular-nums font-semibold text-emerald-400">{log.articles_published}</td>
+                          <td className="px-3 py-3 tabular-nums text-zinc-600 text-xs">{fmt(log.duration_ms)}</td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>

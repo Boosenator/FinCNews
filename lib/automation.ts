@@ -244,6 +244,9 @@ export type DetailEntry = {
 
 export type AutomationResult = {
   articlesFound: number;
+  articlesAfterKeywords: number;
+  articlesAfterUrlDedup: number;
+  articlesAfterSemanticDedup: number;
   articlesPublished: number;
   articlesSkipped: number;
   durationMs: number;
@@ -255,7 +258,7 @@ export async function runAutomation(maxArticles = 3): Promise<AutomationResult> 
   const db = supabaseAdmin();
 
   const { data: sources } = await db.from("rss_sources").select("*").eq("enabled", true);
-  if (!sources?.length) return { articlesFound: 0, articlesPublished: 0, articlesSkipped: 0, durationMs: Date.now() - start, details: [] };
+  if (!sources?.length) return { articlesFound: 0, articlesAfterKeywords: 0, articlesAfterUrlDedup: 0, articlesAfterSemanticDedup: 0, articlesPublished: 0, articlesSkipped: 0, durationMs: Date.now() - start, details: [] };
 
   type FeedItem = { title?: string; link?: string; pubDate?: string; contentSnippet?: string; sourceCategory: string; sourceName: string };
   const allItems: FeedItem[] = [];
@@ -272,40 +275,34 @@ export async function runAutomation(maxArticles = 3): Promise<AutomationResult> 
     }
   }
 
-  // Filter: < 6h old and contains keywords
-  const sixHoursAgo = Date.now() - 6 * 60 * 60 * 1000;
+  // Filter: < 48h old and contains keywords
+  const cutoff = Date.now() - 48 * 60 * 60 * 1000;
   const fresh = allItems.filter((item) => {
     if (!item.link || !item.title) return false;
     const age = new Date(item.pubDate ?? 0).getTime();
-    if (age < sixHoursAgo && item.pubDate) return false;
+    if (item.pubDate && age < cutoff) return false;
     const text = `${item.title} ${item.contentSnippet ?? ""}`.toLowerCase();
     return KEYWORDS.some((kw) => text.includes(kw.toLowerCase()));
   });
 
-  // Deduplicate by URL
+  // Step 1: URL dedup
   const urls = fresh.map((i) => i.link!).filter(Boolean);
-  const { data: existing } = await db.from("processed_urls").select("url, title").in("url", urls);
-  const seen = new Set((existing ?? []).map((r: { url: string }) => r.url));
+  const { data: existing } = await db.from("processed_urls").select("url").in("url", urls);
+  const seenUrls = new Set((existing ?? []).map((r: { url: string }) => r.url));
+  const afterUrlDedup = fresh.filter((i) => !seenUrls.has(i.link!));
 
-  // Semantic dedup: skip if similar title already processed in last 24h
+  // Step 2: Semantic dedup — skip if same story already published in last 48h
   const { data: recentTitles } = await db
     .from("processed_urls")
     .select("title")
-    .gte("published_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+    .gte("published_at", new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString())
     .not("title", "is", null);
   const recentTitleList = (recentTitles ?? []).map((r: { title: string }) => r.title);
-
-  const newItems = fresh.filter((item) => {
-    if (seen.has(item.link!)) return false;
-    // skip if any recent article covers the same story (>50% word overlap)
-    const isDupe = recentTitleList.some(
-      (t) => titleSimilarity(item.title ?? "", t) > 0.5
-    );
-    return !isDupe;
+  const newItems = afterUrlDedup.filter((item) => {
+    return !recentTitleList.some((t) => titleSimilarity(item.title ?? "", t) > 0.5);
   });
 
   const toProcess = newItems.slice(0, maxArticles);
-  // skipped = already in processed_urls (deduped)
   const skipped = fresh.length - newItems.length;
   const details: AutomationResult["details"] = [];
 
@@ -360,7 +357,10 @@ export async function runAutomation(maxArticles = 3): Promise<AutomationResult> 
   }
 
   return {
-    articlesFound: fresh.length,
+    articlesFound: allItems.length,
+    articlesAfterKeywords: fresh.length,
+    articlesAfterUrlDedup: afterUrlDedup.length,
+    articlesAfterSemanticDedup: newItems.length,
     articlesPublished: details.filter((d) => d.status === "published").length,
     articlesSkipped: skipped,
     durationMs: Date.now() - start,

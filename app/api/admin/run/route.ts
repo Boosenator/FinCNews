@@ -3,8 +3,7 @@ import { runAutomation } from "@/lib/automation";
 import { supabaseAdmin } from "@/lib/supabase";
 
 function isAuthed(req: NextRequest) {
-  const cookie = req.cookies.get("admin_key")?.value;
-  return cookie === process.env.ADMIN_KEY;
+  return req.cookies.get("admin_key")?.value === process.env.ADMIN_KEY;
 }
 
 export async function POST(req: NextRequest) {
@@ -15,11 +14,16 @@ export async function POST(req: NextRequest) {
 
   try {
     const result = await runAutomation(3);
+    const hasError = result.details.some((d) => d.status === "error");
+    const status = result.articlesPublished > 0 ? "success" : hasError ? "partial" : "success";
 
     await db.from("run_logs").update({
-      status: result.articlesPublished > 0 ? "success" : result.details.some((d) => d.status === "error") ? "partial" : "success",
+      status,
       finished_at: new Date().toISOString(),
       articles_found: result.articlesFound,
+      articles_after_keywords: result.articlesAfterKeywords,
+      articles_after_url_dedup: result.articlesAfterUrlDedup,
+      articles_after_semantic_dedup: result.articlesAfterSemanticDedup,
       articles_published: result.articlesPublished,
       articles_skipped: result.articlesSkipped,
       duration_ms: result.durationMs,

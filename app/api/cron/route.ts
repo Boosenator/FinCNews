@@ -10,30 +10,23 @@ function isAuthed(req: NextRequest) {
 }
 
 async function handle(req: NextRequest) {
-  if (!isAuthed(req)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  if (!isAuthed(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const db = supabaseAdmin();
-  const { data: log } = await db
-    .from("run_logs")
-    .insert({ status: "running" })
-    .select()
-    .single();
+  const { data: log } = await db.from("run_logs").insert({ status: "running" }).select().single();
 
   try {
     const result = await runAutomation(3);
-    const status =
-      result.articlesPublished > 0
-        ? "success"
-        : result.details.some((d) => d.status === "error")
-        ? "partial"
-        : "success";
+    const hasError = result.details.some((d) => d.status === "error");
+    const status = result.articlesPublished > 0 ? "success" : hasError ? "partial" : "success";
 
     await db.from("run_logs").update({
       status,
       finished_at: new Date().toISOString(),
       articles_found: result.articlesFound,
+      articles_after_keywords: result.articlesAfterKeywords,
+      articles_after_url_dedup: result.articlesAfterUrlDedup,
+      articles_after_semantic_dedup: result.articlesAfterSemanticDedup,
       articles_published: result.articlesPublished,
       articles_skipped: result.articlesSkipped,
       duration_ms: result.durationMs,
@@ -51,7 +44,5 @@ async function handle(req: NextRequest) {
   }
 }
 
-// Vercel Cron calls GET
 export const GET = handle;
-// Manual trigger from admin panel calls POST
 export const POST = handle;
