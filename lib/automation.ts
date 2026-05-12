@@ -501,16 +501,32 @@ export async function runCollect(): Promise<CollectResult> {
     return { sourcesChecked: sources.length, itemsFound: allItems.length, itemsQueued: 0, itemsSkipped: fresh.length, durationMs: Date.now() - start };
   }
 
-  const { data: inserted } = await db.from("article_queue").insert(
-    newItems.map((item) => ({
-      url: item.link,
-      title: item.title,
-      snippet: item.contentSnippet,
+  // Filter out any items with no URL (defensive) and build clean rows
+  const rows = newItems
+    .filter((item) => !!item.link)
+    .map((item) => ({
+      url: item.link!,
+      title: item.title || null,
+      snippet: item.contentSnippet || null,
       source_category: item.sourceCategory,
-      source_name: item.sourceName,
-      pub_date: item.pubDate,
-    })),
-  ).select("id");
+      source_name: item.sourceName || null,
+      pub_date: item.pubDate || null,
+    }));
+
+  if (!rows.length) {
+    return { sourcesChecked: sources.length, itemsFound: allItems.length, itemsQueued: 0, itemsSkipped: fresh.length, durationMs: Date.now() - start };
+  }
+
+  // upsert with ignoreDuplicates — safe even if URL already exists (race condition)
+  const { data: inserted, error: insertError } = await db
+    .from("article_queue")
+    .upsert(rows, { onConflict: "url", ignoreDuplicates: true })
+    .select("id");
+
+  if (insertError) {
+    // Log but don't throw — partial success is acceptable
+    console.error("[collect] queue insert error:", insertError.message);
+  }
 
   return {
     sourcesChecked: sources.length,

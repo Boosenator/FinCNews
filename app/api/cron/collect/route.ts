@@ -13,6 +13,7 @@ async function handle(req: NextRequest) {
 
   const db = supabaseAdmin();
   const { data: log } = await db.from("run_logs").insert({ status: "running" }).select().single();
+  if (!log) return NextResponse.json({ error: "Failed to create log" }, { status: 500 });
 
   try {
     const result = await runCollect();
@@ -20,16 +21,32 @@ async function handle(req: NextRequest) {
     await db.from("run_logs").update({
       status: "success",
       finished_at: new Date().toISOString(),
+      // articles_found = raw items before keyword filter
       articles_found: result.itemsFound,
+      // articles_published = 0 (collect doesn't generate)
       articles_published: 0,
+      // articles_skipped = items filtered by dedup
       articles_skipped: result.itemsSkipped,
       duration_ms: result.durationMs,
-      details: [{ type: "collect", ...result }],
+      // store collect summary as first detail entry
+      details: [{
+        type: "collect",
+        sourcesChecked: result.sourcesChecked,
+        itemsFound: result.itemsFound,
+        itemsQueued: result.itemsQueued,
+        itemsSkipped: result.itemsSkipped,
+        status: "published",
+        url: "collect-run",
+      }],
     }).eq("id", log.id);
 
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {
-    await db.from("run_logs").update({ status: "error", finished_at: new Date().toISOString(), error_text: String(e) }).eq("id", log.id);
+    await db.from("run_logs").update({
+      status: "error",
+      finished_at: new Date().toISOString(),
+      error_text: String(e),
+    }).eq("id", log.id);
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
 }
