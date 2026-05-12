@@ -1,5 +1,32 @@
-import Parser from "rss-parser";
 import { supabaseAdmin } from "@/lib/supabase";
+
+type FeedEntry = {
+  title?: string;
+  link?: string;
+  pubDate?: string;
+  contentSnippet?: string;
+};
+
+function extractTag(xml: string, tag: string): string {
+  const m = xml.match(new RegExp(`<${tag}[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/${tag}>`, "i"));
+  return m ? m[1].trim() : "";
+}
+
+async function parseFeed(url: string): Promise<FeedEntry[]> {
+  const res = await fetch(url, {
+    headers: { "User-Agent": "FinCNews-Bot/1.0" },
+    signal: AbortSignal.timeout(6000),
+  });
+  if (!res.ok) return [];
+  const xml = await res.text();
+  const items = xml.match(/<item[\s\S]*?<\/item>/gi) ?? [];
+  return items.slice(0, 20).map((item) => ({
+    title: extractTag(item, "title"),
+    link: extractTag(item, "link") || extractTag(item, "guid"),
+    pubDate: extractTag(item, "pubDate"),
+    contentSnippet: extractTag(item, "description").replace(/<[^>]+>/g, " ").slice(0, 300),
+  }));
+}
 
 const KEYWORDS = [
   "bitcoin","ethereum","solana","ETF","hack","exploit","listing","regulation",
@@ -152,15 +179,13 @@ export async function runAutomation(maxArticles = 3): Promise<AutomationResult> 
   const { data: sources } = await db.from("rss_sources").select("*").eq("enabled", true);
   if (!sources?.length) return { articlesFound: 0, articlesPublished: 0, articlesSkipped: 0, durationMs: Date.now() - start, details: [] };
 
-  const parser = new Parser({ timeout: 5000, headers: { "User-Agent": "FinCNews-Bot/1.0" } });
-
   type FeedItem = { title?: string; link?: string; pubDate?: string; contentSnippet?: string; sourceCategory: string; sourceName: string };
   const allItems: FeedItem[] = [];
 
   for (const source of sources) {
     try {
-      const feed = await parser.parseURL(source.url);
-      for (const item of feed.items.slice(0, 20)) {
+      const entries = await parseFeed(source.url);
+      for (const item of entries) {
         allItems.push({ ...item, sourceCategory: source.category, sourceName: source.name });
       }
       await db.from("rss_sources").update({ last_fetched_at: new Date().toISOString() }).eq("id", source.id);
