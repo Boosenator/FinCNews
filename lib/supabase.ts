@@ -19,6 +19,18 @@ export type RssSource = {
   created_at: string;
 };
 
+export type RunLogDetail = {
+  url: string;
+  slug?: string;
+  title?: string;
+  category?: string;
+  excerpt?: string;
+  bodyPreview?: string;
+  imageAttached?: boolean;
+  status: string;
+  error?: string;
+};
+
 export type RunLog = {
   id: string;
   started_at: string;
@@ -29,5 +41,5 @@ export type RunLog = {
   articles_skipped: number;
   duration_ms: number | null;
   error_text: string | null;
-  details: Array<{ url: string; slug?: string; title?: string; status: string; error?: string }>;
+  details: RunLogDetail[];
 };

@@ -230,12 +230,24 @@ async function sendTelegram(title: string, url: string, telegramText: string) {
   });
 }
 
+export type DetailEntry = {
+  url: string;
+  title?: string;
+  slug?: string;
+  category?: string;
+  excerpt?: string;
+  bodyPreview?: string;
+  imageAttached?: boolean;
+  status: "published" | "error" | "skipped";
+  error?: string;
+};
+
 export type AutomationResult = {
   articlesFound: number;
   articlesPublished: number;
   articlesSkipped: number;
   durationMs: number;
-  details: Array<{ url: string; title?: string; slug?: string; status: "published" | "error" | "skipped"; error?: string }>;
+  details: DetailEntry[];
 };
 
 export async function runAutomation(maxArticles = 3): Promise<AutomationResult> {
@@ -332,7 +344,16 @@ export async function runAutomation(maxArticles = 3): Promise<AutomationResult> 
       const articleUrl = `${process.env.NEXT_PUBLIC_BASE_URL ?? "https://fin-c-news.vercel.app"}/${category}/${article.slug}`;
       await sendTelegram(en.title, articleUrl, en.telegramText ?? "");
 
-      details.push({ url: item.link!, title: en.title, slug: article.slug as string, status: "published" });
+      details.push({
+        url: item.link!,
+        title: en.title,
+        slug: article.slug as string,
+        category,
+        excerpt: en.excerpt,
+        bodyPreview: (typeof en.body === "string" ? en.body : "").slice(0, 400),
+        imageAttached: !!process.env.PEXELS_API_KEY,
+        status: "published",
+      });
     } catch (e) {
       details.push({ url: item.link!, title: item.title, status: "error", error: String(e) });
     }

@@ -142,25 +142,52 @@ export default async function FlowsPage() {
 
             {/* Last run detail */}
             {lastRun?.details && lastRun.details.length > 0 && (
-              <details className="mt-4 rounded-xl border border-white/[0.06] bg-zinc-900/30">
-                <summary className="cursor-pointer px-4 py-3 text-xs font-semibold text-zinc-500 hover:text-zinc-300">
-                  Last run — {lastRun.details.length} articles detail
-                </summary>
-                <div className="divide-y divide-white/[0.04] px-4 pb-3">
-                  {lastRun.details.map((d, i) => (
-                    <div key={i} className="flex items-start gap-3 py-2.5">
-                      <span className={`mt-0.5 shrink-0 text-[10px] font-bold uppercase ${d.status === "published" ? "text-emerald-400" : "text-red-400"}`}>
-                        {d.status}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="truncate text-xs text-zinc-300">{d.title ?? d.url}</p>
-                        {d.slug && <p className="text-[10px] text-zinc-600">/{d.slug}</p>}
-                        {d.error && <p className="text-[10px] text-red-400">{d.error}</p>}
+              <div className="mt-4 space-y-3">
+                <p className="text-xs font-semibold text-zinc-500">
+                  Last run — {lastRun.details.length} processed
+                </p>
+                {lastRun.details.map((d, i) => (
+                  <div key={i} className={`rounded-xl border p-4 ${d.status === "published" ? "border-emerald-500/20 bg-emerald-500/5" : "border-red-500/20 bg-red-500/5"}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                          <span className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase ${d.status === "published" ? "bg-emerald-500/20 text-emerald-400" : "bg-red-500/20 text-red-400"}`}>
+                            {d.status}
+                          </span>
+                          {d.category && (
+                            <span className="rounded bg-white/[0.05] px-2 py-0.5 text-[10px] text-zinc-500">{d.category}</span>
+                          )}
+                          {d.imageAttached && (
+                            <span className="rounded bg-cyan-400/10 px-2 py-0.5 text-[10px] text-cyan-400">📷 image</span>
+                          )}
+                        </div>
+                        <p className="text-sm font-semibold text-zinc-100">{d.title ?? "—"}</p>
+                        {d.excerpt && (
+                          <p className="mt-1 text-xs leading-5 text-zinc-400">{d.excerpt}</p>
+                        )}
+                        {d.bodyPreview && (
+                          <details className="mt-2">
+                            <summary className="cursor-pointer text-[10px] text-zinc-600 hover:text-zinc-400">Body preview</summary>
+                            <p className="mt-1 text-[11px] leading-5 text-zinc-500">{d.bodyPreview}…</p>
+                          </details>
+                        )}
+                        {d.error && <p className="mt-1 text-[11px] text-red-400">{d.error}</p>}
                       </div>
+                      {d.slug && (
+                        <a
+                          href={`/${d.category}/${d.slug}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="shrink-0 rounded-lg border border-white/[0.08] px-2.5 py-1.5 text-[10px] text-zinc-500 hover:border-cyan-400/30 hover:text-cyan-400"
+                        >
+                          View →
+                        </a>
+                      )}
                     </div>
-                  ))}
-                </div>
-              </details>
+                    <p className="mt-2 truncate text-[10px] text-zinc-700">{d.url}</p>
+                  </div>
+                ))}
+              </div>
             )}
           </section>
 
