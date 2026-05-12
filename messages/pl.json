@@ -1,0 +1,27 @@
+{
+  "home": {
+    "kicker": "Automatyczna redakcja",
+    "title": "Najważniejsze wiadomości po polsku i w trzech innych językach",
+    "subtitle": "Szybki serwis newsowy oparty o Sanity, n8n, Claude API i publikacje Telegram dla każdego języka.",
+    "telegramTitle": "Dystrybucja Telegram",
+    "telegramText": "Każdy artykuł ma osobny krótki tekst kanałowy, dzięki czemu posty brzmią redakcyjnie, a nie automatycznie.",
+    "emptyTitle": "Nie ma jeszcze artykułów",
+    "emptyText": "Dodaj zmienne Sanity do .env.local albo wyślij pierwszy artykuł przez /api/publish."
+  },
+  "category": {
+    "kicker": "Kategoria",
+    "empty": "W tej kategorii nie ma jeszcze artykułów."
+  },
+  "categories": {
+    "all": "Wszystkie",
+    "tech": "Technologia",
+    "finance": "Finanse",
+    "crypto": "Krypto",
+    "world": "Świat",
+    "ukraine": "Ukraina",
+    "lifestyle": "Lifestyle",
+    "sport": "Sport",
+    "auto": "Auto",
+    "health": "Zdrowie"
+  }
+}

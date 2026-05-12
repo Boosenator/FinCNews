@@ -1,0 +1,27 @@
+{
+  "home": {
+    "kicker": "Automated newsroom",
+    "title": "Top stories in English and three more languages",
+    "subtitle": "A fast news site powered by Sanity, n8n, Claude API and Telegram publishing for every locale.",
+    "telegramTitle": "Telegram distribution",
+    "telegramText": "Every article includes a dedicated short channel text, so posts feel editorial instead of robotic.",
+    "emptyTitle": "No articles yet",
+    "emptyText": "Add Sanity variables to .env.local or send the first article through /api/publish."
+  },
+  "category": {
+    "kicker": "Category",
+    "empty": "There are no articles in this category yet."
+  },
+  "categories": {
+    "all": "All",
+    "tech": "Tech",
+    "finance": "Finance",
+    "crypto": "Crypto",
+    "world": "World",
+    "ukraine": "Ukraine",
+    "lifestyle": "Lifestyle",
+    "sport": "Sport",
+    "auto": "Auto",
+    "health": "Health"
+  }
+}
