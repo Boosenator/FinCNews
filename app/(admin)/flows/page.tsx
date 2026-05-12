@@ -4,6 +4,7 @@ import RunButton from "./_components/RunButton";
 import ToggleSource from "./_components/ToggleSource";
 import AddSourceForm from "./_components/AddSourceForm";
 import AutoRefresh from "./_components/AutoRefresh";
+import TestSourceButton from "./_components/TestSourceButton";
 
 function badge(status: RunLog["status"]) {
   const map = {
@@ -213,6 +214,7 @@ export default async function FlowsPage() {
                     <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-zinc-600">Source</th>
                     <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-zinc-600">Cat</th>
                     <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-zinc-600">Published</th>
+                    <th className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-zinc-600">Test</th>
                     <th className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-zinc-600">On</th>
                   </tr>
                 </thead>
@@ -227,6 +229,9 @@ export default async function FlowsPage() {
                         <span className="rounded bg-white/[0.05] px-1.5 py-0.5 text-[10px] font-semibold text-zinc-400">{src.category}</span>
                       </td>
                       <td className="px-4 py-2.5 tabular-nums text-xs text-zinc-500">{src.articles_published}</td>
+                      <td className="px-4 py-2.5">
+                        <TestSourceButton id={src.id} name={src.name} />
+                      </td>
                       <td className="px-4 py-2.5 text-center">
                         <ToggleSource id={src.id} enabled={src.enabled} />
                       </td>
