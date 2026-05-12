@@ -5,10 +5,10 @@ export default function Footer() {
   return (
     <footer className="mt-20 border-t border-white/[0.05] bg-zinc-950">
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6">
-        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
           {/* Brand */}
-          <div className="lg:col-span-2">
-            <Link href="/" className="flex items-center gap-1">
+          <div className="sm:col-span-2">
+            <Link href="/" className="flex items-baseline gap-1.5">
               <span className="text-xl font-black text-white">
                 Fin<span className="text-cyan-400">C</span>News
               </span>
@@ -17,37 +17,28 @@ export default function Footer() {
               Fast AI-powered finance intelligence. Crypto, markets, macro and fintech — breaking news as it happens.
             </p>
             <div className="mt-5 flex gap-3">
-              {[
-                {
-                  href: "https://t.me/fincnews",
-                  label: "Telegram",
-                  icon: (
-                    <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
-                      <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z" />
-                    </svg>
-                  ),
-                },
-                {
-                  href: "https://x.com/fincnews",
-                  label: "X",
-                  icon: (
-                    <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
-                      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.737-8.835L1.254 2.25H8.08l4.266 5.644 5.898-5.644zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-                    </svg>
-                  ),
-                },
-              ].map(({ href, label, icon }) => (
-                <a
-                  key={href}
-                  href={href}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label={label}
-                  className="flex h-9 w-9 items-center justify-center rounded-md border border-white/10 text-zinc-500 transition hover:border-cyan-400/40 hover:text-cyan-400"
-                >
-                  {icon}
-                </a>
-              ))}
+              <a
+                href="https://t.me/fincnews"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Telegram"
+                className="flex h-9 w-9 items-center justify-center rounded-md border border-white/10 text-zinc-500 transition hover:border-cyan-400/40 hover:text-cyan-400"
+              >
+                <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+                  <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z" />
+                </svg>
+              </a>
+              <a
+                href="https://x.com/fincnews"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="X (Twitter)"
+                className="flex h-9 w-9 items-center justify-center rounded-md border border-white/10 text-zinc-500 transition hover:border-white/30 hover:text-white"
+              >
+                <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.737-8.835L1.254 2.25H8.08l4.266 5.644 5.898-5.644zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                </svg>
+              </a>
               <a
                 href="/api/feed"
                 aria-label="RSS feed"
@@ -62,11 +53,16 @@ export default function Footer() {
 
           {/* Sections */}
           <div>
-            <h3 className="mb-4 text-xs font-semibold uppercase tracking-widest text-zinc-600">Sections</h3>
+            <h3 className="mb-4 text-xs font-semibold uppercase tracking-widest text-zinc-600">
+              Sections
+            </h3>
             <ul className="space-y-2.5">
               {categories.map((cat) => (
                 <li key={cat}>
-                  <Link href={`/${cat}`} className="text-sm text-zinc-500 transition hover:text-white">
+                  <Link
+                    href={`/${cat}`}
+                    className="text-sm text-zinc-500 transition hover:text-white"
+                  >
                     {categoryLabels[cat]}
                   </Link>
                 </li>
@@ -74,24 +70,25 @@ export default function Footer() {
             </ul>
           </div>
 
-          {/* Company */}
-          <div>
-            <h3 className="mb-4 text-xs font-semibold uppercase tracking-widest text-zinc-600">Company</h3>
-            <ul className="space-y-2.5 text-sm text-zinc-500">
-              <li><Link href="/about" className="transition hover:text-white">About</Link></li>
-              <li><Link href="/advertise" className="transition hover:text-white">Advertise</Link></li>
-              <li><a href="/api/feed" className="transition hover:text-white">RSS Feed</a></li>
-              <li><Link href="/sitemap.xml" className="transition hover:text-white">Sitemap</Link></li>
-            </ul>
-          </div>
-
           {/* Legal */}
           <div>
-            <h3 className="mb-4 text-xs font-semibold uppercase tracking-widest text-zinc-600">Legal</h3>
+            <h3 className="mb-4 text-xs font-semibold uppercase tracking-widest text-zinc-600">
+              Info
+            </h3>
             <ul className="space-y-2.5 text-sm text-zinc-500">
-              <li>Not financial advice</li>
-              <li>AI-assisted content</li>
-              <li>Sources cited per article</li>
+              <li>
+                <a href="/api/feed" className="transition hover:text-white">
+                  RSS Feed
+                </a>
+              </li>
+              <li>
+                <Link href="/sitemap.xml" className="transition hover:text-white">
+                  Sitemap
+                </Link>
+              </li>
+              <li className="pt-2 text-xs text-zinc-700">Not financial advice</li>
+              <li className="text-xs text-zinc-700">AI-assisted content</li>
+              <li className="text-xs text-zinc-700">Sources cited per article</li>
             </ul>
           </div>
         </div>

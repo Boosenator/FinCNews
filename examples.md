@@ -26,4 +26,4 @@ https://coinspectator.com/
 
 https://www.newsbtc.com/
 
-https://bitcoinmagazine.com/
+https://bitcoinmagazine.com/    
