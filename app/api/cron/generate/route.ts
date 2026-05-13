@@ -20,6 +20,7 @@ async function handle(req: NextRequest) {
     const status = result.articlesPublished > 0 ? "success" : hasError ? "partial" : "success";
 
     await db.from("run_logs").update({
+      run_type: "generate",
       status,
       finished_at: new Date().toISOString(),
       articles_found: result.queueSize,
@@ -27,6 +28,7 @@ async function handle(req: NextRequest) {
       articles_skipped: 0,
       duration_ms: result.durationMs,
       details: result.details,
+      steps: result.steps,
     }).eq("id", log.id);
 
     return NextResponse.json({ ok: true, ...result });

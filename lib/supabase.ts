@@ -31,10 +31,32 @@ export type RunLogDetail = {
   error?: string;
 };
 
+export type PipelineStep = {
+  name: string;
+  status: "ok" | "error" | "fallback" | "skip";
+  durationMs: number;
+  in: number;
+  out: number;
+  note?: string;
+  // collect-specific
+  perSource?: Array<{ name: string; category: string; count: number; error?: boolean }>;
+  scoredItems?: Array<{ title: string; score: number }>;
+  scoreDistribution?: { below45: number; s45_60: number; s60_80: number; above80: number };
+  dedupBreakdown?: { urlDuped: number; belowScore: number; semanticDuped: number };
+  // generate-specific
+  articleSteps?: Array<{
+    name: string;
+    status: "ok" | "error" | "skip";
+    durationMs: number;
+    note?: string;
+  }>;
+};
+
 export type RunLog = {
   id: string;
   started_at: string;
   finished_at: string | null;
+  run_type: "collect" | "generate";
   status: "running" | "success" | "error" | "partial";
   articles_found: number;
   articles_published: number;
@@ -42,4 +64,5 @@ export type RunLog = {
   duration_ms: number | null;
   error_text: string | null;
   details: RunLogDetail[];
+  steps: PipelineStep[] | null;
 };
