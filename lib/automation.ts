@@ -264,21 +264,75 @@ async function publishToSanity(article: Record<string, unknown>): Promise<string
   return data.id as string;
 }
 
-async function sendTelegram(title: string, url: string, telegramText: string) {
+const CATEGORY_EMOJI: Record<string, string> = {
+  crypto:    "₿",
+  markets:   "📈",
+  economy:   "🏦",
+  fintech:   "⚡",
+  policy:    "⚖️",
+  companies: "🏢",
+};
+
+const CATEGORY_LABEL: Record<string, string> = {
+  crypto:    "CRYPTO",
+  markets:   "MARKETS",
+  economy:   "ECONOMY",
+  fintech:   "FINTECH",
+  policy:    "POLICY",
+  companies: "COMPANIES",
+};
+
+// Escape special HTML chars for Telegram HTML parse mode
+function esc(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+type TelegramPost = {
+  title: string;
+  excerpt: string;
+  url: string;
+  category: string;
+  tags?: string[];
+  sourceName?: string;
+};
+
+async function sendTelegram(post: TelegramPost) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHANNEL_ID;
   if (!token || !chatId) return;
 
-  const post1 = (telegramText.split("|||")[0] ?? "").trim().replace("[ARTICLE_URL]", url);
+  const emoji = CATEGORY_EMOJI[post.category] ?? "📰";
+  const label = CATEGORY_LABEL[post.category] ?? post.category.toUpperCase();
+
+  // Build 3-5 relevant hashtags
+  const tagList = (post.tags ?? [])
+    .slice(0, 3)
+    .map((t) => `#${t.replace(/\s+/g, "")}`)
+    .join(" ");
+  const hashtags = [tagList, `#${post.category}`, "#FinCNews"].filter(Boolean).join(" ");
+
+  const text = [
+    `${emoji} <b>${label}</b>`,
+    ``,
+    `<b>${esc(post.title)}</b>`,
+    ``,
+    esc(post.excerpt),
+    ``,
+    `<a href="${post.url}">Read full analysis →</a>`,
+    ``,
+    hashtags,
+  ].join("\n");
+
   await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       chat_id: chatId,
-      text: post1,
-      parse_mode: "Markdown",
-      disable_web_page_preview: false,
+      text,
+      parse_mode: "HTML",
+      link_preview_options: { is_disabled: false, prefer_large_media: true },
     }),
+    signal: AbortSignal.timeout(10000),
   });
 }
 
@@ -400,7 +454,13 @@ export async function runAutomation(maxArticles = 2): Promise<AutomationResult> 
         .eq("category", item.sourceCategory);
 
       const articleUrl = `${process.env.NEXT_PUBLIC_BASE_URL ?? "https://fin-c-news.vercel.app"}/${category}/${article.slug}`;
-      await sendTelegram(en.title, articleUrl, en.telegramText ?? "");
+      await sendTelegram({
+        title: en.title,
+        excerpt: en.excerpt,
+        url: articleUrl,
+        category,
+        tags: (article.tags as string[] | undefined),
+      });
 
       details.push({
         url: item.link!,
@@ -609,7 +669,14 @@ export async function runGenerate(maxArticles = 2): Promise<GenerateResult> {
       await db.from("article_queue").update({ status: "done", processed_at: new Date().toISOString() }).eq("id", item.id);
 
       const articleUrl = `${process.env.NEXT_PUBLIC_BASE_URL ?? "https://fin-c-news.vercel.app"}/${category}/${article.slug}`;
-      await sendTelegram(en.title, articleUrl, en.telegramText ?? "");
+      await sendTelegram({
+        title: en.title,
+        excerpt: en.excerpt,
+        url: articleUrl,
+        category,
+        tags: (article.tags as string[] | undefined),
+        sourceName: item.source_name ?? undefined,
+      });
 
       details.push({ url: item.url, title: en.title, slug: article.slug as string, category, excerpt: en.excerpt, bodyPreview: (typeof en.body === "string" ? en.body : "").slice(0, 400), imageAttached: !!process.env.PEXELS_API_KEY, status: "published" });
     } catch (e) {
