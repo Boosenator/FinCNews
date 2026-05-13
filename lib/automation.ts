@@ -85,6 +85,62 @@ const KEYWORDS = [
 
 // ─── Hype Score ───────────────────────────────────────────────────────────────
 
+async function scoreItemsWithAI(
+  items: Array<{ title?: string; contentSnippet?: string; pubDate?: string; sourceName?: string }>,
+): Promise<number[]> {
+  const lines = items
+    .map((item, i) => {
+      const ageH = item.pubDate
+        ? Math.round((Date.now() - new Date(item.pubDate).getTime()) / 3600000)
+        : null;
+      const age = ageH !== null ? `${ageH}h ago` : "age unknown";
+      const snippet = (item.contentSnippet ?? "").slice(0, 120).replace(/\s+/g, " ");
+      return `${i + 1}. [${item.sourceName ?? "?"}] ${item.title ?? "(no title)"} | ${age}${snippet ? ` | ${snippet}` : ""}`;
+    })
+    .join("\n");
+
+  const prompt = `You are a financial news editor scoring articles for a finance/crypto audience.
+
+Rate each article 0-100:
+80-100: Breaking — major price moves, Fed/SEC rulings, hacks, record highs/lows, bankruptcies
+60-79: Significant — big company news, policy impact, notable market moves
+40-59: Moderate — industry updates, earnings, analyst views
+20-39: Low — generic opinion, forecast fluff, minimal news value
+0-19: Irrelevant — off-topic, clickbait, duplicate angle
+
+Return ONLY a JSON array of integers in the same order. No explanation.
+
+Articles:
+${lines}
+
+JSON:`;
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": process.env.ANTHROPIC_API_KEY!,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 300,
+      messages: [{ role: "user", content: prompt }],
+    }),
+    signal: AbortSignal.timeout(20000),
+  });
+
+  if (!res.ok) throw new Error(`Haiku scoring ${res.status}`);
+  const data = await res.json();
+  const text: string = data.content?.[0]?.text ?? "";
+  const match = text.match(/\[[\d,\s]+\]/);
+  if (!match) throw new Error("No JSON array in scoring response");
+  const arr: unknown[] = JSON.parse(match[0]);
+  if (!Array.isArray(arr) || arr.length !== items.length) throw new Error("Score array length mismatch");
+  return arr.map((v) => Math.max(0, Math.min(100, Number(v) || 0)));
+}
+
+
 const BREAKING_SIGNALS = [
   "confirms","breaks record","crashes","surges","collapses","plummets",
   "hacked","exploited","launches","arrested","bankrupt","emergency",
@@ -706,15 +762,24 @@ export async function runCollect(): Promise<CollectResult> {
     return { sourcesChecked: sources.length, itemsFound: allItems.length, itemsAfterKeywords: 0, itemsAfterDedup: 0, itemsQueued: 0, itemsSkipped: 0, durationMs: Date.now() - start, debug: { sampleTitles, sampleAfterKeywords } };
   }
 
-  // ── Score every item ──────────────────────────────────────────────────────
-  const scored = fresh.map((item) => ({
+  // ── Score every item (AI-powered, rule-based fallback) ───────────────────
+  let aiScores: number[] | null = null;
+  try {
+    aiScores = await scoreItemsWithAI(fresh);
+  } catch {
+    // rule-based fallback — no-op, handled below
+  }
+
+  const scored = fresh.map((item, i) => ({
     ...item,
-    score: calculateHypeScore({
-      title: item.title,
-      contentSnippet: item.contentSnippet,
-      pubDate: item.pubDate,
-      sourceName: item.sourceName,
-    }),
+    score: aiScores
+      ? aiScores[i]
+      : calculateHypeScore({
+          title: item.title,
+          contentSnippet: item.contentSnippet,
+          pubDate: item.pubDate,
+          sourceName: item.sourceName,
+        }),
   }));
 
   // ── Remove stale low-score items already in queue ─────────────────────────
