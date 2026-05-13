@@ -68,33 +68,63 @@ export default async function ArticlePage({ params }: Props) {
 
   const related = await getRelatedArticles(params.slug, article.category);
 
-  const jsonLd = {
+  // NewsArticle — fully compliant with Google's guidelines
+  const newsArticleSchema = {
     "@context": "https://schema.org",
     "@type": "NewsArticle",
     headline: t.metaTitle ?? t.title,
     description: t.metaDescription ?? t.excerpt,
     datePublished: article.publishedAt,
     dateModified: article.publishedAt,
-    author: { "@type": "Organization", name: "FinCNews Editorial", url: BASE_URL },
+    author: {
+      "@type": "Organization",
+      name: "FinCNews Editorial",
+      url: `${BASE_URL}/about`,
+    },
     publisher: {
       "@type": "Organization",
       name: "FinCNews",
       url: BASE_URL,
-      logo: { "@type": "ImageObject", url: `${BASE_URL}/logo.png` },
+      logo: { "@type": "ImageObject", url: `${BASE_URL}/logo.jpg`, width: 300, height: 77 },
     },
-    image: article.coverImage?.url ? [article.coverImage.url] : undefined,
+    // ImageObject format — required by Google News
+    image: article.coverImage?.url
+      ? [{ "@type": "ImageObject", url: article.coverImage.url, width: 1200, height: 630 }]
+      : [{ "@type": "ImageObject", url: `${BASE_URL}/opengraph-image`, width: 1200, height: 630 }],
     url: articleUrl,
-    articleSection: params.category,
+    mainEntityOfPage: { "@type": "WebPage", "@id": articleUrl },
+    articleSection: label,
     keywords: article.tags?.join(", "),
-    inLanguage: "en",
+    inLanguage: "en-US",
+  };
+
+  // BreadcrumbList — shows in SERP as "Home › Category › Title"
+  const breadcrumbSchema = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: BASE_URL },
+      { "@type": "ListItem", position: 2, name: label, item: `${BASE_URL}/${params.category}` },
+      { "@type": "ListItem", position: 3, name: t.title, item: articleUrl },
+    ],
+  };
+
+  // Speakable — marks headline + excerpt for voice search & AI Overviews citations
+  const speakableSchema = {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    speakable: {
+      "@type": "SpeakableSpecification",
+      cssSelector: ["h1", ".article-excerpt"],
+    },
+    url: articleUrl,
   };
 
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(newsArticleSchema) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(speakableSchema) }} />
 
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
         <div className="grid gap-10 lg:grid-cols-[1fr_300px]">
@@ -136,7 +166,7 @@ export default async function ArticlePage({ params }: Props) {
             </h1>
 
             {/* Excerpt */}
-            <p className="mt-4 text-lg leading-8 text-zinc-300">{t.excerpt}</p>
+            <p className="article-excerpt mt-4 text-lg leading-8 text-zinc-300">{t.excerpt}</p>
 
             {/* Byline + share */}
             <div className="mt-5 flex flex-wrap items-center justify-between gap-4 border-y border-white/[0.06] py-4">
