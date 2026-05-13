@@ -20,11 +20,21 @@ type ArticleRow = {
   _id: string;
   slug: string;
   category: string;
-  title: string;
+  title: string | null;
 };
 
-async function fetchPexelsImage(category: string, pexelsKey: string): Promise<Buffer | null> {
-  const query = CATEGORY_QUERIES[category] ?? "finance business";
+const STOP_WORDS = new Set(["the","a","an","and","or","but","in","on","at","to","for","of","with","as","is","was","are","were","has","have","will","would","after","before","than","that","this","from","into","over","just","its","their","our","amid","says","back","new","via","per","how","why","what","when","where"]);
+
+function buildQuery(category: string, title?: string): string {
+  if (title) {
+    const words = title.split(/\W+/).map(w => w.toLowerCase()).filter(w => w.length > 4 && !STOP_WORDS.has(w));
+    if (words.length >= 2) return words.slice(0, 3).join(" ");
+  }
+  return CATEGORY_QUERIES[category] ?? "finance business";
+}
+
+async function fetchPexelsImage(category: string, pexelsKey: string, title?: string): Promise<Buffer | null> {
+  const query = buildQuery(category, title);
   try {
     const res = await fetch(
       `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=10&orientation=landscape`,
@@ -78,7 +88,7 @@ export async function POST(req: NextRequest) {
 
   for (const article of articles) {
     try {
-      const buffer = await fetchPexelsImage(article.category, pexelsKey);
+      const buffer = await fetchPexelsImage(article.category, pexelsKey, article.title ?? undefined);
       if (!buffer) throw new Error("Pexels returned no image");
 
       const asset = await sanity.assets.upload("image", buffer, {

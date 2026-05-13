@@ -198,20 +198,57 @@ function titleSimilarity(a: string, b: string): number {
   return union === 0 ? 0 : intersection / union;
 }
 
+// Build specific Pexels search query from article context
+function buildImageQuery(category: string, tags?: string[], title?: string): string {
+  const STOP_WORDS = new Set([
+    "the","a","an","and","or","but","in","on","at","to","for","of","with","as",
+    "is","was","are","were","has","have","will","would","after","before","than",
+    "that","this","from","into","over","just","its","their","our","amid","amid",
+    "says","says","back","new","via","per","how","why","what","when","where",
+  ]);
+
+  // Priority 1: article tags → most specific (e.g. "memecoin", "solana", "istanbul")
+  if (tags && tags.length > 0) {
+    const meaningful = tags
+      .map((t) => t.replace(/-/g, " ").toLowerCase())
+      .filter((t) => t.length > 3 && !STOP_WORDS.has(t))
+      .slice(0, 2);
+    if (meaningful.length > 0) return `${meaningful.join(" ")} finance`;
+  }
+
+  // Priority 2: key nouns from title (entities, organizations, topics)
+  if (title) {
+    const words = title
+      .split(/\W+/)
+      .map((w) => w.toLowerCase())
+      .filter((w) => w.length > 4 && !STOP_WORDS.has(w));
+    if (words.length >= 2) return `${words.slice(0, 3).join(" ")}`;
+  }
+
+  // Priority 3: category fallback
+  const categoryMap: Record<string, string> = {
+    crypto:    "cryptocurrency digital assets trading",
+    markets:   "stock market trading finance chart",
+    economy:   "federal reserve central bank economy",
+    fintech:   "mobile payment technology fintech",
+    policy:    "law regulation government finance",
+    companies: "corporate office business earnings",
+  };
+  return categoryMap[category] ?? "finance business";
+}
+
 // Returns Pexels photo URL (medium size) for use in Telegram, or null on failure
-async function attachPexelsImage(sanityDocId: string, slug: string, category: string): Promise<string | null> {
+async function attachPexelsImage(
+  sanityDocId: string,
+  slug: string,
+  category: string,
+  tags?: string[],
+  title?: string,
+): Promise<string | null> {
   const pexelsKey = process.env.PEXELS_API_KEY;
   if (!pexelsKey) return null;
 
-  const queryMap: Record<string, string> = {
-    crypto: "bitcoin cryptocurrency blockchain",
-    markets: "stock market trading finance chart",
-    economy: "federal reserve central bank economy",
-    fintech: "mobile payment technology fintech",
-    policy: "law regulation government finance",
-    companies: "corporate office business earnings",
-  };
-  const query = queryMap[category] ?? "finance business";
+  const query = buildImageQuery(category, tags, title);
 
   try {
     const search = await fetch(
@@ -495,8 +532,14 @@ export async function runAutomation(maxArticles = 2): Promise<AutomationResult> 
 
       const sanityId = await publishToSanity(article);
 
-      // Image before Telegram
-      const photoUrl = await attachPexelsImage(sanityId, article.slug as string, category);
+      // Image before Telegram — pass tags + title for specific search
+      const photoUrl = await attachPexelsImage(
+        sanityId,
+        article.slug as string,
+        category,
+        article.tags as string[] | undefined,
+        en.title,
+      );
 
       await db.from("processed_urls").insert({
         url: item.link,
@@ -721,8 +764,14 @@ export async function runGenerate(maxArticles = 2): Promise<GenerateResult> {
       article.sourceUrl = item.url;
       const sanityId = await publishToSanity(article);
 
-      // 1. Attach image (await — needed for Telegram photo)
-      const photoUrl = await attachPexelsImage(sanityId, article.slug as string, category);
+      // 1. Attach image — specific query from tags + title
+      const photoUrl = await attachPexelsImage(
+        sanityId,
+        article.slug as string,
+        category,
+        article.tags as string[] | undefined,
+        en.title,
+      );
 
       const articleUrl = `${process.env.NEXT_PUBLIC_BASE_URL ?? "https://fin-c-news.vercel.app"}/${category}/${article.slug}`;
       const enBodyText = typeof en.body === "string" ? en.body : "";
