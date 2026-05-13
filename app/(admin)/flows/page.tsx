@@ -6,6 +6,7 @@ import AddSourceForm from "./_components/AddSourceForm";
 import AutoRefresh from "./_components/AutoRefresh";
 import TestSourceButton from "./_components/TestSourceButton";
 import AttachImagesButton from "./_components/AttachImagesButton";
+import TelegramTestButton from "./_components/TelegramTestButton";
 
 function badge(status: RunLog["status"]) {
   const map = {
@@ -267,6 +268,9 @@ export default async function FlowsPage() {
                 Header: <span className="text-zinc-400">Authorization: Bearer {"{CRON_SECRET}"}</span>
               </p>
               <p className="mt-1 text-[10px] text-zinc-600">Schedule: every 15 minutes</p>
+              <div className="mt-4 border-t border-white/[0.04] pt-4">
+                <TelegramTestButton />
+              </div>
             </div>
           </section>
         </div>
