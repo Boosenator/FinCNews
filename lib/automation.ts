@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabase";
+import { createTelegraphPage } from "@/lib/telegraph";
 
 type FeedEntry = {
   title?: string;
@@ -311,7 +312,8 @@ function pickCta(title: string, category: string): string {
 type TelegramPost = {
   title: string;
   excerpt: string;
-  url: string;
+  url: string;          // Telegraph URL (or site as fallback)
+  siteUrl?: string;     // always the site URL (shown as secondary link)
   category: string;
   tags?: string[];
   photoUrl?: string | null;
@@ -338,6 +340,8 @@ async function sendTelegram(post: TelegramPost) {
     ? `🚨 <b>BREAKING</b>`
     : `${emoji} <b>${post.category.toUpperCase()}</b>`;
 
+  const isTelegraph = post.url.includes("telegra.ph");
+
   const caption = [
     header,
     ``,
@@ -345,7 +349,10 @@ async function sendTelegram(post: TelegramPost) {
     ``,
     esc(post.excerpt),
     ``,
-    `<a href="${post.url}">${cta}</a>`,
+    // Primary link → Telegraph (for backlink flow)
+    `<a href="${post.url}">${isTelegraph ? "Read on Telegraph →" : cta}</a>`,
+    // Secondary link → site (if Telegraph is primary)
+    ...(isTelegraph && post.siteUrl ? [`<a href="${post.siteUrl}">Full analysis on FinCNews</a>`] : []),
     ``,
     hashtags,
   ].join("\n");
@@ -708,17 +715,43 @@ export async function runGenerate(maxArticles = 2): Promise<GenerateResult> {
       article.sourceUrl = item.url;
       const sanityId = await publishToSanity(article);
 
-      // Image first — await so Telegram post includes the photo
+      // 1. Attach image (await — needed for Telegram photo)
       const photoUrl = await attachPexelsImage(sanityId, article.slug as string, category);
+
+      const articleUrl = `${process.env.NEXT_PUBLIC_BASE_URL ?? "https://fin-c-news.vercel.app"}/${category}/${article.slug}`;
+      const enBodyText = typeof en.body === "string" ? en.body : "";
+
+      // 2. Create Telegraph page (backlink DR90+ → site)
+      const telegraph = await createTelegraphPage({
+        title: en.title,
+        excerpt: en.excerpt,
+        bodyPreview: enBodyText.slice(0, 800),
+        siteUrl: articleUrl,
+        category,
+      });
+
+      // 3. Patch Sanity with Telegraph URL
+      if (telegraph) {
+        const { createClient } = await import("@sanity/client");
+        const sc = createClient({
+          projectId: process.env.SANITY_PROJECT_ID ?? process.env.NEXT_PUBLIC_SANITY_PROJECT_ID!,
+          dataset: process.env.SANITY_DATASET ?? "production",
+          token: process.env.SANITY_TOKEN!,
+          apiVersion: "2024-01-01",
+          useCdn: false,
+        });
+        void sc.patch(sanityId).set({ telegraphUrl: telegraph.url }).commit();
+      }
 
       await db.from("processed_urls").insert({ url: item.url, slug: article.slug, title: en.title, category });
       await db.from("article_queue").update({ status: "done", processed_at: new Date().toISOString() }).eq("id", item.id);
 
-      const articleUrl = `${process.env.NEXT_PUBLIC_BASE_URL ?? "https://fin-c-news.vercel.app"}/${category}/${article.slug}`;
+      // 4. Send Telegram → links to Telegraph (which links to site)
       await sendTelegram({
         title: en.title,
         excerpt: en.excerpt,
-        url: articleUrl,
+        url: telegraph?.url ?? articleUrl,   // Telegraph URL first, site as fallback
+        siteUrl: articleUrl,
         category,
         tags: (article.tags as string[] | undefined),
         photoUrl,
