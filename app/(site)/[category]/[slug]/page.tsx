@@ -186,12 +186,6 @@ export default async function ArticlePage({ params }: Props) {
                       View source
                     </a>
                   )}
-                  {article.telegraphUrl && (
-                    <a href={article.telegraphUrl} target="_blank" rel="noreferrer"
-                      className="text-[10px] text-zinc-600 underline underline-offset-2 transition hover:text-zinc-400">
-                      Also on Telegraph
-                    </a>
-                  )}
                 </div>
               </div>
               <ShareButtons url={articleUrl} title={t.title} />
