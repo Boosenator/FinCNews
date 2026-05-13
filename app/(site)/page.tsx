@@ -1,7 +1,6 @@
 import { Suspense } from "react";
 import HeroSection from "@/components/HeroSection";
 import ArticleCard from "@/components/ArticleCard";
-import MarketBar from "@/components/MarketBar";
 import TelegramCTA from "@/components/TelegramCTA";
 import { getArticles } from "@/lib/sanity";
 import { categories, categoryLabels } from "@/lib/i18n";
@@ -15,11 +14,6 @@ export default async function HomePage() {
 
   return (
     <main>
-      {/* Market data */}
-      <Suspense fallback={<div className="h-24 border-y border-white/[0.06] bg-zinc-900/30" />}>
-        <MarketBar />
-      </Suspense>
-
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
         {articles.length === 0 ? (
           <EmptyState />
