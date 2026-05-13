@@ -7,6 +7,7 @@ import type { RssSource, RunLog } from "@/lib/supabase";
 import LogsTab from "./LogsTab";
 import AnalyticsTab from "./AnalyticsTab";
 import SettingsTab from "./SettingsTab";
+import QueueTab from "./QueueTab";
 
 type Props = {
   sources: RssSource[];
@@ -23,6 +24,7 @@ type Props = {
 
 const TABS = [
   { key: "logs",      label: "Flow Logs",  icon: "▶" },
+  { key: "queue",     label: "Queue",      icon: "⏳" },
   { key: "analytics", label: "Analytics",  icon: "📊" },
   { key: "settings",  label: "Settings",   icon: "⚙" },
 ] as const;
@@ -67,6 +69,7 @@ export default function FlowsShell({ sources, logs, totalProcessed, queuePending
             totalProcessed={totalProcessed}
           />
         )}
+        {tab === "queue" && <QueueTab />}
         {tab === "analytics" && <AnalyticsTab sources={sources} logs={logs} />}
         {tab === "settings" && <SettingsTab sources={sources} />}
       </div>

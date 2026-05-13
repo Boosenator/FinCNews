@@ -931,6 +931,131 @@ export type GenerateResult = {
   steps: import("@/lib/supabase").PipelineStep[];
 };
 
+type RawQueueItem = {
+  id: string;
+  url: string;
+  title?: string | null;
+  snippet?: string | null;
+  source_category: string;
+  source_name?: string | null;
+  pub_date?: string | null;
+  score: number;
+};
+
+async function processQueueItem(
+  item: RawQueueItem,
+  db: ReturnType<typeof supabaseAdmin>,
+): Promise<{ detail: DetailEntry; step: import("@/lib/supabase").PipelineStep }> {
+  const articleSteps: Array<{ name: string; status: "ok" | "error" | "skip"; durationMs: number; note?: string }> = [];
+  let articleOk = true;
+  let detail: DetailEntry = { url: item.url, title: item.title ?? undefined, status: "error" };
+
+  try {
+    // ── scrape ──
+    let t = Date.now();
+    let scraped = "";
+    try {
+      scraped = await tryFetchArticleText(item.url);
+      articleSteps.push({ name: "scrape", status: "ok", durationMs: Date.now() - t, note: `${scraped.length} chars` });
+    } catch (e) {
+      articleSteps.push({ name: "scrape", status: "error", durationMs: Date.now() - t, note: String(e) });
+    }
+    const bodyText = scraped.length > 300 ? scraped : (item.snippet ?? "");
+
+    // ── claude ──
+    t = Date.now();
+    const category = detectCategory(`${item.title ?? ""} ${item.snippet ?? ""}`, item.source_category);
+    const article = await callClaude({ title: item.title ?? "Untitled", pubDate: item.pub_date ?? undefined }, bodyText, category);
+    const en = (article.translations as Record<string, Record<string, string>>)?.en;
+    if (!en?.title || !en.excerpt || !en.body) throw new Error("Claude returned incomplete article");
+    articleSteps.push({ name: "claude", status: "ok", durationMs: Date.now() - t, note: `"${en.title.slice(0, 60)}"` });
+
+    // ── sanity ──
+    t = Date.now();
+    article.sourceUrl = item.url;
+    const sanityId = await publishToSanity(article);
+    articleSteps.push({ name: "sanity", status: "ok", durationMs: Date.now() - t, note: sanityId });
+
+    // ── pexels ──
+    t = Date.now();
+    let photoUrl: string | null = null;
+    try {
+      photoUrl = await attachPexelsImage(sanityId, article.slug as string, category, article.tags as string[] | undefined, en.title);
+      articleSteps.push({ name: "pexels", status: "ok", durationMs: Date.now() - t, note: photoUrl ? "attached" : "no result" });
+    } catch (e) {
+      articleSteps.push({ name: "pexels", status: "error", durationMs: Date.now() - t, note: String(e) });
+    }
+
+    const articleUrl = `${process.env.NEXT_PUBLIC_BASE_URL ?? "https://fin-c-news.vercel.app"}/${category}/${article.slug}`;
+    const enBodyText = typeof en.body === "string" ? en.body : "";
+
+    // ── telegraph ──
+    t = Date.now();
+    let telegraph = null;
+    try {
+      telegraph = await createTelegraphPage({ title: en.title, excerpt: en.excerpt, bodyPreview: enBodyText.slice(0, 800), siteUrl: articleUrl, category });
+      if (telegraph) {
+        const { createClient } = await import("@sanity/client");
+        const sc = createClient({ projectId: process.env.SANITY_PROJECT_ID ?? process.env.NEXT_PUBLIC_SANITY_PROJECT_ID!, dataset: process.env.SANITY_DATASET ?? "production", token: process.env.SANITY_TOKEN!, apiVersion: "2024-01-01", useCdn: false });
+        void sc.patch(sanityId).set({ telegraphUrl: telegraph.url }).commit();
+      }
+      articleSteps.push({ name: "telegraph", status: "ok", durationMs: Date.now() - t, note: telegraph?.url ?? "no url" });
+    } catch (e) {
+      articleSteps.push({ name: "telegraph", status: "error", durationMs: Date.now() - t, note: String(e) });
+    }
+
+    await db.from("processed_urls").insert({ url: item.url, slug: article.slug, title: en.title, category });
+    await db.from("article_queue").update({ status: "done", processed_at: new Date().toISOString() }).eq("id", item.id);
+
+    // ── telegram ──
+    t = Date.now();
+    try {
+      await sendTelegram({ title: en.title, excerpt: en.excerpt, url: telegraph?.url ?? articleUrl, siteUrl: articleUrl, category, tags: article.tags as string[] | undefined, photoUrl });
+      articleSteps.push({ name: "telegram", status: "ok", durationMs: Date.now() - t, note: "sent" });
+    } catch (e) {
+      articleSteps.push({ name: "telegram", status: "error", durationMs: Date.now() - t, note: String(e) });
+    }
+
+    detail = { url: item.url, title: en.title, slug: article.slug as string, category, excerpt: en.excerpt, bodyPreview: enBodyText.slice(0, 400), imageAttached: !!photoUrl, score: item.score, status: "published" };
+  } catch (e) {
+    articleOk = false;
+    await db.from("article_queue").update({ status: "error", error_text: String(e), processed_at: new Date().toISOString() }).eq("id", item.id);
+    detail = { url: item.url, title: item.title ?? undefined, status: "error", error: String(e) };
+  }
+
+  const step: import("@/lib/supabase").PipelineStep = {
+    name: `article:${item.title?.slice(0, 50) ?? item.url}`,
+    status: articleOk ? "ok" : "error",
+    durationMs: articleSteps.reduce((s, st) => s + st.durationMs, 0),
+    in: 1,
+    out: articleOk ? 1 : 0,
+    note: `score=${item.score} · ${item.source_category}`,
+    articleSteps,
+  };
+
+  return { detail, step };
+}
+
+export async function generateSingle(itemId: string): Promise<GenerateResult> {
+  const start = Date.now();
+  const db = supabaseAdmin();
+
+  const { data: item, error } = await db.from("article_queue").select("*").eq("id", itemId).single();
+  if (error || !item) throw new Error("Queue item not found");
+  if (item.status === "done") throw new Error("Already published");
+
+  await db.from("article_queue").update({ status: "processing" }).eq("id", itemId);
+  const { detail, step } = await processQueueItem(item as RawQueueItem, db);
+
+  return {
+    queueSize: 1,
+    articlesPublished: detail.status === "published" ? 1 : 0,
+    durationMs: Date.now() - start,
+    details: [detail],
+    steps: [step],
+  };
+}
+
 export async function runGenerate(maxArticles = 2): Promise<GenerateResult> {
   const start = Date.now();
   const db = supabaseAdmin();
@@ -959,93 +1084,9 @@ export async function runGenerate(maxArticles = 2): Promise<GenerateResult> {
 
   for (const item of items) {
     await db.from("article_queue").update({ status: "processing" }).eq("id", item.id);
-
-    // per-article sub-steps
-    const articleSteps: Array<{ name: string; status: "ok" | "error" | "skip"; durationMs: number; note?: string }> = [];
-    let articleOk = true;
-
-    try {
-      // ── scrape ──
-      let t = Date.now();
-      let scraped = "";
-      try {
-        scraped = await tryFetchArticleText(item.url);
-        articleSteps.push({ name: "scrape", status: "ok", durationMs: Date.now() - t, note: `${scraped.length} chars` });
-      } catch (e) {
-        articleSteps.push({ name: "scrape", status: "error", durationMs: Date.now() - t, note: String(e) });
-      }
-      const bodyText = scraped.length > 300 ? scraped : (item.snippet ?? "");
-
-      // ── claude ──
-      t = Date.now();
-      const category = detectCategory(`${item.title ?? ""} ${item.snippet ?? ""}`, item.source_category);
-      const article = await callClaude({ title: item.title ?? "Untitled", pubDate: item.pub_date }, bodyText, category);
-      const en = (article.translations as Record<string, Record<string, string>>)?.en;
-      if (!en?.title || !en.excerpt || !en.body) throw new Error("Claude returned incomplete article");
-      articleSteps.push({ name: "claude", status: "ok", durationMs: Date.now() - t, note: `"${en.title.slice(0, 60)}"` });
-
-      // ── sanity ──
-      t = Date.now();
-      article.sourceUrl = item.url;
-      const sanityId = await publishToSanity(article);
-      articleSteps.push({ name: "sanity", status: "ok", durationMs: Date.now() - t, note: sanityId });
-
-      // ── pexels ──
-      t = Date.now();
-      let photoUrl: string | null = null;
-      try {
-        photoUrl = await attachPexelsImage(sanityId, article.slug as string, category, article.tags as string[] | undefined, en.title);
-        articleSteps.push({ name: "pexels", status: "ok", durationMs: Date.now() - t, note: photoUrl ? "attached" : "no result" });
-      } catch (e) {
-        articleSteps.push({ name: "pexels", status: "error", durationMs: Date.now() - t, note: String(e) });
-      }
-
-      const articleUrl = `${process.env.NEXT_PUBLIC_BASE_URL ?? "https://fin-c-news.vercel.app"}/${category}/${article.slug}`;
-      const enBodyText = typeof en.body === "string" ? en.body : "";
-
-      // ── telegraph ──
-      t = Date.now();
-      let telegraph = null;
-      try {
-        telegraph = await createTelegraphPage({ title: en.title, excerpt: en.excerpt, bodyPreview: enBodyText.slice(0, 800), siteUrl: articleUrl, category });
-        if (telegraph) {
-          const { createClient } = await import("@sanity/client");
-          const sc = createClient({ projectId: process.env.SANITY_PROJECT_ID ?? process.env.NEXT_PUBLIC_SANITY_PROJECT_ID!, dataset: process.env.SANITY_DATASET ?? "production", token: process.env.SANITY_TOKEN!, apiVersion: "2024-01-01", useCdn: false });
-          void sc.patch(sanityId).set({ telegraphUrl: telegraph.url }).commit();
-        }
-        articleSteps.push({ name: "telegraph", status: "ok", durationMs: Date.now() - t, note: telegraph?.url ?? "no url" });
-      } catch (e) {
-        articleSteps.push({ name: "telegraph", status: "error", durationMs: Date.now() - t, note: String(e) });
-      }
-
-      await db.from("processed_urls").insert({ url: item.url, slug: article.slug, title: en.title, category });
-      await db.from("article_queue").update({ status: "done", processed_at: new Date().toISOString() }).eq("id", item.id);
-
-      // ── telegram ──
-      t = Date.now();
-      try {
-        await sendTelegram({ title: en.title, excerpt: en.excerpt, url: telegraph?.url ?? articleUrl, siteUrl: articleUrl, category, tags: article.tags as string[] | undefined, photoUrl });
-        articleSteps.push({ name: "telegram", status: "ok", durationMs: Date.now() - t, note: "sent" });
-      } catch (e) {
-        articleSteps.push({ name: "telegram", status: "error", durationMs: Date.now() - t, note: String(e) });
-      }
-
-      details.push({ url: item.url, title: en.title, slug: article.slug as string, category, excerpt: en.excerpt, bodyPreview: enBodyText.slice(0, 400), imageAttached: !!photoUrl, score: item.score, status: "published" });
-    } catch (e) {
-      articleOk = false;
-      await db.from("article_queue").update({ status: "error", error_text: String(e), processed_at: new Date().toISOString() }).eq("id", item.id);
-      details.push({ url: item.url, title: item.title, status: "error", error: String(e) });
-    }
-
-    steps.push({
-      name: `article:${item.title?.slice(0, 50) ?? item.url}`,
-      status: articleOk ? "ok" : "error",
-      durationMs: articleSteps.reduce((s, st) => s + st.durationMs, 0),
-      in: 1,
-      out: articleOk ? 1 : 0,
-      note: `score=${item.score} · ${item.source_category}`,
-      articleSteps,
-    });
+    const { detail, step } = await processQueueItem(item as RawQueueItem, db);
+    details.push(detail);
+    steps.push(step);
   }
 
   return {
