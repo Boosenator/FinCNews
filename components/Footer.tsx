@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { categories, categoryLabels } from "@/lib/i18n";
 
@@ -8,10 +9,8 @@ export default function Footer() {
         <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
           {/* Brand */}
           <div className="sm:col-span-2">
-            <Link href="/" className="flex items-baseline gap-1.5">
-              <span className="text-xl font-black text-white">
-                Fin<span className="text-cyan-400">C</span>News
-              </span>
+            <Link href="/" className="flex items-center">
+              <Image src="/logo.jpg" alt="FinCNews" width={120} height={31} className="h-8 w-auto" />
             </Link>
             <p className="mt-3 max-w-xs text-sm leading-6 text-zinc-500">
               Fast AI-powered finance intelligence. Crypto, markets, macro and fintech — breaking news as it happens.
