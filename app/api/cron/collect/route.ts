@@ -19,25 +19,15 @@ async function handle(req: NextRequest) {
     const result = await runCollect();
 
     await db.from("run_logs").update({
+      run_type: "collect",
       status: "success",
       finished_at: new Date().toISOString(),
-      // articles_found = raw items before keyword filter
       articles_found: result.itemsFound,
-      // articles_published = 0 (collect doesn't generate)
-      articles_published: 0,
-      // articles_skipped = items filtered by dedup
+      articles_published: result.itemsQueued,
       articles_skipped: result.itemsSkipped,
       duration_ms: result.durationMs,
-      // store collect summary as first detail entry
-      details: [{
-        type: "collect",
-        sourcesChecked: result.sourcesChecked,
-        itemsFound: result.itemsFound,
-        itemsQueued: result.itemsQueued,
-        itemsSkipped: result.itemsSkipped,
-        status: "published",
-        url: "collect-run",
-      }],
+      steps: result.steps,
+      details: [],
     }).eq("id", log.id);
 
     return NextResponse.json({ ok: true, ...result });

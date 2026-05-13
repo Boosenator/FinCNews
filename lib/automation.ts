@@ -710,43 +710,62 @@ export type CollectResult = {
   itemsQueued: number;
   itemsSkipped: number;
   durationMs: number;
-  debug: {
-    sampleTitles: string[];          // first 5 raw titles before filter
-    sampleAfterKeywords: string[];   // first 5 titles that passed keyword filter
-    insertError?: string;
-  };
+  steps: import("@/lib/supabase").PipelineStep[];
+  debug: { insertError?: string };
 };
 
 export async function runCollect(): Promise<CollectResult> {
   const start = Date.now();
   const db = supabaseAdmin();
+  const steps: import("@/lib/supabase").PipelineStep[] = [];
 
   const { data: sources } = await db.from("rss_sources").select("*").eq("enabled", true);
-  const emptyDebug = { sampleTitles: [], sampleAfterKeywords: [] };
   if (!sources?.length) {
-    return { sourcesChecked: 0, itemsFound: 0, itemsAfterKeywords: 0, itemsAfterDedup: 0, itemsQueued: 0, itemsSkipped: 0, durationMs: Date.now() - start, debug: emptyDebug };
+    return { sourcesChecked: 0, itemsFound: 0, itemsAfterKeywords: 0, itemsAfterDedup: 0, itemsQueued: 0, itemsSkipped: 0, durationMs: Date.now() - start, steps, debug: {} };
   }
 
   type FeedItem = { title?: string; link?: string; pubDate?: string; contentSnippet?: string; sourceCategory: string; sourceName: string };
+
+  // ── Step 1: RSS Fetch ─────────────────────────────────────────────────────
+  const t1 = Date.now();
+  const perSource: Array<{ name: string; category: string; count: number; error?: boolean }> = [];
 
   const results = await Promise.allSettled(
     sources.map(async (source) => {
       const entries = await parseFeed(source.url);
       void db.from("rss_sources").update({ last_fetched_at: new Date().toISOString() }).eq("id", source.id);
+      perSource.push({ name: source.name, category: source.category, count: entries.length });
       return entries.map((e) => ({ ...e, sourceCategory: source.category, sourceName: source.name }));
     }),
   );
+
+  // Mark failed sources
+  results.forEach((r, i) => {
+    if (r.status === "rejected") {
+      const src = sources[i];
+      perSource.push({ name: src.name, category: src.category, count: 0, error: true });
+    }
+  });
 
   const allItems: FeedItem[] = results
     .filter((r): r is PromiseFulfilledResult<FeedItem[]> => r.status === "fulfilled")
     .flatMap((r) => r.value);
 
-  const sampleTitles = allItems.slice(0, 5).map((i) => `[${i.sourceCategory}] ${i.title ?? "(empty)"}`);
+  steps.push({
+    name: "rss_fetch",
+    status: results.some((r) => r.status === "rejected") ? "fallback" : "ok",
+    durationMs: Date.now() - t1,
+    in: sources.length,
+    out: allItems.length,
+    note: `${sources.length} sources → ${allItems.length} items`,
+    perSource: perSource.sort((a, b) => b.count - a.count),
+  });
 
-  // ── 12h collection window (was 48h) ──────────────────────────────────────
+  // ── Step 2: Keyword + window filter ──────────────────────────────────────
+  const t2 = Date.now();
   const COLLECTION_WINDOW_H = 12;
   const cutoff = Date.now() - COLLECTION_WINDOW_H * 60 * 60 * 1000;
-  const MIN_SCORE = 45; // articles below this threshold are not queued
+  const MIN_SCORE = 45;
 
   const fresh = allItems.filter((item) => {
     if (!item.link) return false;
@@ -756,33 +775,66 @@ export async function runCollect(): Promise<CollectResult> {
     return text.trim().length >= 10 && hasKeyword(text);
   });
 
-  const sampleAfterKeywords = fresh.slice(0, 5).map((i) => i.title ?? "(empty)");
+  steps.push({
+    name: "keyword_filter",
+    status: "ok",
+    durationMs: Date.now() - t2,
+    in: allItems.length,
+    out: fresh.length,
+    note: `${allItems.length - fresh.length} dropped (old or no keywords)`,
+  });
 
   if (!fresh.length) {
-    return { sourcesChecked: sources.length, itemsFound: allItems.length, itemsAfterKeywords: 0, itemsAfterDedup: 0, itemsQueued: 0, itemsSkipped: 0, durationMs: Date.now() - start, debug: { sampleTitles, sampleAfterKeywords } };
+    return { sourcesChecked: sources.length, itemsFound: allItems.length, itemsAfterKeywords: 0, itemsAfterDedup: 0, itemsQueued: 0, itemsSkipped: 0, durationMs: Date.now() - start, steps, debug: {} };
   }
 
-  // ── Score every item (AI-powered, rule-based fallback) ───────────────────
+  // ── Step 3: AI Scoring ────────────────────────────────────────────────────
+  const t3 = Date.now();
   let aiScores: number[] | null = null;
+  let scoringFallback = false;
   try {
     aiScores = await scoreItemsWithAI(fresh);
   } catch {
-    // rule-based fallback — no-op, handled below
+    scoringFallback = true;
   }
 
   const scored = fresh.map((item, i) => ({
     ...item,
     score: aiScores
       ? aiScores[i]
-      : calculateHypeScore({
-          title: item.title,
-          contentSnippet: item.contentSnippet,
-          pubDate: item.pubDate,
-          sourceName: item.sourceName,
-        }),
+      : calculateHypeScore({ title: item.title, contentSnippet: item.contentSnippet, pubDate: item.pubDate, sourceName: item.sourceName }),
   }));
 
-  // ── Remove stale low-score items already in queue ─────────────────────────
+  const scoreDistribution = {
+    below45: scored.filter((i) => i.score < 45).length,
+    s45_60:  scored.filter((i) => i.score >= 45 && i.score < 60).length,
+    s60_80:  scored.filter((i) => i.score >= 60 && i.score < 80).length,
+    above80: scored.filter((i) => i.score >= 80).length,
+  };
+
+  // Top 15 scored items for the log
+  const scoredItems = scored
+    .slice()
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 15)
+    .map((i) => ({ title: i.title ?? "(no title)", score: i.score }));
+
+  const aboveMin = scored.filter((i) => i.score >= MIN_SCORE).length;
+
+  steps.push({
+    name: "ai_score",
+    status: scoringFallback ? "fallback" : "ok",
+    durationMs: Date.now() - t3,
+    in: fresh.length,
+    out: aboveMin,
+    note: scoringFallback ? `rule-based fallback · ${aboveMin}/${fresh.length} ≥${MIN_SCORE}` : `Haiku · ${aboveMin}/${fresh.length} ≥${MIN_SCORE}`,
+    scoreDistribution,
+    scoredItems,
+  });
+
+  // ── Step 4: Dedup ─────────────────────────────────────────────────────────
+  const t4 = Date.now();
+
   void db.from("article_queue")
     .delete()
     .eq("status", "pending")
@@ -790,8 +842,6 @@ export async function runCollect(): Promise<CollectResult> {
     .lt("score", MIN_SCORE);
 
   const urls = scored.map((i) => i.link!);
-
-  // Dedup: already published OR already in queue
   const [{ data: processed }, { data: queued }] = await Promise.all([
     db.from("processed_urls").select("url").in("url", urls),
     db.from("article_queue").select("url").in("url", urls),
@@ -801,7 +851,6 @@ export async function runCollect(): Promise<CollectResult> {
     ...(queued ?? []).map((r: { url: string }) => r.url),
   ]);
 
-  // Semantic dedup against recent 12h titles
   const { data: recentTitles } = await db
     .from("processed_urls")
     .select("title")
@@ -809,16 +858,30 @@ export async function runCollect(): Promise<CollectResult> {
     .not("title", "is", null);
   const recentTitleList = (recentTitles ?? []).map((r: { title: string }) => r.title);
 
+  let urlDuped = 0, belowScore = 0, semanticDuped = 0;
   const newItems = scored.filter((item) => {
-    if (seen.has(item.link!)) return false;
-    if (item.score < MIN_SCORE) return false; // below hype threshold
-    return !recentTitleList.some((t) => titleSimilarity(item.title ?? "", t) > 0.5);
+    if (seen.has(item.link!)) { urlDuped++; return false; }
+    if (item.score < MIN_SCORE) { belowScore++; return false; }
+    if (recentTitleList.some((t) => titleSimilarity(item.title ?? "", t) > 0.5)) { semanticDuped++; return false; }
+    return true;
+  });
+
+  steps.push({
+    name: "dedup",
+    status: "ok",
+    durationMs: Date.now() - t4,
+    in: scored.length,
+    out: newItems.length,
+    note: `${urlDuped} url-dup · ${belowScore} low-score · ${semanticDuped} semantic-dup`,
+    dedupBreakdown: { urlDuped, belowScore, semanticDuped },
   });
 
   if (!newItems.length) {
-    return { sourcesChecked: sources.length, itemsFound: allItems.length, itemsAfterKeywords: fresh.length, itemsAfterDedup: 0, itemsQueued: 0, itemsSkipped: fresh.length, durationMs: Date.now() - start, debug: { sampleTitles, sampleAfterKeywords } };
+    return { sourcesChecked: sources.length, itemsFound: allItems.length, itemsAfterKeywords: fresh.length, itemsAfterDedup: 0, itemsQueued: 0, itemsSkipped: fresh.length, durationMs: Date.now() - start, steps, debug: {} };
   }
 
+  // ── Step 5: Queue Insert ──────────────────────────────────────────────────
+  const t5 = Date.now();
   const rows = newItems
     .filter((item) => !!item.link)
     .map((item) => ({
@@ -831,19 +894,21 @@ export async function runCollect(): Promise<CollectResult> {
       score: item.score,
     }));
 
-  if (!rows.length) {
-    return { sourcesChecked: sources.length, itemsFound: allItems.length, itemsAfterKeywords: fresh.length, itemsAfterDedup: newItems.length, itemsQueued: 0, itemsSkipped: fresh.length, durationMs: Date.now() - start, debug: { sampleTitles, sampleAfterKeywords } };
-  }
-
   const { data: inserted, error: insertError } = await db
     .from("article_queue")
     .upsert(rows, { onConflict: "url", ignoreDuplicates: true })
     .select("id");
 
-  if (insertError) {
-    // Log but don't throw — partial success is acceptable
-    console.error("[collect] queue insert error:", insertError.message);
-  }
+  if (insertError) console.error("[collect] queue insert error:", insertError.message);
+
+  steps.push({
+    name: "queue_insert",
+    status: insertError ? "error" : "ok",
+    durationMs: Date.now() - t5,
+    in: rows.length,
+    out: inserted?.length ?? 0,
+    note: insertError ? insertError.message : `${inserted?.length ?? 0} new items queued`,
+  });
 
   return {
     sourcesChecked: sources.length,
@@ -853,11 +918,8 @@ export async function runCollect(): Promise<CollectResult> {
     itemsQueued: inserted?.length ?? 0,
     itemsSkipped: fresh.length - newItems.length,
     durationMs: Date.now() - start,
-    debug: {
-      sampleTitles,
-      sampleAfterKeywords,
-      insertError: insertError?.message,
-    },
+    steps,
+    debug: { insertError: insertError?.message },
   };
 }
 
@@ -866,6 +928,7 @@ export type GenerateResult = {
   articlesPublished: number;
   durationMs: number;
   details: DetailEntry[];
+  steps: import("@/lib/supabase").PipelineStep[];
 };
 
 export async function runGenerate(maxArticles = 2): Promise<GenerateResult> {
@@ -888,78 +951,101 @@ export async function runGenerate(maxArticles = 2): Promise<GenerateResult> {
     .limit(maxArticles);
 
   if (!items?.length) {
-    return { queueSize: 0, articlesPublished: 0, durationMs: Date.now() - start, details: [] };
+    return { queueSize: 0, articlesPublished: 0, durationMs: Date.now() - start, details: [], steps: [] };
   }
 
   const details: DetailEntry[] = [];
+  const steps: import("@/lib/supabase").PipelineStep[] = [];
 
   for (const item of items) {
     await db.from("article_queue").update({ status: "processing" }).eq("id", item.id);
+
+    // per-article sub-steps
+    const articleSteps: Array<{ name: string; status: "ok" | "error" | "skip"; durationMs: number; note?: string }> = [];
+    let articleOk = true;
+
     try {
-      const scraped = await tryFetchArticleText(item.url);
+      // ── scrape ──
+      let t = Date.now();
+      let scraped = "";
+      try {
+        scraped = await tryFetchArticleText(item.url);
+        articleSteps.push({ name: "scrape", status: "ok", durationMs: Date.now() - t, note: `${scraped.length} chars` });
+      } catch (e) {
+        articleSteps.push({ name: "scrape", status: "error", durationMs: Date.now() - t, note: String(e) });
+      }
       const bodyText = scraped.length > 300 ? scraped : (item.snippet ?? "");
+
+      // ── claude ──
+      t = Date.now();
       const category = detectCategory(`${item.title ?? ""} ${item.snippet ?? ""}`, item.source_category);
       const article = await callClaude({ title: item.title ?? "Untitled", pubDate: item.pub_date }, bodyText, category);
-
       const en = (article.translations as Record<string, Record<string, string>>)?.en;
       if (!en?.title || !en.excerpt || !en.body) throw new Error("Claude returned incomplete article");
+      articleSteps.push({ name: "claude", status: "ok", durationMs: Date.now() - t, note: `"${en.title.slice(0, 60)}"` });
 
+      // ── sanity ──
+      t = Date.now();
       article.sourceUrl = item.url;
       const sanityId = await publishToSanity(article);
+      articleSteps.push({ name: "sanity", status: "ok", durationMs: Date.now() - t, note: sanityId });
 
-      // 1. Attach image — specific query from tags + title
-      const photoUrl = await attachPexelsImage(
-        sanityId,
-        article.slug as string,
-        category,
-        article.tags as string[] | undefined,
-        en.title,
-      );
+      // ── pexels ──
+      t = Date.now();
+      let photoUrl: string | null = null;
+      try {
+        photoUrl = await attachPexelsImage(sanityId, article.slug as string, category, article.tags as string[] | undefined, en.title);
+        articleSteps.push({ name: "pexels", status: "ok", durationMs: Date.now() - t, note: photoUrl ? "attached" : "no result" });
+      } catch (e) {
+        articleSteps.push({ name: "pexels", status: "error", durationMs: Date.now() - t, note: String(e) });
+      }
 
       const articleUrl = `${process.env.NEXT_PUBLIC_BASE_URL ?? "https://fin-c-news.vercel.app"}/${category}/${article.slug}`;
       const enBodyText = typeof en.body === "string" ? en.body : "";
 
-      // 2. Create Telegraph page (backlink DR90+ → site)
-      const telegraph = await createTelegraphPage({
-        title: en.title,
-        excerpt: en.excerpt,
-        bodyPreview: enBodyText.slice(0, 800),
-        siteUrl: articleUrl,
-        category,
-      });
-
-      // 3. Patch Sanity with Telegraph URL
-      if (telegraph) {
-        const { createClient } = await import("@sanity/client");
-        const sc = createClient({
-          projectId: process.env.SANITY_PROJECT_ID ?? process.env.NEXT_PUBLIC_SANITY_PROJECT_ID!,
-          dataset: process.env.SANITY_DATASET ?? "production",
-          token: process.env.SANITY_TOKEN!,
-          apiVersion: "2024-01-01",
-          useCdn: false,
-        });
-        void sc.patch(sanityId).set({ telegraphUrl: telegraph.url }).commit();
+      // ── telegraph ──
+      t = Date.now();
+      let telegraph = null;
+      try {
+        telegraph = await createTelegraphPage({ title: en.title, excerpt: en.excerpt, bodyPreview: enBodyText.slice(0, 800), siteUrl: articleUrl, category });
+        if (telegraph) {
+          const { createClient } = await import("@sanity/client");
+          const sc = createClient({ projectId: process.env.SANITY_PROJECT_ID ?? process.env.NEXT_PUBLIC_SANITY_PROJECT_ID!, dataset: process.env.SANITY_DATASET ?? "production", token: process.env.SANITY_TOKEN!, apiVersion: "2024-01-01", useCdn: false });
+          void sc.patch(sanityId).set({ telegraphUrl: telegraph.url }).commit();
+        }
+        articleSteps.push({ name: "telegraph", status: "ok", durationMs: Date.now() - t, note: telegraph?.url ?? "no url" });
+      } catch (e) {
+        articleSteps.push({ name: "telegraph", status: "error", durationMs: Date.now() - t, note: String(e) });
       }
 
       await db.from("processed_urls").insert({ url: item.url, slug: article.slug, title: en.title, category });
       await db.from("article_queue").update({ status: "done", processed_at: new Date().toISOString() }).eq("id", item.id);
 
-      // 4. Send Telegram → links to Telegraph (which links to site)
-      await sendTelegram({
-        title: en.title,
-        excerpt: en.excerpt,
-        url: telegraph?.url ?? articleUrl,   // Telegraph URL first, site as fallback
-        siteUrl: articleUrl,
-        category,
-        tags: (article.tags as string[] | undefined),
-        photoUrl,
-      });
+      // ── telegram ──
+      t = Date.now();
+      try {
+        await sendTelegram({ title: en.title, excerpt: en.excerpt, url: telegraph?.url ?? articleUrl, siteUrl: articleUrl, category, tags: article.tags as string[] | undefined, photoUrl });
+        articleSteps.push({ name: "telegram", status: "ok", durationMs: Date.now() - t, note: "sent" });
+      } catch (e) {
+        articleSteps.push({ name: "telegram", status: "error", durationMs: Date.now() - t, note: String(e) });
+      }
 
-      details.push({ url: item.url, title: en.title, slug: article.slug as string, category, excerpt: en.excerpt, bodyPreview: (typeof en.body === "string" ? en.body : "").slice(0, 400), imageAttached: !!process.env.PEXELS_API_KEY, score: item.score, status: "published" });
+      details.push({ url: item.url, title: en.title, slug: article.slug as string, category, excerpt: en.excerpt, bodyPreview: enBodyText.slice(0, 400), imageAttached: !!photoUrl, score: item.score, status: "published" });
     } catch (e) {
+      articleOk = false;
       await db.from("article_queue").update({ status: "error", error_text: String(e), processed_at: new Date().toISOString() }).eq("id", item.id);
       details.push({ url: item.url, title: item.title, status: "error", error: String(e) });
     }
+
+    steps.push({
+      name: `article:${item.title?.slice(0, 50) ?? item.url}`,
+      status: articleOk ? "ok" : "error",
+      durationMs: articleSteps.reduce((s, st) => s + st.durationMs, 0),
+      in: 1,
+      out: articleOk ? 1 : 0,
+      note: `score=${item.score} · ${item.source_category}`,
+      articleSteps,
+    });
   }
 
   return {
@@ -967,5 +1053,6 @@ export async function runGenerate(maxArticles = 2): Promise<GenerateResult> {
     articlesPublished: details.filter((d) => d.status === "published").length,
     durationMs: Date.now() - start,
     details,
+    steps,
   };
 }
