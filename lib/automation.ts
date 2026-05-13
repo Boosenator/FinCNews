@@ -342,17 +342,21 @@ async function sendTelegram(post: TelegramPost) {
 
   const isTelegraph = post.url.includes("telegra.ph");
 
+  // Compact excerpt — 1-2 punchy sentences for Telegram scroll
+  const shortExcerpt = post.excerpt.split(/(?<=[.!?])\s+/).slice(0, 2).join(" ");
+
   const caption = [
     header,
     ``,
     `<b>${esc(post.title)}</b>`,
     ``,
-    esc(post.excerpt),
+    esc(shortExcerpt),
     ``,
-    // Primary link → Telegraph (for backlink flow)
-    `<a href="${post.url}">${isTelegraph ? "Read on Telegraph →" : cta}</a>`,
-    // Secondary link → site (if Telegraph is primary)
-    ...(isTelegraph && post.siteUrl ? [`<a href="${post.siteUrl}">Full analysis on FinCNews</a>`] : []),
+    // Curiosity trigger + single CTA
+    isTelegraph
+      ? `${cta.includes("→") ? cta.replace("→", "👇") : `What this means 👇`}`
+      : cta,
+    `<a href="${post.url}">${post.url}</a>`,
     ``,
     hashtags,
   ].join("\n");
