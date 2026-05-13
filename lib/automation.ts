@@ -137,39 +137,27 @@ async function tryFetchArticleText(url: string): Promise<string> {
       .replace(/<[^>]+>/g, " ")
       .replace(/\s+/g, " ")
       .trim()
-      .slice(0, 4000);
+      .slice(0, 2000);
   } catch {
     return "";
   }
 }
 
 async function callClaude(item: { title: string; pubDate?: string }, bodyText: string, category: string): Promise<Record<string, unknown>> {
-  const prompt = `You are a senior financial journalist. Generate a finance news article as a single valid JSON object (no markdown, no code blocks — raw JSON only).
+  // Trim body early — Haiku handles 1500 chars well, saves input tokens
+  const body = bodyText.slice(0, 1500);
+  const date = item.pubDate ? item.pubDate.slice(0, 10) : new Date().toISOString().slice(0, 10);
 
-INPUT:
+  const prompt = `Financial journalist. Output ONLY raw JSON, no markdown.
+
 Title: ${item.title}
-Published: ${item.pubDate ?? new Date().toISOString()}
-Category: ${category}
-Article text: ${bodyText.slice(0, 3000)}
+Date: ${date} | Category: ${category}
+Text: ${body}
 
-OUTPUT JSON structure:
-{
-  "slug": "kebab-case-max-60-chars",
-  "category": "${category}",
-  "tags": ["tag1","tag2","tag3"],
-  "translations": {
-    "en": {
-      "title": "SEO title 50-60 chars",
-      "excerpt": "2-3 sentences with primary keyword, under 280 chars",
-      "body": "500-700 word article. Paragraphs separated by \\n\\n. Structure: What happened (facts+numbers) → Why it matters → Expert take (first person 'Based on my analysis...') → How to act. End with: Not financial advice.",
-      "metaTitle": "50-60 char meta title",
-      "metaDescription": "150-160 char meta description with CTA",
-      "telegramText": "Post1 (150w recap + [ARTICLE_URL]) ||| Post2 (100w portfolio impact) ||| Post3 (80w affiliate bridge + [AFFILIATE_URL])"
-    }
-  }
-}
+JSON:
+{"slug":"kebab-max-60","category":"${category}","tags":["t1","t2","t3"],"translations":{"en":{"title":"SEO title 50-60 chars","excerpt":"2-3 sentences under 250 chars","body":"400-500 word article: What happened (facts+numbers) → Why it matters → Expert take (first person) → How to act. End: Not financial advice.","metaTitle":"50-60 chars","metaDescription":"150-160 chars with CTA","telegramText":"120w news recap ending [ARTICLE_URL]"}}}
 
-Rules: facts only, no invented quotes, include specific numbers/dates, slug max 60 chars.`;
+Rules: facts only, real numbers/dates, slug≤60 chars.`;
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -179,11 +167,11 @@ Rules: facts only, no invented quotes, include specific numbers/dates, slug max 
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 2000,
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 1500,
       messages: [{ role: "user", content: prompt }],
     }),
-    signal: AbortSignal.timeout(55000),
+    signal: AbortSignal.timeout(30000),
   });
 
   if (!res.ok) throw new Error(`Claude API error: ${res.status}`);
