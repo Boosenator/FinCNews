@@ -87,6 +87,21 @@ export async function getRelatedArticles(slug: string, category: Category): Prom
   );
 }
 
+export async function findArticleByTopic(topic: string): Promise<{ slug: string; category: string } | null> {
+  if (!sanity) return null;
+  // Try exact title match first, then broad word match
+  const words = topic.trim().split(/\s+/).filter((w) => w.length > 2);
+  if (!words.length) return null;
+  const pattern = words.join(" ");
+  return sanity.fetch<{ slug: string; category: string } | null>(
+    `*[_type == "article" && defined(translations.en.title) && (
+      translations.en.title match $pattern
+    )] | order(publishedAt desc)[0] { "slug": slug.current, category }`,
+    { pattern },
+    { next: { revalidate: 300 } },
+  );
+}
+
 export function readingTime(body: PortableTextBlock[] | string | undefined): number {
   if (!body) return 1;
   const text =
