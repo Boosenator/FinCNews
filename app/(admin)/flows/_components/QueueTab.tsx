@@ -111,8 +111,6 @@ export default function QueueTab() {
     }
   }
 
-  const pendingCount = activeStatus === "pending" ? items.length : null;
-
   return (
     <div className="space-y-6">
       {/* Header */}

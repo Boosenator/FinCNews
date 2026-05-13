@@ -153,7 +153,7 @@ function ArticleStepDetail({ step }: { step: PipelineStep }) {
   );
 }
 
-function StepsTimeline({ steps, runType }: { steps: PipelineStep[]; runType: string }) {
+function StepsTimeline({ steps }: { steps: PipelineStep[] }) {
   const [openStep, setOpenStep] = useState<number | null>(null);
 
   return (
@@ -315,7 +315,7 @@ export default function LogsTab({ logs, queuePending, queueTotal, stats, totalPr
                 {/* Steps timeline */}
                 {isExpanded && hasSteps && (
                   <div className="border-t border-white/[0.04] bg-zinc-950/50 px-4 pb-4">
-                    <StepsTimeline steps={log.steps!} runType={runType} />
+                    <StepsTimeline steps={log.steps!} />
                   </div>
                 )}
               </div>
