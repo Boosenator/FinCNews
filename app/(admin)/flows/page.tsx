@@ -7,6 +7,7 @@ import AutoRefresh from "./_components/AutoRefresh";
 import TestSourceButton from "./_components/TestSourceButton";
 import AttachImagesButton from "./_components/AttachImagesButton";
 import TelegramTestButton from "./_components/TelegramTestButton";
+import TelegraphStats from "./_components/TelegraphStats";
 
 function badge(status: RunLog["status"]) {
   const map = {
@@ -273,6 +274,11 @@ export default async function FlowsPage() {
               </div>
             </div>
           </section>
+        </div>
+
+        {/* Telegraph Stats */}
+        <div className="mt-10">
+          <TelegraphStats />
         </div>
       </div>
     </div>
