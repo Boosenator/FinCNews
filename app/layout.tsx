@@ -33,8 +33,19 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const plausibleDomain = process.env.NEXT_PUBLIC_PLAUSIBLE_DOMAIN;
+
   return (
     <html lang="en" className="scroll-smooth">
+      <head>
+        {plausibleDomain && (
+          <script
+            defer
+            data-domain={plausibleDomain}
+            src="https://plausible.io/js/script.js"
+          />
+        )}
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-zinc-950 text-zinc-100 antialiased`}>
         {children}
       </body>
