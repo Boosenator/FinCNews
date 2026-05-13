@@ -1,32 +1,27 @@
 # FinCNews — Content Factory Master Spec
 
 ## Current Stack
-- **Frontend**: Next.js 14 (App Router) → deployed on **Vercel** at `fin-c-news.vercel.app`
-- **CMS**: Sanity (project `x55aaanw`, dataset `production`) → Studio at `fincnews.sanity.studio`
-- **Automation**: n8n + Claude API + Telegram Bot
+- **Frontend**: Next.js 14 (App Router) → Vercel `fin-c-news.vercel.app`
+- **CMS**: Sanity project `x55aaanw`, dataset `production` → Studio `fincnews.sanity.studio`
+- **Automation**: Vercel Cron + Claude Haiku API + Supabase
+- **Distribution**: Telegram `@FinCNews` → Telegra.ph → Site
 - **Language**: English only
-- **Niche**: Finance (crypto, markets, macro, fintech, policy, corporate)
+- **Niche**: Finance (crypto, markets, macro, fintech, policy, companies)
 
 ---
 
-## Architecture
+## Traffic Flow (SEO Link Graph)
 
 ```
-[RSS Sources] → [n8n: Monitor 15min] → [n8n: Deduplicate]
-                                               ↓
-                                   [n8n: Fetch full article text]
-                                               ↓
-                                   [n8n: Claude API — generate article JSON]
-                                               ↓
-                              ┌────────────────┼─────────────────┐
-                              ↓                ↓                 ↓
-                     [POST /api/publish]  [Pexels image]  [Telegram post]
-                              ↓
-                       [Sanity CMS]
-                              ↓
-                    [Next.js ISR — 60s revalidate]
-                              ↓
-                    [Google Indexing API — submit URL]
+Vercel Cron (every 5min) → Collect RSS → article_queue (Supabase)
+Vercel Cron (every 10min) → Generate → Claude Haiku → Sanity
+                                      → Pexels image → Sanity
+                                      → Telegraph page (DR90+ backlink)
+                                      → Telegram post (photo + Telegraph URL)
+
+Traffic funnel:
+Telegram → Telegraph (instant view) → Site article
+                 ↑ backlink to site       ↑ destination
 ```
 
 ---
@@ -34,17 +29,26 @@
 ## Route Structure
 
 ```
-/                          → homepage (hero + market bar + trending + grid)
-/[category]                → category page (crypto, markets, economy, fintech, policy, companies)
-/[category]/[slug]         → article page
+/                          → homepage (WebSite + Organization schema)
+/[category]                → category page (BreadcrumbList schema)
+/[category]/[slug]         → article (NewsArticle + BreadcrumbList + Speakable)
 /terms-and-conditions      → legal
 /privacy-policy            → legal
-/api/publish               → POST endpoint for n8n (Bearer auth)
+/about                     → E-E-A-T (TODO)
+/flows                     → admin panel (auth: ADMIN_KEY cookie)
+/api/publish               → POST — n8n/automation → Sanity
 /api/feed                  → RSS feed
+/api/cron/collect          → Vercel Cron 5min — RSS → Supabase queue
+/api/cron/generate         → Vercel Cron 10min — queue → Claude → Sanity → TG
+/api/admin/collect         → manual trigger (admin)
+/api/admin/generate        → manual trigger (admin)
+/api/admin/run             → full run (admin)
+/api/admin/attach-images   → attach Pexels images to articles without photo
+/api/admin/test-telegram   → send test message to @FinCNews
 /sitemap.xml               → auto-generated
-/robots.txt                → auto-generated
-/opengraph-image           → default OG image (Edge runtime)
-/studio                    → REMOVED — use fincnews.sanity.studio instead
+/news-sitemap.xml          → Google News sitemap (last 48h articles)
+/robots.txt                → blocks /api/ /flows /studio/
+/opengraph-image           → default OG image (edge runtime)
 ```
 
 ---
@@ -53,12 +57,12 @@
 
 | Slug | Label | Trigger Keywords |
 |------|-------|-----------------|
-| `crypto` | Crypto | bitcoin, ethereum, solana, ETF, hack, exploit, fork, airdrop, listing, DeFi, NFT |
-| `markets` | Markets | S&P, nasdaq, dow, gold, oil, futures, earnings, IPO, index |
-| `economy` | Economy | Fed, rate, CPI, GDP, inflation, recession, FOMC, Powell, ECB |
-| `fintech` | Fintech | payment, neobank, stablecoin, CBDC, banking, stripe, revolut |
-| `policy` | Policy | SEC, regulation, ban, law, congress, CFTC, MiCA, compliance |
-| `companies` | Companies | earnings, revenue, acquisition, merger, layoffs, IPO, quarterly |
+| `crypto` | Crypto | bitcoin, ethereum, ETF, hack, exploit, DeFi, NFT, staking, airdrop |
+| `markets` | Markets | stock, S&P, nasdaq, gold, oil, futures, earnings, IPO, rally, crash |
+| `economy` | Economy | Fed, Federal Reserve, rate, CPI, inflation, GDP, recession, FOMC |
+| `fintech` | Fintech | payment, neobank, stablecoin, CBDC, stripe, revolut, fintech |
+| `policy` | Policy | SEC, CFTC, MiCA, regulation, ban, congress, compliance, sanctions |
+| `companies` | Companies | earnings, revenue, merger, acquisition, IPO, layoffs, bankruptcy |
 
 ---
 
@@ -66,18 +70,18 @@
 
 ```json
 {
-  "slug": "kebab-case-slug-max-60-chars",
+  "slug": "kebab-max-60-chars",
   "category": "crypto",
-  "tags": ["bitcoin", "etf", "institutional"],
+  "tags": ["bitcoin", "etf"],
   "sourceUrl": "https://coindesk.com/...",
   "translations": {
     "en": {
-      "title": "SEO title 50-60 chars with primary keyword",
-      "excerpt": "2-3 sentence summary with primary keyword",
-      "body": "Full article text. Paragraphs separated by \\n\\n",
-      "metaTitle": "Meta title 50-60 chars",
-      "metaDescription": "Meta description 150-160 chars with CTA",
-      "telegramText": "Telegram post text (Post 1 ||| Post 2 ||| Post 3)"
+      "title": "SEO title 50-60 chars",
+      "excerpt": "2-3 sentences, primary keyword, under 250 chars",
+      "body": "400-600 word article: facts → why matters → expert take → action. End: Not financial advice.",
+      "metaTitle": "50-60 chars",
+      "metaDescription": "150-160 chars with CTA",
+      "telegramText": "used internally by old flow — ignored now"
     }
   }
 }
@@ -85,153 +89,126 @@
 
 **Auth**: `Authorization: Bearer fincnews_secret_2026`
 **Endpoint (prod)**: `https://fin-c-news.vercel.app/api/publish`
-**Validation**: only `translations.en` is required (title + excerpt + body)
 
 ---
 
-## n8n Workflows
+## Automation Pipeline (current)
 
-### Workflow 1 — RSS Monitor (Cron: every 15 min)
+### Collect Cron (every 5 min, maxDuration 30s)
 
-1. **Cron** — trigger every 15 min
-2. **RSS Feed nodes** (run in parallel):
-   - `https://www.coindesk.com/arc/outboundfeeds/rss/`
-   - `https://cointelegraph.com/rss`
-   - `https://theblock.co/rss.xml`
-   - `https://decrypt.co/feed`
-   - `https://beincrypto.com/feed/`
-   - `https://www.newsbtc.com/feed/`
-   - `https://bitcoinmagazine.com/feed`
-   - `https://cryptoslate.com/feed/`
-3. **Merge** — combine all items
-4. **Code (JS)** — filter `pubDate < 2h ago`, deduplicate by URL via n8n static store
-5. **Filter** — keep if title/description matches:
-   ```
-   hack|exploit|ETF|regulation|ban|launch|listing|rate|fed|SEC|crash|bankruptcy|fork|upgrade|airdrop|merger|earnings|IPO|stablecoin|CBDC
-   ```
-6. **HTTP Request** → trigger Workflow 2 webhook
+1. Fetch all enabled `rss_sources` from Supabase in **parallel**
+2. Parse RSS/Atom feeds (custom XML parser, no dependencies)
+3. Filter: `pubDate < 48h` + keyword match (word boundary for short words)
+4. URL dedup: check `processed_urls` + `article_queue` in Supabase
+5. Semantic dedup: Jaccard similarity > 0.5 against last 48h titles → skip
+6. `upsert` new items into `article_queue` (ignoreDuplicates: conflict-safe)
 
-### Workflow 2 — Content Generator (Webhook)
+### Generate Cron (every 10 min, maxDuration 120s)
 
-**Input**: `{ title, description, url, pubDate, source }`
-
-1. **Webhook** — receive trigger
-2. **HTTP Request** — `GET {url}` → extract `<article>` body text via Code node (cheerio or regex)
-3. **HTTP Request** — Claude API (see prompt below)
-4. **Code (JS)** — parse Claude JSON → validate → build `/api/publish` payload
-5. **HTTP Request** — `POST https://fin-c-news.vercel.app/api/publish`
-6. **HTTP Request** — Pexels API → fetch cover image → upload to Sanity → patch article
-7. **IF success** → trigger Workflow 3 (Telegram) + Workflow 4 (Google Index)
-
-### Workflow 3 — Telegram Distributor
-
-**Input**: `{ slug, category, en.title, en.telegramText }`
-
-1. **Split telegramText** by `|||` → 3 posts
-2. **Send Post 1** immediately (value post)
-3. **Wait** 3h
-4. **Send Post 2** (expert analysis)
-5. **Wait** 6h
-6. **Send Post 3** (affiliate offer)
-
-**Message format:**
-```
-*{title}*
-
-{post text}
-
-👉 https://fin-c-news.vercel.app/{category}/{slug}
-
-#{category} #{tag1} #{tag2}
-```
-
-### Workflow 4 — Google Indexer
-
-1. **HTTP Request** → `POST https://indexing.googleapis.com/v3/urlNotifications:publish`
-   ```json
-   { "url": "https://fin-c-news.vercel.app/{category}/{slug}", "type": "URL_UPDATED" }
-   ```
-2. Auth: Google Service Account JWT (Bearer)
-3. Limit: max 200 URLs/day per quota
+1. Reset stuck `processing` items > 10min → back to `pending`
+2. Fetch 1 `pending` item from `article_queue`
+3. `tryFetchArticleText` (Googlebot UA, 8s timeout) → fall back to RSS snippet
+4. **Claude Haiku** (`claude-haiku-4-5-20251001`, max_tokens 1500, 55s timeout)
+5. `publishToSanity` via `/api/publish`
+6. `attachPexelsImage` → Pexels search by category → upload to Sanity → patch article
+7. `createTelegraphPage` → short unique content + backlink to site → get `telegra.ph` URL
+8. Patch Sanity article with `telegraphUrl`
+9. Mark `article_queue` → `done`, insert into `processed_urls`
+10. `sendTelegram` → `sendPhoto` with Telegraph URL (single CTA)
 
 ---
 
-## Claude API Prompt
-
-**Model**: `claude-sonnet-4-6` (cost) or `claude-opus-4-7` (quality)
-**Max tokens**: 4000
-**Response**: strict JSON only
+## Claude Prompt (Haiku, compressed)
 
 ```
-You are a senior financial journalist with 15 years covering crypto, markets, and macroeconomics. You write for institutional and retail investors. Writing is factual, precise, data-driven, and SEO-optimized.
+Financial journalist. Output ONLY raw JSON, no markdown.
 
-INPUT:
 Title: {title}
-Source: {source}
-Published: {pubDate}
-Article text: {scrapedBody}
+Date: {date} | Category: {category}
+Text: {body.slice(0, 1500)}
 
-TASK: Generate a finance news article as a single valid JSON object:
+JSON: {"slug":"kebab-max-60","category":"{category}","tags":["t1","t2","t3"],
+"translations":{"en":{"title":"SEO 50-60 chars","excerpt":"2-3 sentences under 250 chars",
+"body":"400-500 word article: What happened → Why matters → Expert take (first person) → Action. End: Not financial advice.",
+"metaTitle":"50-60","metaDescription":"150-160 with CTA","telegramText":"ignored"}}}
 
-{
-  "slug": "kebab-case-max-60-chars-with-primary-keyword",
-  "category": "one of: crypto | markets | economy | fintech | policy | companies",
-  "tags": ["tag1", "tag2", "tag3", "tag4"],
-  "sourceUrl": "{url}",
-  "translations": {
-    "en": {
-      "title": "50-60 chars, primary keyword first, no clickbait",
-      "metaTitle": "50-60 chars for Google SERP",
-      "metaDescription": "150-160 chars, includes CTA like 'Full analysis inside'",
-      "excerpt": "2-3 sentences, includes primary keyword naturally, under 300 chars",
-      "body": "FULL ARTICLE — see format below",
-      "telegramText": "3-POST SEQUENCE — see format below"
-    }
-  }
-}
-
-BODY FORMAT (plain text, paragraphs separated by \n\n, 800-1200 words):
-Para 1: What happened — factual, specific numbers, named entities, dates
-Para 2: Why it matters — market impact, historical context, comparison
-Para 3: Expert analysis — write as "Based on my analysis of [specific data]..." — authoritative first person
-Para 4: Three scenarios — Bull case / Base case / Bear case with specific price targets or metrics
-Para 5: How to act — actionable takeaway. End with: "This is not financial advice. Always do your own research."
-
-TELEGRAM 3-POST SEQUENCE (telegramText — join with " ||| "):
-Post 1 (150-200 words): Plain English recap of the news. End with "[ARTICLE_URL]"
-Post 2 (100-150 words): "Here's what this means for your portfolio..." Expert framing. One rhetorical question.
-Post 3 (80-100 words): Natural affiliate bridge. "I use [SERVICE] for exactly this situation." End with "[AFFILIATE_URL]"
-
-RULES:
-- Only use facts present in the source text
-- Mark speculation as "analysts expect" or "could potentially"
-- No invented quotes. No ALL CAPS. No emoji in body.
-- Include at least 3 specific numbers/dates/names
-- slug must be unique and descriptive, max 60 chars
+Rules: facts only, real numbers/dates, slug≤60 chars.
 ```
+
+**Cost**: ~$0.009/article (Haiku vs $0.035 Sonnet — 75% saving)
 
 ---
 
-## Image Pipeline (Pexels)
-
-In Workflow 2, after publishing to Sanity:
+## Telegram Post Format
 
 ```
-Pexels API: GET https://api.pexels.com/v1/search?query={keyword}&per_page=1&orientation=landscape
-Header: Authorization: {PEXELS_API_KEY}
-→ extract photos[0].src.large2x
-→ fetch image as Buffer
-→ POST to Sanity assets API
-→ PATCH article._id with coverImage reference
+₿ CRYPTO  (or 🚨 BREAKING for breaking news)
+
+[bold title — punchy, provocative angle]
+
+[1-2 sentences, specific numbers]
+
+What this means 👇  (or varied CTA by category)
+telegra.ph/article-url
+
+#bitcoin #crypto #FinCNews
 ```
 
-Keywords per category:
-- `crypto` → `"bitcoin cryptocurrency blockchain"`
-- `markets` → `"stock market trading finance"`
-- `economy` → `"federal reserve central bank economy"`
-- `fintech` → `"mobile payment technology fintech"`
-- `policy` → `"law regulation government finance"`
-- `companies` → `"corporate office business earnings"`
+**Rules:**
+- `sendPhoto` when Pexels image available (higher engagement)
+- `sendMessage` with `prefer_large_media: true` as fallback
+- ONE link only — Telegraph URL (instant view in TG)
+- Breaking detection: title keywords → `🚨 BREAKING` header
+- CTA rotates by category: "Full breakdown →", "Numbers inside →", "What changes →"
+- Max 3 hashtags
+
+---
+
+## Telegraph Integration
+
+**Purpose**: DR90+ backlink from `telegra.ph` to site. Google treats this as strong authority signal.
+
+**Content**: unique shortened version (excerpt + 2-3 body sentences) + link to site.
+**NOT** a copy of the article — unique content requirement.
+
+**Link graph**:
+```
+Telegram → Telegraph (instant view) → Site
+                   ↑ backlink to site article
+```
+
+Site does NOT link to Telegraph (would bounce users + duplicate content signal).
+
+---
+
+## SEO Implementation (Phase 1 Done)
+
+### Structured Data
+- ✅ `NewsArticle` on every article (headline, datePublished, author Org, publisher, ImageObject)
+- ✅ `BreadcrumbList` on article + category pages
+- ✅ `Speakable` on article pages (`.article-excerpt` selector)
+- ✅ `WebSite` + SearchAction on homepage
+- ✅ `Organization` on homepage (logo, sameAs: Telegram + X)
+
+### Meta
+- ✅ Homepage: title + description metadata + H1 (sr-only)
+- ✅ Category pages: unique OG + Twitter + canonical + BreadcrumbList
+- ✅ Article pages: full OG (ImageObject), Twitter card, canonical, alternates
+- ✅ `news-sitemap.xml` (last 48h, Google News format)
+- ✅ `robots.txt` blocks /api/ /flows /studio/
+- ✅ `app/icon.jpg` → favicon
+- ✅ `app/opengraph-image.tsx` → default OG (edge runtime)
+
+### SEO TODO (Phase 2)
+- [ ] `/about` page — E-E-A-T signal (YMYL critical)
+- [ ] `/editorial-policy` — Google quality rater requirement
+- [ ] Author `Person` schema on articles
+- [ ] Internal linking in Claude prompt (`[INTERNAL: topic]` → resolve)
+- [ ] Google Search Console — submit both sitemaps
+- [ ] Google News Publisher Center — apply for inclusion
+- [ ] Plausible analytics install
+- [ ] 5 pillar evergreen articles (manual, topic clusters)
+- [ ] `/about` page with author entity
 
 ---
 
@@ -243,81 +220,79 @@ NEXT_PUBLIC_BASE_URL=https://fin-c-news.vercel.app
 NEXT_PUBLIC_SANITY_PROJECT_ID=x55aaanw
 NEXT_PUBLIC_SANITY_DATASET=production
 
-# Sanity (server-side)
+# Sanity (server)
 SANITY_PROJECT_ID=x55aaanw
 SANITY_DATASET=production
 SANITY_TOKEN=sk...
 
-# n8n auth
+# Automation auth
 N8N_SECRET=fincnews_secret_2026
+ADMIN_KEY=...         (admin panel /flows)
+CRON_SECRET=...       (Vercel Cron auth)
+
+# Claude
+ANTHROPIC_API_KEY=sk-ant-...
 
 # Telegram
-TELEGRAM_BOT_TOKEN=
-TELEGRAM_CHANNEL_ID=   # @fincnews or -100xxxxxxx
-
-# Claude API
-ANTHROPIC_API_KEY=
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_CHANNEL_ID=@FinCNews
 
 # Images
-PEXELS_API_KEY=
+PEXELS_API_KEY=...
 
-# Google Indexing (optional)
-GOOGLE_SERVICE_ACCOUNT_EMAIL=
-GOOGLE_PRIVATE_KEY=
+# Telegraph
+TELEGRAPH_TOKEN=...   (from api.telegra.ph/createAccount)
+
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
 ```
 
 ---
 
-## What Is Already Built ✅
+## Supabase Schema
 
-### Site (Next.js on Vercel)
-- [x] Homepage: PriceTicker (live CoinGecko) + MarketBar (6 crypto) + HeroSection + Trending sidebar
-- [x] Category pages: `/crypto`, `/markets`, `/economy`, `/fintech`, `/policy`, `/companies`
-- [x] Article pages: breadcrumbs, JSON-LD NewsArticle, reading time, share buttons (Telegram/X/copy), tags, related articles
-- [x] Header: sticky, mobile menu (hamburger → dropdown)
-- [x] Footer: sections, social links, RSS, legal links
-- [x] `/api/publish` — n8n → Sanity write endpoint (Bearer auth)
-- [x] `/api/feed` — RSS feed
-- [x] `/sitemap.xml` — auto-generated from Sanity articles
-- [x] `/robots.txt`
-- [x] `/opengraph-image` — default branded OG image (Edge runtime)
-- [x] `/terms-and-conditions` — adapted legal page
-- [x] `/privacy-policy` — GDPR-compliant with AI disclosure
+```sql
+-- RSS sources
+rss_sources: id, name, url, category, enabled, last_fetched_at, articles_published
 
-### CMS
-- [x] Sanity project `x55aaanw` connected
-- [x] Sanity Studio deployed at `fincnews.sanity.studio`
-- [x] Article schema: slug, category, translations.en (title/excerpt/body/metaTitle/metaDescription/telegramText), coverImage, tags, sourceUrl, publishedAt
-- [x] 11 test articles published with cover images
+-- Queue (collect → generate pipeline)
+article_queue: id, url, title, snippet, source_category, source_name, pub_date,
+               queued_at, status (pending/processing/done/error), processed_at, error_text
+
+-- Deduplication
+processed_urls: id, url, slug, title, category, published_at
+
+-- Automation logs
+run_logs: id, started_at, finished_at, status, articles_found, articles_published,
+          articles_skipped, duration_ms, error_text, details (jsonb)
+```
 
 ---
 
-## What Needs to Be Built 🔲
+## Admin Panel (/flows)
 
-### n8n Automation
-- [ ] Deploy n8n (n8n.cloud or self-hosted Docker)
-- [ ] Workflow 1: RSS Monitor + deduplication (15-min cron)
-- [ ] Workflow 2: Claude content generator + Pexels image + `/api/publish`
-- [ ] Workflow 3: Telegram 3-post funnel with delays
-- [ ] Workflow 4: Google Indexing API submission (optional)
+| Button | Action |
+|--------|--------|
+| 📷 Attach Images | Find articles without coverImage → Pexels → Sanity |
+| Collect RSS | Manual RSS fetch → article_queue |
+| Generate Articles | 1 article from queue → Claude → Sanity → Telegraph → Telegram |
+| ▶ Full Run | collect + generate combined |
+| Test (per source) | Fetch that RSS, show items + keyword matches |
+| Send test message | Test @FinCNews bot connection |
 
-### Monetization
-- [ ] Create Telegram channel + bot
-- [ ] Set affiliate links (Binance, TradingView, OKX, NordVPN)
-- [ ] Wire affiliate placeholders in Workflow 3 Post 3
-- [ ] Add newsletter signup (Beehiiv embed)
-
-### Analytics
-- [ ] Add Plausible or Umami (privacy-first, no cookie banner needed)
+Auto-refresh: 20s. Stale RUNNING logs > 5min → auto-marked error.
 
 ---
 
 ## Anti-patterns
 
-- Never publish without `sourceUrl` — always cite
-- Never post to Telegram before article is live on site (add 5-min delay or check 200 status)
-- If Claude returns non-JSON, log the error and skip — do NOT retry blindly
-- Do not exceed 200 Google Indexing API requests/day
-- `SANITY_TOKEN` is server-side only — never expose via `NEXT_PUBLIC_`
-- N8N_SECRET must be ASCII only — Cyrillic or special chars break curl/n8n auth headers
-- Pexels requires `Authorization` header (not query param)
+- `N8N_SECRET` and `CRON_SECRET` must be **ASCII only** — Cyrillic breaks curl/headers
+- `SANITY_TOKEN` server-side only — never `NEXT_PUBLIC_`
+- Do NOT link Site → Telegraph (bounces users, duplicate content)
+- Telegraph content must be **unique** (not copy-paste of article) — different length, focus
+- Keyword word-boundary matching for short words (≤5 chars) prevents "ban" → "bank" false positives
+- `upsert` with `ignoreDuplicates` in collect — never `insert` (race condition)
+- `attachPexelsImage` is `await` (not `void`) — image must exist before Telegram post
+- Max 200 Google Indexing API requests/day (if using)
