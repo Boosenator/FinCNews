@@ -158,7 +158,9 @@ Text: ${body}
 JSON:
 {"slug":"kebab-max-60","category":"${category}","tags":["t1","t2","t3"],"translations":{"en":{"title":"SEO title 50-60 chars","excerpt":"2-3 sentences under 250 chars","body":"400-500 word article: What happened (facts+numbers) → Why it matters → Expert take (first person) → How to act. End: Not financial advice.","metaTitle":"50-60 chars","metaDescription":"150-160 chars with CTA","telegramText":"120w news recap ending [ARTICLE_URL]"}}}
 
-Rules: facts only, real numbers/dates, slug≤60 chars.`;
+Rules: facts only, real numbers/dates, slug≤60 chars.
+In the body, naturally reference 1-2 related topics using format [INTERNAL: topic] — e.g. [INTERNAL: Bitcoin ETF] or [INTERNAL: Federal Reserve rates]. These become internal links.`;
+
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",

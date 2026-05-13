@@ -76,13 +76,13 @@ export default function Footer() {
             </h3>
             <ul className="space-y-2.5 text-sm text-zinc-500">
               <li>
-                <a href="/api/feed" className="transition hover:text-white">
-                  RSS Feed
-                </a>
+                <Link href="/about" className="transition hover:text-white">
+                  About FinCNews
+                </Link>
               </li>
               <li>
-                <Link href="/sitemap.xml" className="transition hover:text-white">
-                  Sitemap
+                <Link href="/editorial-policy" className="transition hover:text-white">
+                  Editorial Policy
                 </Link>
               </li>
               <li>
@@ -95,8 +95,12 @@ export default function Footer() {
                   Privacy Policy
                 </Link>
               </li>
-              <li className="pt-2 text-xs text-zinc-700">Not financial advice</li>
-              <li className="text-xs text-zinc-700">AI-assisted content</li>
+              <li>
+                <a href="/api/feed" className="transition hover:text-white">
+                  RSS Feed
+                </a>
+              </li>
+              <li className="pt-2 text-xs text-zinc-700">Not financial advice · AI-assisted</li>
             </ul>
           </div>
         </div>

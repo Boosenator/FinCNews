@@ -227,6 +227,18 @@ export default async function ArticlePage({ params }: Props) {
               <p className="mb-3 text-sm font-semibold text-zinc-300">Share this story</p>
               <ShareButtons url={articleUrl} title={t.title} />
             </div>
+
+            {/* Financial disclaimer — YMYL requirement */}
+            <div className="mt-6 rounded-xl border border-white/[0.04] bg-white/[0.02] px-5 py-4">
+              <p className="text-[11px] leading-5 text-zinc-600">
+                <span className="font-semibold text-zinc-500">Disclaimer:</span> This article is AI-assisted and for informational purposes only.
+                Nothing published on FinCNews constitutes financial advice, investment recommendation or solicitation.
+                Cryptocurrency markets are highly volatile. Always conduct your own research and consult a qualified financial advisor before making investment decisions.{" "}
+                <a href="/about" className="text-zinc-500 underline underline-offset-2 hover:text-zinc-400">
+                  About our editorial standards →
+                </a>
+              </p>
+            </div>
           </article>
 
           {/* Sidebar */}
