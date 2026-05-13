@@ -5,6 +5,7 @@ import ToggleSource from "./_components/ToggleSource";
 import AddSourceForm from "./_components/AddSourceForm";
 import AutoRefresh from "./_components/AutoRefresh";
 import TestSourceButton from "./_components/TestSourceButton";
+import AttachImagesButton from "./_components/AttachImagesButton";
 
 function badge(status: RunLog["status"]) {
   const map = {
@@ -94,7 +95,10 @@ export default async function FlowsPage() {
               <AutoRefresh intervalMs={20000} />
             </div>
           </div>
-          <RunButton />
+          <div className="flex flex-wrap items-center gap-2">
+            <AttachImagesButton />
+            <RunButton />
+          </div>
         </div>
 
         {/* Stats */}
