@@ -195,9 +195,10 @@ function titleSimilarity(a: string, b: string): number {
   return union === 0 ? 0 : intersection / union;
 }
 
-async function attachPexelsImage(sanityDocId: string, slug: string, category: string): Promise<void> {
+// Returns Pexels photo URL (medium size) for use in Telegram, or null on failure
+async function attachPexelsImage(sanityDocId: string, slug: string, category: string): Promise<string | null> {
   const pexelsKey = process.env.PEXELS_API_KEY;
-  if (!pexelsKey) return;
+  if (!pexelsKey) return null;
 
   const queryMap: Record<string, string> = {
     crypto: "bitcoin cryptocurrency blockchain",
@@ -211,16 +212,18 @@ async function attachPexelsImage(sanityDocId: string, slug: string, category: st
 
   try {
     const search = await fetch(
-      `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=5&orientation=landscape`,
+      `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=10&orientation=landscape`,
       { headers: { Authorization: pexelsKey }, signal: AbortSignal.timeout(5000) },
     );
-    if (!search.ok) return;
+    if (!search.ok) return null;
     const { photos } = await search.json();
-    const photoUrl: string = photos?.[0]?.src?.large2x;
-    if (!photoUrl) return;
+    const idx = Math.floor(Math.random() * Math.min(photos?.length ?? 0, 10));
+    const photoUrl: string = photos?.[idx]?.src?.large2x;
+    const telegramPhotoUrl: string = photos?.[idx]?.src?.large; // smaller for Telegram
+    if (!photoUrl) return null;
 
     const imgRes = await fetch(photoUrl, { signal: AbortSignal.timeout(10000) });
-    if (!imgRes.ok) return;
+    if (!imgRes.ok) return null;
     const buffer = Buffer.from(await imgRes.arrayBuffer());
 
     const { createClient } = await import("@sanity/client");
@@ -240,8 +243,10 @@ async function attachPexelsImage(sanityDocId: string, slug: string, category: st
     await sanity.patch(sanityDocId).set({
       coverImage: { _type: "image", asset: { _type: "reference", _ref: asset._id } },
     }).commit();
+
+    return telegramPhotoUrl ?? null;
   } catch {
-    // image is optional — never fail article publish because of it
+    return null;
   }
 }
 
@@ -273,18 +278,34 @@ const CATEGORY_EMOJI: Record<string, string> = {
   companies: "🏢",
 };
 
-const CATEGORY_LABEL: Record<string, string> = {
-  crypto:    "CRYPTO",
-  markets:   "MARKETS",
-  economy:   "ECONOMY",
-  fintech:   "FINTECH",
-  policy:    "POLICY",
-  companies: "COMPANIES",
-};
-
-// Escape special HTML chars for Telegram HTML parse mode
+// Escape HTML for Telegram
 function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// Detect if title signals breaking/urgent news
+function isBreaking(title: string): boolean {
+  const words = ["confirms", "launches", "crashes", "breaks record", "hits", "surges",
+    "drops", "collapses", "banned", "arrests", "hacked", "exploited", "just announced"];
+  return words.some((w) => title.toLowerCase().includes(w));
+}
+
+// Pick CTA that fits the article
+function pickCta(title: string, category: string): string {
+  if (isBreaking(title)) {
+    const opts = ["What this means →", "Breaking down what happened →", "Full story →", "Here's the context →"];
+    return opts[Math.floor(Math.random() * opts.length)];
+  }
+  const byCat: Record<string, string[]> = {
+    crypto:    ["Full breakdown →", "Read the analysis →", "Get the details →", "Dive deeper →"],
+    markets:   ["Market analysis →", "Numbers inside →", "Full picture →"],
+    economy:   ["What this means for your money →", "Full macro breakdown →", "Read more →"],
+    fintech:   ["Full story →", "Read more →", "Get the details →"],
+    policy:    ["Full analysis →", "What changes →", "Read more →"],
+    companies: ["Earnings breakdown →", "Full story →", "Read more →"],
+  };
+  const opts = byCat[category] ?? ["Read more →", "Full story →", "Get the details →"];
+  return opts[Math.floor(Math.random() * opts.length)];
 }
 
 type TelegramPost = {
@@ -293,7 +314,7 @@ type TelegramPost = {
   url: string;
   category: string;
   tags?: string[];
-  sourceName?: string;
+  photoUrl?: string | null;
 };
 
 async function sendTelegram(post: TelegramPost) {
@@ -302,38 +323,60 @@ async function sendTelegram(post: TelegramPost) {
   if (!token || !chatId) return;
 
   const emoji = CATEGORY_EMOJI[post.category] ?? "📰";
-  const label = CATEGORY_LABEL[post.category] ?? post.category.toUpperCase();
+  const breaking = isBreaking(post.title);
+  const cta = pickCta(post.title, post.category);
 
-  // Build 3-5 relevant hashtags
+  // Hashtags: article tags + category + brand
   const tagList = (post.tags ?? [])
     .slice(0, 3)
     .map((t) => `#${t.replace(/\s+/g, "")}`)
     .join(" ");
   const hashtags = [tagList, `#${post.category}`, "#FinCNews"].filter(Boolean).join(" ");
 
-  const text = [
-    `${emoji} <b>${label}</b>`,
+  // Header line — "🚨 BREAKING" vs "₿ CRYPTO" vs "📈 MARKETS"
+  const header = breaking
+    ? `🚨 <b>BREAKING</b>`
+    : `${emoji} <b>${post.category.toUpperCase()}</b>`;
+
+  const caption = [
+    header,
     ``,
     `<b>${esc(post.title)}</b>`,
     ``,
     esc(post.excerpt),
     ``,
-    `<a href="${post.url}">Read full analysis →</a>`,
+    `<a href="${post.url}">${cta}</a>`,
     ``,
     hashtags,
   ].join("\n");
 
-  await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      parse_mode: "HTML",
-      link_preview_options: { is_disabled: false, prefer_large_media: true },
-    }),
-    signal: AbortSignal.timeout(10000),
-  });
+  // If photo URL available → sendPhoto (more visual impact)
+  // Otherwise → sendMessage with link preview
+  if (post.photoUrl) {
+    await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        photo: post.photoUrl,
+        caption,
+        parse_mode: "HTML",
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+  } else {
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: caption,
+        parse_mode: "HTML",
+        link_preview_options: { is_disabled: false, prefer_large_media: true },
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+  }
 }
 
 export type DetailEntry = {
@@ -439,8 +482,8 @@ export async function runAutomation(maxArticles = 2): Promise<AutomationResult> 
 
       const sanityId = await publishToSanity(article);
 
-      // Attach cover image from Pexels (non-blocking)
-      void attachPexelsImage(sanityId, article.slug as string, category);
+      // Image before Telegram
+      const photoUrl = await attachPexelsImage(sanityId, article.slug as string, category);
 
       await db.from("processed_urls").insert({
         url: item.link,
@@ -460,6 +503,7 @@ export async function runAutomation(maxArticles = 2): Promise<AutomationResult> 
         url: articleUrl,
         category,
         tags: (article.tags as string[] | undefined),
+        photoUrl,
       });
 
       details.push({
@@ -663,7 +707,9 @@ export async function runGenerate(maxArticles = 2): Promise<GenerateResult> {
 
       article.sourceUrl = item.url;
       const sanityId = await publishToSanity(article);
-      void attachPexelsImage(sanityId, article.slug as string, category);
+
+      // Image first — await so Telegram post includes the photo
+      const photoUrl = await attachPexelsImage(sanityId, article.slug as string, category);
 
       await db.from("processed_urls").insert({ url: item.url, slug: article.slug, title: en.title, category });
       await db.from("article_queue").update({ status: "done", processed_at: new Date().toISOString() }).eq("id", item.id);
@@ -675,7 +721,7 @@ export async function runGenerate(maxArticles = 2): Promise<GenerateResult> {
         url: articleUrl,
         category,
         tags: (article.tags as string[] | undefined),
-        sourceName: item.source_name ?? undefined,
+        photoUrl,
       });
 
       details.push({ url: item.url, title: en.title, slug: article.slug as string, category, excerpt: en.excerpt, bodyPreview: (typeof en.body === "string" ? en.body : "").slice(0, 400), imageAttached: !!process.env.PEXELS_API_KEY, status: "published" });
