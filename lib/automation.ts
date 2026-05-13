@@ -83,6 +83,59 @@ const KEYWORDS = [
   "payment","neobank","fintech","PayPal","Stripe","Revolut","SWIFT","IBAN",
 ];
 
+// ─── Hype Score ───────────────────────────────────────────────────────────────
+
+const BREAKING_SIGNALS = [
+  "confirms","breaks record","crashes","surges","collapses","plummets",
+  "hacked","exploited","launches","arrested","bankrupt","emergency",
+  "all-time high","ath","record high","record low","just announced","breaking",
+];
+
+const HIGH_VALUE_TERMS = [
+  "bitcoin","ethereum","etf","etfs","fed","sec","cpi","earnings","ipo",
+  "billion","trillion","hack","exploit","acquisition","merger","bankruptcy",
+  "rate cut","rate hike","clarity act","federal reserve",
+];
+
+const QUALITY_SOURCES = ["CoinDesk","Bloomberg","Reuters","The Block","Decrypt","CNBC"];
+
+export function calculateHypeScore(item: {
+  title?: string;
+  contentSnippet?: string;
+  pubDate?: string;
+  sourceName?: string;
+}): number {
+  let score = 35;
+
+  const title = (item.title ?? "").toLowerCase();
+  const text = `${title} ${(item.contentSnippet ?? "").toLowerCase()}`;
+
+  // Breaking/urgency signal (+25)
+  if (BREAKING_SIGNALS.some((w) => title.includes(w))) score += 25;
+
+  // High-value keyword density (+20 max)
+  const matches = HIGH_VALUE_TERMS.filter((w) => text.includes(w)).length;
+  score += Math.min(matches * 5, 20);
+
+  // Recency — the main freshness factor
+  if (item.pubDate) {
+    const ageH = (Date.now() - new Date(item.pubDate).getTime()) / 3600000;
+    if (ageH < 1)       score += 25;
+    else if (ageH < 3)  score += 15;
+    else if (ageH < 6)  score += 5;
+    else if (ageH < 12) score -= 5;
+    else                score -= 25; // stale — penalise heavily
+  }
+
+  // Source quality (+10)
+  if (QUALITY_SOURCES.some((s) => (item.sourceName ?? "").includes(s))) score += 10;
+
+  // Specific numbers in title — specificity = credibility (+10)
+  if (/\$[\d,.]+[BKMbkm]?|\d+\.?\d*%|\d+[BKMbkm]\b/i.test(item.title ?? "")) score += 10;
+
+  return Math.max(0, Math.min(100, score));
+}
+
 // Escape special regex chars
 function escapeRe(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -437,6 +490,7 @@ export type DetailEntry = {
   excerpt?: string;
   bodyPreview?: string;
   imageAttached?: boolean;
+  score?: number;
   status: "published" | "error" | "skipped";
   error?: string;
 };
@@ -631,9 +685,13 @@ export async function runCollect(): Promise<CollectResult> {
     .filter((r): r is PromiseFulfilledResult<FeedItem[]> => r.status === "fulfilled")
     .flatMap((r) => r.value);
 
-  const sampleTitles = allItems.slice(0, 5).map((i) => `[${i.sourceCategory}] ${i.title ?? "(empty)"} | link:${i.link ? "✓" : "✗"} | snippet:${i.contentSnippet ? i.contentSnippet.slice(0, 40) : "(empty)"}`);
+  const sampleTitles = allItems.slice(0, 5).map((i) => `[${i.sourceCategory}] ${i.title ?? "(empty)"}`);
 
-  const cutoff = Date.now() - 48 * 60 * 60 * 1000;
+  // ── 12h collection window (was 48h) ──────────────────────────────────────
+  const COLLECTION_WINDOW_H = 12;
+  const cutoff = Date.now() - COLLECTION_WINDOW_H * 60 * 60 * 1000;
+  const MIN_SCORE = 45; // articles below this threshold are not queued
+
   const fresh = allItems.filter((item) => {
     if (!item.link) return false;
     const age = new Date(item.pubDate ?? 0).getTime();
@@ -648,7 +706,25 @@ export async function runCollect(): Promise<CollectResult> {
     return { sourcesChecked: sources.length, itemsFound: allItems.length, itemsAfterKeywords: 0, itemsAfterDedup: 0, itemsQueued: 0, itemsSkipped: 0, durationMs: Date.now() - start, debug: { sampleTitles, sampleAfterKeywords } };
   }
 
-  const urls = fresh.map((i) => i.link!);
+  // ── Score every item ──────────────────────────────────────────────────────
+  const scored = fresh.map((item) => ({
+    ...item,
+    score: calculateHypeScore({
+      title: item.title,
+      contentSnippet: item.contentSnippet,
+      pubDate: item.pubDate,
+      sourceName: item.sourceName,
+    }),
+  }));
+
+  // ── Remove stale low-score items already in queue ─────────────────────────
+  void db.from("article_queue")
+    .delete()
+    .eq("status", "pending")
+    .lt("queued_at", new Date(Date.now() - COLLECTION_WINDOW_H * 60 * 60 * 1000).toISOString())
+    .lt("score", MIN_SCORE);
+
+  const urls = scored.map((i) => i.link!);
 
   // Dedup: already published OR already in queue
   const [{ data: processed }, { data: queued }] = await Promise.all([
@@ -660,16 +736,17 @@ export async function runCollect(): Promise<CollectResult> {
     ...(queued ?? []).map((r: { url: string }) => r.url),
   ]);
 
-  // Semantic dedup against recent 48h titles
+  // Semantic dedup against recent 12h titles
   const { data: recentTitles } = await db
     .from("processed_urls")
     .select("title")
-    .gte("published_at", new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString())
+    .gte("published_at", new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString())
     .not("title", "is", null);
   const recentTitleList = (recentTitles ?? []).map((r: { title: string }) => r.title);
 
-  const newItems = fresh.filter((item) => {
+  const newItems = scored.filter((item) => {
     if (seen.has(item.link!)) return false;
+    if (item.score < MIN_SCORE) return false; // below hype threshold
     return !recentTitleList.some((t) => titleSimilarity(item.title ?? "", t) > 0.5);
   });
 
@@ -677,7 +754,6 @@ export async function runCollect(): Promise<CollectResult> {
     return { sourcesChecked: sources.length, itemsFound: allItems.length, itemsAfterKeywords: fresh.length, itemsAfterDedup: 0, itemsQueued: 0, itemsSkipped: fresh.length, durationMs: Date.now() - start, debug: { sampleTitles, sampleAfterKeywords } };
   }
 
-  // Filter out any items with no URL (defensive) and build clean rows
   const rows = newItems
     .filter((item) => !!item.link)
     .map((item) => ({
@@ -687,13 +763,13 @@ export async function runCollect(): Promise<CollectResult> {
       source_category: item.sourceCategory,
       source_name: item.sourceName || null,
       pub_date: item.pubDate || null,
+      score: item.score,
     }));
 
   if (!rows.length) {
     return { sourcesChecked: sources.length, itemsFound: allItems.length, itemsAfterKeywords: fresh.length, itemsAfterDedup: newItems.length, itemsQueued: 0, itemsSkipped: fresh.length, durationMs: Date.now() - start, debug: { sampleTitles, sampleAfterKeywords } };
   }
 
-  // upsert with ignoreDuplicates — safe even if URL already exists (race condition)
   const { data: inserted, error: insertError } = await db
     .from("article_queue")
     .upsert(rows, { onConflict: "url", ignoreDuplicates: true })
@@ -737,11 +813,13 @@ export async function runGenerate(maxArticles = 2): Promise<GenerateResult> {
     .eq("status", "processing")
     .lt("queued_at", new Date(Date.now() - 10 * 60 * 1000).toISOString());
 
+  // Pick highest-scoring articles first, then oldest
   const { data: items } = await db
     .from("article_queue")
     .select("*")
     .eq("status", "pending")
-    .order("queued_at")
+    .order("score", { ascending: false })
+    .order("queued_at", { ascending: true })
     .limit(maxArticles);
 
   if (!items?.length) {
@@ -812,7 +890,7 @@ export async function runGenerate(maxArticles = 2): Promise<GenerateResult> {
         photoUrl,
       });
 
-      details.push({ url: item.url, title: en.title, slug: article.slug as string, category, excerpt: en.excerpt, bodyPreview: (typeof en.body === "string" ? en.body : "").slice(0, 400), imageAttached: !!process.env.PEXELS_API_KEY, status: "published" });
+      details.push({ url: item.url, title: en.title, slug: article.slug as string, category, excerpt: en.excerpt, bodyPreview: (typeof en.body === "string" ? en.body : "").slice(0, 400), imageAttached: !!process.env.PEXELS_API_KEY, score: item.score, status: "published" });
     } catch (e) {
       await db.from("article_queue").update({ status: "error", error_text: String(e), processed_at: new Date().toISOString() }).eq("id", item.id);
       details.push({ url: item.url, title: item.title, status: "error", error: String(e) });
