@@ -50,6 +50,7 @@ export default {
     },
     { name: "coverImage", title: "Cover image", type: "image", options: { hotspot: true } },
     { name: "tags", title: "Tags", type: "array", of: [{ type: "string" }] },
+    { name: "telegraphUrl", title: "Telegraph URL", type: "url" },
   ],
   preview: {
     select: { title: "translations.en.title", category: "category" },
