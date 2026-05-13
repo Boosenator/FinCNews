@@ -7,7 +7,7 @@ import Breadcrumbs from "@/components/Breadcrumbs";
 import ShareButtons from "@/components/ShareButtons";
 import ArticleCard from "@/components/ArticleCard";
 import TelegramCTA from "@/components/TelegramCTA";
-import { getArticle, getRelatedArticles, readingTime, timeAgo, type PortableTextBlock } from "@/lib/sanity";
+import { getArticle, getRelatedArticles, findArticleByTopic, readingTime, timeAgo, type PortableTextBlock } from "@/lib/sanity";
 import { isCategory, categoryLabels, type Category } from "@/lib/i18n";
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? "https://fincnews.com";
@@ -60,7 +60,8 @@ export default async function ArticlePage({ params }: Props) {
   const t = article.en;
   if (!t) notFound();
 
-  const body = normalizeBody(t.body);
+  const resolvedLinks = await resolveInternalLinks(t.body);
+  const body = normalizeBody(t.body, resolvedLinks);
   const mins = readingTime(t.body);
   const ago = timeAgo(article.publishedAt);
   const articleUrl = `${BASE_URL}/${params.category}/${params.slug}`;
@@ -262,18 +263,81 @@ export default async function ArticlePage({ params }: Props) {
   );
 }
 
-function normalizeBody(body: PortableTextBlock[] | string | undefined): PortableTextBlock[] {
+const INTERNAL_RE = /\[INTERNAL:\s*([^\]]+)\]/g;
+
+async function resolveInternalLinks(
+  body: PortableTextBlock[] | string | undefined,
+): Promise<Map<string, string>> {
+  const text = typeof body === "string" ? body : "";
+  const resolved = new Map<string, string>();
+  if (!text) return resolved;
+
+  const rawTopics: string[] = [];
+  let rm: RegExpExecArray | null;
+  INTERNAL_RE.lastIndex = 0;
+  while ((rm = INTERNAL_RE.exec(text)) !== null) rawTopics.push(rm[1].trim());
+  const topics = rawTopics.filter((t, i) => rawTopics.indexOf(t) === i);
+  await Promise.all(
+    topics.map(async (topic) => {
+      const hit = await findArticleByTopic(topic);
+      if (hit) resolved.set(topic, `/${hit.category}/${hit.slug}`);
+    }),
+  );
+  return resolved;
+}
+
+function normalizeBody(
+  body: PortableTextBlock[] | string | undefined,
+  links: Map<string, string> = new Map(),
+): PortableTextBlock[] {
   if (Array.isArray(body)) return body;
   if (!body) return [];
+
   return body
     .split(/\n{2,}/)
     .map((t) => t.trim())
     .filter(Boolean)
-    .map((text, i) => ({
-      _type: "block" as const,
-      _key: `b-${i}`,
-      style: "normal",
-      markDefs: [],
-      children: [{ _type: "span" as const, _key: `s-${i}`, text, marks: [] }],
-    }));
+    .map((paragraph, i) => {
+      const markDefs: Array<{ _type: "link"; _key: string; href: string }> = [];
+      const children: Array<{ _type: "span"; _key: string; text: string; marks: string[] }> = [];
+
+      let last = 0;
+      let spanIdx = 0;
+      INTERNAL_RE.lastIndex = 0;
+
+      let m: RegExpExecArray | null;
+      while ((m = INTERNAL_RE.exec(paragraph)) !== null) {
+        const topic = m[1].trim();
+        const href = links.get(topic);
+
+        // text before this match
+        if (m.index > last) {
+          children.push({ _type: "span", _key: `s-${i}-${spanIdx++}`, text: paragraph.slice(last, m.index), marks: [] });
+        }
+
+        if (href) {
+          const linkKey = `lnk-${i}-${spanIdx}`;
+          markDefs.push({ _type: "link", _key: linkKey, href });
+          children.push({ _type: "span", _key: `s-${i}-${spanIdx++}`, text: topic, marks: [linkKey] });
+        } else {
+          // no match found — render topic text without link
+          children.push({ _type: "span", _key: `s-${i}-${spanIdx++}`, text: topic, marks: [] });
+        }
+
+        last = m.index + m[0].length;
+      }
+
+      // remaining text after last match
+      if (last < paragraph.length) {
+        children.push({ _type: "span", _key: `s-${i}-${spanIdx}`, text: paragraph.slice(last), marks: [] });
+      }
+
+      return {
+        _type: "block" as const,
+        _key: `b-${i}`,
+        style: "normal" as const,
+        markDefs,
+        children,
+      };
+    });
 }
