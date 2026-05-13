@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import HeroSection from "@/components/HeroSection";
 import ArticleCard from "@/components/ArticleCard";
 import TelegramCTA from "@/components/TelegramCTA";
