@@ -714,7 +714,7 @@ export type CollectResult = {
   debug: { insertError?: string };
 };
 
-export async function runCollect(): Promise<CollectResult> {
+export async function runCollect(opts: { minScore?: number } = {}): Promise<CollectResult> {
   const start = Date.now();
   const db = supabaseAdmin();
   const steps: import("@/lib/supabase").PipelineStep[] = [];
@@ -765,7 +765,7 @@ export async function runCollect(): Promise<CollectResult> {
   const t2 = Date.now();
   const COLLECTION_WINDOW_H = 12;
   const cutoff = Date.now() - COLLECTION_WINDOW_H * 60 * 60 * 1000;
-  const MIN_SCORE = 45;
+  const MIN_SCORE = opts.minScore ?? 45;
 
   const fresh = allItems.filter((item) => {
     if (!item.link) return false;

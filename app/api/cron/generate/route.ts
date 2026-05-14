@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runGenerate } from "@/lib/automation";
 import { supabaseAdmin } from "@/lib/supabase";
+import { getPipelineConfig } from "@/lib/pipeline-config";
 
 export const maxDuration = 120;
 
@@ -11,11 +12,16 @@ function isAuthed(req: NextRequest) {
 async function handle(req: NextRequest) {
   if (!isAuthed(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const config = await getPipelineConfig();
+  if (!config.generate_enabled) {
+    return NextResponse.json({ ok: true, skipped: true, reason: "generate paused" });
+  }
+
   const db = supabaseAdmin();
-  const { data: log } = await db.from("run_logs").insert({ status: "running" }).select().single();
+  const { data: log } = await db.from("run_logs").insert({ status: "running", run_type: "generate" }).select().single();
 
   try {
-    const result = await runGenerate(1);
+    const result = await runGenerate(config.generate_max_per_run);
     const hasError = result.details.some((d) => d.status === "error");
     const status = result.articlesPublished > 0 ? "success" : hasError ? "partial" : "success";
 
@@ -29,11 +35,11 @@ async function handle(req: NextRequest) {
       duration_ms: result.durationMs,
       details: result.details,
       steps: result.steps,
-    }).eq("id", log.id);
+    }).eq("id", log?.id);
 
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {
-    await db.from("run_logs").update({ status: "error", finished_at: new Date().toISOString(), error_text: String(e) }).eq("id", log.id);
+    await db.from("run_logs").update({ status: "error", finished_at: new Date().toISOString(), error_text: String(e) }).eq("id", log?.id);
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
 }

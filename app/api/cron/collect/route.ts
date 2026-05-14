@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runCollect } from "@/lib/automation";
 import { supabaseAdmin } from "@/lib/supabase";
+import { getPipelineConfig } from "@/lib/pipeline-config";
 
 export const maxDuration = 30;
 
@@ -11,12 +12,17 @@ function isAuthed(req: NextRequest) {
 async function handle(req: NextRequest) {
   if (!isAuthed(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const config = await getPipelineConfig();
+  if (!config.collect_enabled) {
+    return NextResponse.json({ ok: true, skipped: true, reason: "collect paused" });
+  }
+
   const db = supabaseAdmin();
-  const { data: log } = await db.from("run_logs").insert({ status: "running" }).select().single();
+  const { data: log } = await db.from("run_logs").insert({ status: "running", run_type: "collect" }).select().single();
   if (!log) return NextResponse.json({ error: "Failed to create log" }, { status: 500 });
 
   try {
-    const result = await runCollect();
+    const result = await runCollect({ minScore: config.min_score });
 
     await db.from("run_logs").update({
       run_type: "collect",
