@@ -5,6 +5,7 @@ import ToggleSource from "./ToggleSource";
 import AddSourceForm from "./AddSourceForm";
 import TestSourceButton from "./TestSourceButton";
 import TelegramTestButton from "./TelegramTestButton";
+import CronControl from "./CronControl";
 
 type Props = {
   sources: RssSource[];
@@ -81,30 +82,7 @@ export default function SettingsTab({ sources }: Props) {
           <span className="h-4 w-0.5 rounded-full bg-cyan-400" />
           Pipeline Config
         </h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="rounded-xl border border-white/[0.06] bg-zinc-900/40 p-5 space-y-3">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Collect Cron</p>
-            <code className="block text-xs text-zinc-300">*/5 * * * *</code>
-            <p className="text-[10px] text-zinc-600">Every 5 min · maxDuration 30s</p>
-            <div className="pt-2 border-t border-white/[0.04]">
-              <p className="text-[10px] text-zinc-600 mb-1">Endpoint</p>
-              <code className="block break-all text-[11px] text-zinc-400">
-                POST /api/cron/collect
-              </code>
-            </div>
-          </div>
-          <div className="rounded-xl border border-white/[0.06] bg-zinc-900/40 p-5 space-y-3">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Generate Cron</p>
-            <code className="block text-xs text-zinc-300">*/10 * * * *</code>
-            <p className="text-[10px] text-zinc-600">Every 10 min · maxDuration 120s</p>
-            <div className="pt-2 border-t border-white/[0.04]">
-              <p className="text-[10px] text-zinc-600 mb-1">Endpoint</p>
-              <code className="block break-all text-[11px] text-zinc-400">
-                POST /api/cron/generate
-              </code>
-            </div>
-          </div>
-        </div>
+        <CronControl />
       </section>
 
       {/* External cron */}
