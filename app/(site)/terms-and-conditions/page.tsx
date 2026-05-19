@@ -22,7 +22,7 @@ export default function TermsPage() {
 
         <h2>1. Definitions</h2>
         <p><strong>Company</strong> — FinCNews Ltd., the legal entity operating this news portal.</p>
-        <p><strong>News Portal</strong> — The news portal operated by the Company and available at <a href="https://finc.news">fincnews.com</a>.</p>
+        <p><strong>News Portal</strong> — The news portal operated by the Company and available at <a href="https://finc.news">finc.news</a>.</p>
         <p><strong>FinCNews</strong> — Collective name referring to either or both the Company or the News Portal.</p>
         <p><strong>Terms and Conditions</strong> — The latest version of the Company&apos;s Terms and Conditions as published on this page.</p>
         <p><strong>Visitor</strong> — An individual person who visits the News Portal.</p>

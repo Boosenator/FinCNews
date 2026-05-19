@@ -22,7 +22,7 @@ export default function PrivacyPage() {
 
         <h2>1. Definitions</h2>
         <p><strong>Company</strong> — FinCNews Ltd., the legal entity operating this news portal.</p>
-        <p><strong>News Portal</strong> — The website operated by the Company and available at <a href="https://finc.news">fincnews.com</a>.</p>
+        <p><strong>News Portal</strong> — The website operated by the Company and available at <a href="https://finc.news">finc.news</a>.</p>
         <p><strong>FinCNews</strong> — Collective name referring to either or both the Company or the News Portal.</p>
         <p><strong>Privacy Policy</strong> — The latest version of this document.</p>
         <p><strong>Visitor</strong> — An individual person visiting the News Portal.</p>
@@ -49,8 +49,8 @@ export default function PrivacyPage() {
         <p>Visitors may contact <a href="mailto:privacy@fincnews.com">privacy@fincnews.com</a> to request details on the personal data held about them.</p>
 
         <h2>4. Analytics</h2>
-        <p>FinCNews uses privacy-respecting analytics tools to understand how Visitors use the News Portal. Where possible, we prefer tools that do not require cookie consent (e.g., server-side analytics, privacy-first tools such as Plausible or Umami).</p>
-        <p>Where analytics tools set cookies or collect identifiable data, explicit consent will be requested via a cookie banner in compliance with the ePrivacy Directive.</p>
+        <p>FinCNews uses Google Analytics 4 (Google LLC) to understand how Visitors use the News Portal. Google Analytics collects usage data including pages visited, session duration, device type, and approximate geographic location via cookies and similar technologies.</p>
+        <p>Data collected by Google Analytics may be transferred to and stored on Google servers. Google&apos;s use of this data is governed by the <a href="https://policies.google.com/privacy" target="_blank" rel="noreferrer">Google Privacy Policy</a>. Visitors may opt out of Google Analytics tracking by installing the <a href="https://tools.google.com/dlpage/gaoptout" target="_blank" rel="noreferrer">Google Analytics Opt-out Browser Add-on</a> or by adjusting browser cookie settings.</p>
 
         <h2>5. Telegram Channel</h2>
         <p>FinCNews operates a Telegram channel. If you subscribe to the channel, your Telegram username and profile data are handled by Telegram in accordance with <a href="https://telegram.org/privacy" target="_blank" rel="noreferrer">Telegram&apos;s own Privacy Policy</a>. FinCNews does not separately store or process your Telegram personal data.</p>

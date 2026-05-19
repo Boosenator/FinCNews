@@ -39,18 +39,17 @@ export default function EditorialPolicyPage() {
 
         <h2>3. AI Content Standards</h2>
         <p>
-          FinCNews uses AI (Claude by Anthropic) to assist in article drafting. The following
-          rules govern AI-generated content:
+          FinCNews uses AI-assisted writing technology to draft articles. The following
+          rules govern AI-assisted content:
         </p>
         <ul>
           <li>AI may only use facts present in the provided source material.</li>
           <li>Speculation must be clearly labelled: &ldquo;analysts expect&rdquo;, &ldquo;could potentially&rdquo;, &ldquo;according to sources&rdquo;.</li>
-          <li>AI-generated articles undergo automated validation checks before publication.</li>
           <li>All published content is disclosed as AI-assisted per our <Link href="/about">About page</Link>.</li>
         </ul>
         <p>
           We do not use AI to fabricate events, manufacture quotes or create misleading
-          financial narratives. Our AI prompt explicitly prohibits these practices.
+          financial narratives.
         </p>
 
         <h2>4. Financial Content Standards</h2>
