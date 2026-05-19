@@ -81,15 +81,22 @@ function validate(article: IncomingArticle): string | null {
 function normalizeBody(body: string | PortableTextBlock[] | undefined): PortableTextBlock[] {
   if (Array.isArray(body)) return body;
   if (!body) return [];
-  return body
+
+  const cleaned = body.replace(/\[INTERNAL:\s*([^\]]+)\]/g, (_, t) => t.trim());
+
+  return cleaned
     .split(/\n{2,}/)
     .map((t) => t.trim())
     .filter(Boolean)
-    .map((text, i) => ({
-      _type: "block" as const,
-      _key: `p-${i}`,
-      style: "normal",
-      markDefs: [],
-      children: [{ _type: "span" as const, _key: `s-${i}`, text, marks: [] }],
-    }));
+    .map((text, i) => {
+      const h2 = text.match(/^##\s+(.+)$/);
+      const h3 = text.match(/^###\s+(.+)$/);
+      return {
+        _type: "block" as const,
+        _key: `p-${i}`,
+        style: (h2 ? "h2" : h3 ? "h3" : "normal") as string,
+        markDefs: [],
+        children: [{ _type: "span" as const, _key: `s-${i}`, text: h2?.[1] ?? h3?.[1] ?? text, marks: [] }],
+      };
+    });
 }

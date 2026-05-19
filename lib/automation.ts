@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "@/lib/supabase";
 import { createTelegraphPage } from "@/lib/telegraph";
 import { BASE_URL } from "@/lib/config";
+import { sanityAdmin } from "@/lib/sanity";
 
 type FeedEntry = {
   title?: string;
@@ -266,10 +267,9 @@ Date: ${date} | Category: ${category}
 Text: ${body}
 
 JSON:
-{"slug":"kebab-max-60","category":"${category}","tags":["t1","t2","t3"],"translations":{"en":{"title":"SEO title 50-60 chars","excerpt":"2-3 sentences under 250 chars","body":"400-500 word article: What happened (facts+numbers) → Why it matters → Expert take (first person) → How to act. End: Not financial advice.","metaTitle":"50-60 chars","metaDescription":"150-160 chars with CTA","telegramText":"120w news recap ending [ARTICLE_URL]"}}}
+{"slug":"kebab-max-60","category":"${category}","tags":["t1","t2","t3"],"translations":{"en":{"title":"SEO title 50-60 chars","excerpt":"2-3 sentences under 250 chars","body":"600-800 word article with these exact sections separated by blank lines:\\n\\n## What Happened\\n(3-4 paragraphs: facts, numbers, named entities, timeline)\\n\\n## Why It Matters\\n(2-3 paragraphs: market impact, broader implications, who is affected)\\n\\n## Expert Perspective\\n(1-2 paragraphs: first-person analyst take, historical context, comparable events)\\n\\n## What to Watch\\n(1 paragraph: key signals, dates, thresholds investors should monitor)\\n\\nNot financial advice.","metaTitle":"50-60 chars","metaDescription":"150-160 chars with CTA","telegramText":"ignored"}}}
 
-Rules: facts only, real numbers/dates, slug≤60 chars.
-In the body, naturally reference 1-2 related topics using format [INTERNAL: topic] — e.g. [INTERNAL: Bitcoin ETF] or [INTERNAL: Federal Reserve rates]. These become internal links.`;
+Rules: facts only, real numbers/dates, slug≤60 chars, no placeholder text like [INTERNAL:...].`;
 
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -306,6 +306,22 @@ function titleSimilarity(a: string, b: string): number {
   const allWords = new Set([...wa, ...words(b)]);
   const union = allWords.size;
   return union === 0 ? 0 : intersection / union;
+}
+
+// Check Sanity for published articles on the same topic (last 7 days, threshold 0.35)
+async function isSanityDuplicate(title: string): Promise<string | null> {
+  if (!sanityAdmin) return null;
+  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const recent = await sanityAdmin.fetch<{ title: string; slug: string; category: string }[]>(
+    `*[_type == "article" && publishedAt >= $cutoff && defined(translations.en.title)]
+     { "title": translations.en.title, "slug": slug.current, category }`,
+    { cutoff },
+  );
+  for (const art of recent ?? []) {
+    if (titleSimilarity(title, art.title) > 0.35)
+      return `${art.category}/${art.slug}`;
+  }
+  return null;
 }
 
 // Build specific Pexels search query from article context
@@ -962,6 +978,16 @@ async function processQueueItem(
     }
     const bodyText = scraped.length > 300 ? scraped : (item.snippet ?? "");
 
+    // ── sanity duplicate check ──
+    t = Date.now();
+    const dupSlug = await isSanityDuplicate(item.title ?? "");
+    if (dupSlug) {
+      await db.from("article_queue").update({ status: "done", processed_at: new Date().toISOString(), error_text: `duplicate: ${dupSlug}` }).eq("id", item.id);
+      articleSteps.push({ name: "dedup", status: "skip", durationMs: Date.now() - t, note: `duplicate of ${dupSlug}` });
+      detail = { url: item.url, title: item.title ?? undefined, status: "skipped", error: `duplicate: ${dupSlug}` };
+      return { detail, step: { name: `article:${item.title?.slice(0, 50)}`, status: "ok", durationMs: Date.now() - t, in: 1, out: 0, note: `skipped — duplicate`, articleSteps } };
+    }
+
     // ── claude ──
     t = Date.now();
     const category = detectCategory(`${item.title ?? ""} ${item.snippet ?? ""}`, item.source_category);
@@ -1066,14 +1092,36 @@ export async function runGenerate(maxArticles = 2): Promise<GenerateResult> {
     .eq("status", "processing")
     .lt("queued_at", new Date(Date.now() - 10 * 60 * 1000).toISOString());
 
-  // Pick highest-scoring articles first, then oldest
-  const { data: items } = await db
+  // Fetch candidate pool, then balance by category
+  const { data: candidates } = await db
     .from("article_queue")
     .select("*")
     .eq("status", "pending")
     .order("score", { ascending: false })
     .order("queued_at", { ascending: true })
-    .limit(maxArticles);
+    .limit(30);
+
+  // Count recent articles per category (last 6h) to avoid crypto flooding
+  const recentCutoff = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
+  const { data: recentPublished } = await db
+    .from("processed_urls")
+    .select("category")
+    .gte("published_at", recentCutoff);
+  const recentCount: Record<string, number> = {};
+  for (const r of recentPublished ?? []) {
+    recentCount[r.category] = (recentCount[r.category] ?? 0) + 1;
+  }
+
+  // Sort candidates: deprioritize categories with 3+ recent articles
+  const sorted = (candidates ?? []).sort((a, b) => {
+    const aCount = recentCount[a.source_category] ?? 0;
+    const bCount = recentCount[b.source_category] ?? 0;
+    if (aCount >= 3 && bCount < 3) return 1;
+    if (bCount >= 3 && aCount < 3) return -1;
+    return (b.score ?? 0) - (a.score ?? 0);
+  });
+
+  const items = sorted.slice(0, maxArticles);
 
   if (!items?.length) {
     return { queueSize: 0, articlesPublished: 0, durationMs: Date.now() - start, details: [], steps: [] };
