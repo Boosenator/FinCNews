@@ -60,38 +60,29 @@ export default function AboutPage() {
 
           <h2>Our Editorial Methodology</h2>
           <p>
-            FinCNews uses a two-stage pipeline:
+            Every story on FinCNews is grounded in verified source material from established
+            financial news outlets. Our editorial process prioritises accuracy, specificity,
+            and speed — we cover a story once, with the most newsworthy angle, and always
+            link to the original source.
           </p>
-          <ul>
-            <li>
-              <strong>Collection</strong> — Automated monitoring of 10+ authoritative RSS sources,
-              filtered by financial relevance keywords and recency (48-hour window).
-              Semantic deduplication ensures each story is covered once, with the most newsworthy
-              angle prioritised.
-            </li>
-            <li>
-              <strong>Generation</strong> — Articles are drafted by Claude AI (Anthropic),
-              a large language model trained on financial and journalistic content.
-              The AI is instructed to use only facts present in the source material,
-              include specific numbers and named entities, and mark speculation clearly.
-            </li>
-          </ul>
           <p>
-            Every published article includes the original source URL. We do not invent quotes,
-            fabricate data, or republish content verbatim. Our AI prompt explicitly prohibits
-            invented sources and requires factual grounding.
+            We do not invent quotes, fabricate data, or republish content verbatim.
+            Every published article includes the original source URL so readers can verify
+            the underlying reporting directly.
           </p>
 
           <h2>AI Content Disclosure</h2>
           <p>
-            <strong>All content on FinCNews is AI-assisted.</strong> Articles are generated
-            using Claude (Anthropic) based on verified source material from established financial
-            news outlets. We disclose this clearly in accordance with emerging AI transparency
-            standards and Google&apos;s content policies.
+            <strong>FinCNews uses AI-assisted writing technology</strong> to deliver finance
+            and crypto news at the speed the market demands. Our technology drafts articles
+            from verified source material — facts, numbers, and named entities drawn directly
+            from primary reporting by outlets such as Reuters, Bloomberg, and CoinDesk.
           </p>
           <p>
-            AI-assisted does not mean unverified. Our system is designed to surface factual,
-            source-cited financial reporting at scale — not to fabricate news.
+            AI-assisted does not mean unverified. We disclose our use of AI in accordance
+            with emerging transparency standards and Google&apos;s content policies.
+            The editorial standard is the same as any news organisation: factual,
+            source-cited, and accountable.
           </p>
 
           <h2>Financial Disclaimer</h2>
