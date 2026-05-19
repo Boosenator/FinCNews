@@ -174,15 +174,15 @@ Target: niche finance aggregators that link to primary sources.
 ## Phase 5 — Analytics & Monitoring (Ongoing)
 
 ### 5.1 Google Search Console
-- Submit sitemap: `fin-c-news.vercel.app/sitemap.xml`
-- Submit news sitemap: `fin-c-news.vercel.app/news-sitemap.xml`
+- Submit sitemap: `finc.news/sitemap.xml`
+- Submit news sitemap: `finc.news/news-sitemap.xml`
 - Monitor: Core Web Vitals, crawl errors, manual actions
 - Track: impressions vs clicks per article (CTR optimization)
 
 ### 5.2 Analytics (Privacy-first)
 Add Plausible or Umami (no cookie banner needed):
 ```
-NEXT_PUBLIC_PLAUSIBLE_DOMAIN=fin-c-news.vercel.app
+NEXT_PUBLIC_PLAUSIBLE_DOMAIN=finc.news
 ```
 
 ### 5.3 KPIs to Track

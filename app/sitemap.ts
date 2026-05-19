@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 import { categories } from "@/lib/i18n";
 import { sanity } from "@/lib/sanity";
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? "https://fin-c-news.vercel.app";
+import { BASE_URL } from "@/lib/config";
 
 function dateStr(iso?: string): string {
   return new Date(iso ?? Date.now()).toISOString().split("T")[0]; // YYYY-MM-DD

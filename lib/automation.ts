@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabase";
 import { createTelegraphPage } from "@/lib/telegraph";
+import { BASE_URL } from "@/lib/config";
 
 type FeedEntry = {
   title?: string;
@@ -400,8 +401,7 @@ async function attachPexelsImage(
 }
 
 async function publishToSanity(article: Record<string, unknown>): Promise<string> {
-  const base = process.env.NEXT_PUBLIC_BASE_URL ?? "https://fin-c-news.vercel.app";
-  const res = await fetch(`${base}/api/publish`, {
+  const res = await fetch(`${BASE_URL}/api/publish`, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${process.env.N8N_SECRET}`,
@@ -662,7 +662,7 @@ export async function runAutomation(maxArticles = 2): Promise<AutomationResult> 
         .update({ articles_published: sources.find((s) => s.category === item.sourceCategory)?.articles_published ?? 0 + 1 })
         .eq("category", item.sourceCategory);
 
-      const articleUrl = `${process.env.NEXT_PUBLIC_BASE_URL ?? "https://fin-c-news.vercel.app"}/${category}/${article.slug}`;
+      const articleUrl = `${BASE_URL}/${category}/${article.slug}`;
       await sendTelegram({
         title: en.title,
         excerpt: en.excerpt,
@@ -986,7 +986,7 @@ async function processQueueItem(
       articleSteps.push({ name: "pexels", status: "error", durationMs: Date.now() - t, note: String(e) });
     }
 
-    const articleUrl = `${process.env.NEXT_PUBLIC_BASE_URL ?? "https://fin-c-news.vercel.app"}/${category}/${article.slug}`;
+    const articleUrl = `${BASE_URL}/${category}/${article.slug}`;
     const enBodyText = typeof en.body === "string" ? en.body : "";
 
     // ── telegraph ──

@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   alternates: { canonical: "/about" },
 };
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? "https://fin-c-news.vercel.app";
+import { BASE_URL } from "@/lib/config";
 
 const orgSchema = {
   "@context": "https://schema.org",

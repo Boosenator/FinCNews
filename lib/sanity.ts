@@ -49,6 +49,16 @@ export const sanity = projectId
     })
   : null;
 
+export const sanityAdmin = projectId
+  ? createClient({
+      projectId,
+      dataset,
+      apiVersion: "2024-01-01",
+      useCdn: false,
+      token: process.env.SANITY_TOKEN,
+    })
+  : null;
+
 const projection = `
   _id,
   "slug": slug.current,

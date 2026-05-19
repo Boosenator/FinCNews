@@ -7,7 +7,7 @@ import TelegramCTA from "@/components/TelegramCTA";
 import { getArticles } from "@/lib/sanity";
 import { isCategory, categoryLabels, categories, type Category } from "@/lib/i18n";
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? "https://fin-c-news.vercel.app";
+import { BASE_URL } from "@/lib/config";
 
 const CATEGORY_DESCRIPTIONS: Record<string, string> = {
   crypto:    "Bitcoin, Ethereum, DeFi, NFTs and the broader crypto market — breaking news, price analysis and regulation updates.",

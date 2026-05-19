@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { sanity } from "@/lib/sanity";
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? "https://fin-c-news.vercel.app";
+import { BASE_URL } from "@/lib/config";
 
 function esc(s: string) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");

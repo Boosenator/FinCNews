@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@sanity/client";
+import { isAuthed } from "@/lib/auth";
 
 export const maxDuration = 60;
-
-function isAuthed(req: NextRequest) {
-  return req.cookies.get("admin_key")?.value === process.env.ADMIN_KEY;
-}
 
 type SanityArticle = {
   _id: string;

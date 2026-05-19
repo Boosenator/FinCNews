@@ -1,7 +1,6 @@
-// Telegraph API integration
-// Docs: https://telegra.ph/api
+import { BASE_URL } from "@/lib/config";
 
-type TelegraphNode =
+export type TelegraphNode =
   | string
   | { tag: string; attrs?: Record<string, string>; children?: TelegraphNode[] };
 
@@ -56,7 +55,7 @@ function buildContent(
       children: [
         {
           tag: "a",
-          attrs: { href: `${process.env.NEXT_PUBLIC_BASE_URL ?? "https://fin-c-news.vercel.app"}/${category}` },
+          attrs: { href: `${BASE_URL}/${category}` },
           children: [`#${category}`],
         },
         " #FinCNews #finance",
@@ -91,7 +90,7 @@ export async function createTelegraphPage(opts: {
         access_token: token,
         title: opts.title.slice(0, 256), // Telegraph title limit
         author_name: "FinCNews",
-        author_url: process.env.NEXT_PUBLIC_BASE_URL ?? "https://fin-c-news.vercel.app",
+        author_url: BASE_URL,
         content,
         return_content: false,
       }),

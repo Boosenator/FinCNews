@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { generateSingle } from "@/lib/automation";
-
-function isAuthed(req: NextRequest) {
-  return req.cookies.get("admin_key")?.value === process.env.ADMIN_KEY;
-}
+import { isAuthed } from "@/lib/auth";
 
 // DELETE — reject (remove from queue)
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {

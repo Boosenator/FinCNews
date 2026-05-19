@@ -1,7 +1,7 @@
 # FinCNews — Content Factory Master Spec
 
 ## Current Stack
-- **Frontend**: Next.js 14 (App Router) → Vercel `fin-c-news.vercel.app`
+- **Frontend**: Next.js 14 (App Router) → Vercel `finc.news`
 - **CMS**: Sanity project `x55aaanw`, dataset `production` → Studio `fincnews.sanity.studio`
 - **Automation**: Vercel Cron + Claude Haiku API + Supabase
 - **Distribution**: Telegram `@FinCNews` → Telegra.ph → Site
@@ -88,7 +88,7 @@ Telegram → Telegraph (instant view) → Site article
 ```
 
 **Auth**: `Authorization: Bearer fincnews_secret_2026`
-**Endpoint (prod)**: `https://fin-c-news.vercel.app/api/publish`
+**Endpoint (prod)**: `https://finc.news/api/publish`
 
 ---
 
@@ -216,7 +216,7 @@ Site does NOT link to Telegraph (would bounce users + duplicate content signal).
 
 ```env
 # Vercel / Next.js
-NEXT_PUBLIC_BASE_URL=https://fin-c-news.vercel.app
+NEXT_PUBLIC_BASE_URL=https://finc.news
 NEXT_PUBLIC_SANITY_PROJECT_ID=x55aaanw
 NEXT_PUBLIC_SANITY_DATASET=production
 

@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/boosy/**)",
+      "Bash(vercel --prod)",
+      "Bash(curl -s -X POST https://finc.news/api/admin/migrate-telegraph -H 'Authorization: Bearer fincnews_secret_2026' -H 'Content-Type: application/json')",
+      "Bash(node -e ' *)",
+      "Bash(curl -sI \"https://finc.news/robots.txt\")",
+      "Bash(curl -s \"https://finc.news/robots.txt\")",
+      "Bash(curl -sI \"https://fin-c-news.vercel.app/robots.txt\")",
+      "Bash(git checkout *)"
+    ]
+  }
+}

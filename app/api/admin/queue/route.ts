@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
-
-function isAuthed(req: NextRequest) {
-  return req.cookies.get("admin_key")?.value === process.env.ADMIN_KEY;
-}
+import { isAuthed } from "@/lib/auth";
 
 // GET — list queue items
 export async function GET(req: NextRequest) {

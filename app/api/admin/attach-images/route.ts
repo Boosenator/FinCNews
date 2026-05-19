@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@sanity/client";
+import { isAuthed } from "@/lib/auth";
 
 export const maxDuration = 120;
-
-function isAuthed(req: NextRequest) {
-  return req.cookies.get("admin_key")?.value === process.env.ADMIN_KEY;
-}
 
 const CATEGORY_QUERIES: Record<string, string> = {
   crypto:    "bitcoin cryptocurrency blockchain",

@@ -22,7 +22,7 @@ export default function PrivacyPage() {
 
         <h2>1. Definitions</h2>
         <p><strong>Company</strong> — FinCNews Ltd., the legal entity operating this news portal.</p>
-        <p><strong>News Portal</strong> — The website operated by the Company and available at <a href="https://fin-c-news.vercel.app">fincnews.com</a>.</p>
+        <p><strong>News Portal</strong> — The website operated by the Company and available at <a href="https://finc.news">fincnews.com</a>.</p>
         <p><strong>FinCNews</strong> — Collective name referring to either or both the Company or the News Portal.</p>
         <p><strong>Privacy Policy</strong> — The latest version of this document.</p>
         <p><strong>Visitor</strong> — An individual person visiting the News Portal.</p>

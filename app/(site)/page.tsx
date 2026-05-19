@@ -5,6 +5,7 @@ import TelegramCTA from "@/components/TelegramCTA";
 import { getArticles } from "@/lib/sanity";
 import { categories, categoryLabels } from "@/lib/i18n";
 import Link from "next/link";
+import { BASE_URL } from "@/lib/config";
 
 export const metadata: Metadata = {
   title: "Finance & Crypto News — Markets, Bitcoin, Economy",
@@ -23,13 +24,13 @@ export default async function HomePage() {
     "@context": "https://schema.org",
     "@type": "WebSite",
     name: "FinCNews",
-    url: process.env.NEXT_PUBLIC_BASE_URL ?? "https://fin-c-news.vercel.app",
+    url: BASE_URL,
     description: "AI-powered finance and crypto news — markets, Bitcoin, macro and fintech.",
     potentialAction: {
       "@type": "SearchAction",
       target: {
         "@type": "EntryPoint",
-        urlTemplate: `${process.env.NEXT_PUBLIC_BASE_URL ?? "https://fin-c-news.vercel.app"}/search?q={search_term_string}`,
+        urlTemplate: `${BASE_URL}/search?q={search_term_string}`,
       },
       "query-input": "required name=search_term_string",
     },
@@ -39,8 +40,8 @@ export default async function HomePage() {
     "@context": "https://schema.org",
     "@type": "Organization",
     name: "FinCNews",
-    url: process.env.NEXT_PUBLIC_BASE_URL ?? "https://fin-c-news.vercel.app",
-    logo: `${process.env.NEXT_PUBLIC_BASE_URL ?? "https://fin-c-news.vercel.app"}/logo.jpg`,
+    url: BASE_URL,
+    logo: `${BASE_URL}/logo.jpg`,
     sameAs: [
       "https://t.me/FinCNews",
       "https://x.com/fincnews",
