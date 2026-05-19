@@ -46,7 +46,7 @@ export default function PrivacyPage() {
           <li>Legitimate interest (e.g., cybersecurity, analytics, fraud prevention);</li>
           <li>Compliance with legal obligations.</li>
         </ul>
-        <p>Visitors may contact <a href="mailto:privacy@fincnews.com">privacy@fincnews.com</a> to request details on the personal data held about them.</p>
+        <p>Visitors may contact <a href="mailto:privacy@finc.news">privacy@finc.news</a> to request details on the personal data held about them.</p>
 
         <h2>4. Analytics</h2>
         <p>FinCNews uses Google Analytics 4 (Google LLC) to understand how Visitors use the News Portal. Google Analytics collects usage data including pages visited, session duration, device type, and approximate geographic location via cookies and similar technologies.</p>
@@ -67,7 +67,7 @@ export default function PrivacyPage() {
         <p>FinCNews uses artificial intelligence tools to assist in content creation. No personal data of Visitors is used as training data for AI models, shared with AI providers beyond what is necessary for content generation, or stored by AI providers beyond the processing of individual requests.</p>
 
         <h2>8. Third-Party Processors</h2>
-        <p>FinCNews may use trusted third-party service providers to operate the News Portal, including hosting providers, content delivery networks, and analytics services. These processors act under contract and are bound by data protection obligations. An up-to-date list of processors can be requested at <a href="mailto:privacy@fincnews.com">privacy@fincnews.com</a>.</p>
+        <p>FinCNews may use trusted third-party service providers to operate the News Portal, including hosting providers, content delivery networks, and analytics services. These processors act under contract and are bound by data protection obligations. An up-to-date list of processors can be requested at <a href="mailto:privacy@finc.news">privacy@finc.news</a>.</p>
 
         <h2>9. Data Retention</h2>
         <p>Personal data is retained only for as long as necessary for the purpose for which it was collected:</p>
@@ -88,7 +88,7 @@ export default function PrivacyPage() {
           <li><strong>Right to data portability</strong> — to receive data in a structured, machine-readable format;</li>
           <li><strong>Right to object</strong> — to object to processing based on legitimate interest.</li>
         </ul>
-        <p>To exercise any of these rights, contact: <a href="mailto:privacy@fincnews.com">privacy@fincnews.com</a>.</p>
+        <p>To exercise any of these rights, contact: <a href="mailto:privacy@finc.news">privacy@finc.news</a>.</p>
 
         <h2>11. Right to Lodge a Complaint</h2>
         <p>If you believe your personal data is not being processed in compliance with the GDPR, you have the right to lodge a complaint with a supervisory authority. In the EU, you may contact the data protection authority in your country of residence.</p>
@@ -104,7 +104,7 @@ export default function PrivacyPage() {
         <p>For any privacy-related queries, requests, or complaints, please contact:</p>
         <p>
           <strong>FinCNews Ltd.</strong><br />
-          Email: <a href="mailto:privacy@fincnews.com">privacy@fincnews.com</a>
+          Email: <a href="mailto:privacy@finc.news">privacy@finc.news</a>
         </p>
       </div>
 

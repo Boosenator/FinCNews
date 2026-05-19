@@ -21,7 +21,7 @@ const orgSchema = {
   sameAs: ["https://t.me/FinCNews", "https://x.com/fincnews"],
   contactPoint: {
     "@type": "ContactPoint",
-    email: "editorial@fincnews.com",
+    email: "editorial@finc.news",
     contactType: "editorial",
   },
 };
@@ -101,15 +101,15 @@ export default function AboutPage() {
           <p>
             We are committed to factual accuracy. If you identify an error in our reporting,
             contact us at{" "}
-            <a href="mailto:editorial@fincnews.com">editorial@fincnews.com</a> with details.
+            <a href="mailto:editorial@finc.news">editorial@finc.news</a> with details.
             Verified corrections are applied promptly and noted within the article.
           </p>
 
           <h2>Contact</h2>
           <p>
-            Editorial: <a href="mailto:editorial@fincnews.com">editorial@fincnews.com</a>
+            Editorial: <a href="mailto:editorial@finc.news">editorial@finc.news</a>
             <br />
-            Advertising: <a href="mailto:ads@fincnews.com">ads@fincnews.com</a>
+            Advertising: <a href="mailto:ads@finc.news">ads@finc.news</a>
             <br />
             Telegram: <a href="https://t.me/FinCNews" target="_blank" rel="noreferrer">@FinCNews</a>
           </p>

@@ -74,7 +74,7 @@ export default function EditorialPolicyPage() {
           <li>Articles are never silently deleted — redirects and notices are used instead.</li>
         </ul>
         <p>
-          To report an error: <a href="mailto:editorial@fincnews.com">editorial@fincnews.com</a>
+          To report an error: <a href="mailto:editorial@finc.news">editorial@finc.news</a>
         </p>
 
         <h2>6. Independence & Conflicts of Interest</h2>

@@ -37,7 +37,7 @@ export default function TermsPage() {
         <p>All content published on FinCNews — including articles, analysis, and market commentary — is the property of the Company and is protected under applicable copyright and intellectual property laws.</p>
         <p><strong>AI-Assisted Content.</strong> FinCNews uses artificial intelligence tools (including large language models) to assist in the research, drafting, and summarisation of news content. All AI-assisted content is reviewed before publication. The use of AI does not affect the copyright ownership of the Company over published content.</p>
         <p>Content may be used by a Visitor for personal, non-commercial purposes only. Redistribution, republication, or resale of content without prior written consent of the Company is prohibited.</p>
-        <p>To request permission for any other use, contact: <a href="mailto:legal@fincnews.com">legal@fincnews.com</a>.</p>
+        <p>To request permission for any other use, contact: <a href="mailto:legal@finc.news">legal@finc.news</a>.</p>
 
         <h2>4. Market Data & Price Accuracy</h2>
         <p>Cryptocurrency price data displayed on the News Portal is sourced from third-party providers (including CoinGecko and other market data APIs) and is provided for informational purposes only. Prices may be delayed and may not reflect real-time market values.</p>
@@ -66,7 +66,7 @@ export default function TermsPage() {
         <p>Where affiliate links are used, this will be disclosed within the relevant content.</p>
 
         <h2>8. Complaints & Copyright Infringement</h2>
-        <p>If you believe that any content on the News Portal infringes your intellectual property or copyright, please contact us immediately at <a href="mailto:legal@fincnews.com">legal@fincnews.com</a> with the following details:</p>
+        <p>If you believe that any content on the News Portal infringes your intellectual property or copyright, please contact us immediately at <a href="mailto:legal@finc.news">legal@finc.news</a> with the following details:</p>
         <ul>
           <li>Details of the intellectual property owner;</li>
           <li>Identification of the specific content in question;</li>
