@@ -255,16 +255,38 @@ async function tryFetchArticleText(url: string): Promise<string> {
   }
 }
 
-async function callClaude(item: { title: string; pubDate?: string }, bodyText: string, category: string): Promise<Record<string, unknown>> {
+type RecentArticleHint = { title: string; slug: string; category: string };
+
+async function callClaude(
+  item: { title: string; pubDate?: string },
+  bodyText: string,
+  category: string,
+  recentArticles: RecentArticleHint[] = [],
+): Promise<Record<string, unknown>> {
   // Trim body early — Haiku handles 1500 chars well, saves input tokens
   const body = bodyText.slice(0, 1500);
   const date = item.pubDate ? item.pubDate.slice(0, 10) : new Date().toISOString().slice(0, 10);
+  const avoidList = recentArticles.length
+    ? recentArticles
+        .slice(0, 12)
+        .map((a, i) => `${i + 1}. ${a.category}/${a.slug} - ${a.title}`)
+        .join("\n")
+    : "None";
 
   const prompt = `Financial journalist. Output ONLY raw JSON, no markdown.
 
 Title: ${item.title}
 Date: ${date} | Category: ${category}
 Text: ${body}
+
+Recently published FinCNews titles to avoid:
+${avoidList}
+
+Uniqueness requirements:
+- Do not reuse the same headline frame, slug phrase, or broad angle from the avoid list.
+- If the source overlaps with an avoid-list story, make the new article narrower: lead with the new entity, number, timeline, legal action, market reaction, or consequence.
+- The title, metaTitle, excerpt, and slug must include the differentiator that makes this article distinct.
+- Avoid generic repeats like "Bitcoin drops", "XRP rally", "SEC crypto case", or "Iran crypto seizure" unless the new fact is explicit.
 
 JSON:
 {"slug":"kebab-max-60","category":"${category}","tags":["t1","t2","t3"],"translations":{"en":{"title":"SEO title 50-60 chars","excerpt":"2-3 sentences under 250 chars","body":"600-800 word article with these exact sections separated by blank lines:\\n\\n## What Happened\\n(3-4 paragraphs: facts, numbers, named entities, timeline)\\n\\n## Why It Matters\\n(2-3 paragraphs: market impact, broader implications, who is affected)\\n\\n## Expert Perspective\\n(1-2 paragraphs: first-person analyst take, historical context, comparable events)\\n\\n## What to Watch\\n(1 paragraph: key signals, dates, thresholds investors should monitor)\\n\\nNot financial advice.","metaTitle":"50-60 chars","metaDescription":"150-160 chars with CTA","telegramText":"ignored"}}}
@@ -281,7 +303,7 @@ Rules: facts only, real numbers/dates, slug≤60 chars, no placeholder text like
     },
     body: JSON.stringify({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 1500,
+      max_tokens: 1800,
       messages: [{ role: "user", content: prompt }],
     }),
     signal: AbortSignal.timeout(30000),
@@ -322,6 +344,20 @@ async function isSanityDuplicate(title: string): Promise<string | null> {
       return `${art.category}/${art.slug}`;
   }
   return null;
+}
+
+async function getRecentArticleHints(category: string): Promise<RecentArticleHint[]> {
+  if (!sanityAdmin) return [];
+  const cutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+  return sanityAdmin.fetch<RecentArticleHint[]>(
+    `*[_type == "article" && category == $category && publishedAt >= $cutoff && defined(translations.en.title)]
+     | order(publishedAt desc)[0...20] {
+       "title": translations.en.title,
+       "slug": slug.current,
+       category
+     }`,
+    { category, cutoff },
+  );
 }
 
 // Build specific Pexels search query from article context
@@ -648,7 +684,8 @@ export async function runAutomation(maxArticles = 2): Promise<AutomationResult> 
       const bodyText = scraped.length > 300 ? scraped : rssText;
 
       const category = detectCategory(`${item.title} ${rssText}`, item.sourceCategory);
-      const article = await callClaude({ title: item.title ?? "Untitled", pubDate: item.pubDate }, bodyText, category);
+      const recentHints = await getRecentArticleHints(category);
+      const article = await callClaude({ title: item.title ?? "Untitled", pubDate: item.pubDate }, bodyText, category, recentHints);
 
       const en = (article.translations as Record<string, Record<string, string>>)?.en;
       if (!en?.title || !en.excerpt || !en.body) throw new Error("Claude returned incomplete article");
@@ -991,7 +1028,8 @@ async function processQueueItem(
     // ── claude ──
     t = Date.now();
     const category = detectCategory(`${item.title ?? ""} ${item.snippet ?? ""}`, item.source_category);
-    const article = await callClaude({ title: item.title ?? "Untitled", pubDate: item.pub_date ?? undefined }, bodyText, category);
+    const recentHints = await getRecentArticleHints(category);
+    const article = await callClaude({ title: item.title ?? "Untitled", pubDate: item.pub_date ?? undefined }, bodyText, category, recentHints);
     const en = (article.translations as Record<string, Record<string, string>>)?.en;
     if (!en?.title || !en.excerpt || !en.body) throw new Error("Claude returned incomplete article");
     articleSteps.push({ name: "claude", status: "ok", durationMs: Date.now() - t, note: `"${en.title.slice(0, 60)}"` });

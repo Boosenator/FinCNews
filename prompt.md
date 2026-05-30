@@ -105,16 +105,19 @@ Telegram → Telegraph (instant view) → Site article
 
 ### Generate Cron (every 10 min, maxDuration 120s)
 
+Current generation includes a pre-Claude uniqueness step: fetch the latest 20 same-category Sanity titles from the last 14 days and pass them to Claude as an avoid list. Claude runs with `max_tokens: 1800` so it has enough room for the avoid list plus the article JSON.
+
 1. Reset stuck `processing` items > 10min → back to `pending`
 2. Fetch 1 `pending` item from `article_queue`
 3. `tryFetchArticleText` (Googlebot UA, 8s timeout) → fall back to RSS snippet
-4. **Claude Haiku** (`claude-haiku-4-5-20251001`, max_tokens 1500, 55s timeout)
-5. `publishToSanity` via `/api/publish`
-6. `attachPexelsImage` → Pexels search by category → upload to Sanity → patch article
-7. `createTelegraphPage` → short unique content + backlink to site → get `telegra.ph` URL
-8. Patch Sanity article with `telegraphUrl`
-9. Mark `article_queue` → `done`, insert into `processed_urls`
-10. `sendTelegram` → `sendPhoto` with Telegraph URL (single CTA)
+4. Fetch recent same-category Sanity titles from the last 14 days and pass them to Claude as an avoid list
+5. **Claude Haiku** (`claude-haiku-4-5-20251001`, max_tokens 1800, 55s timeout)
+6. `publishToSanity` via `/api/publish`
+7. `attachPexelsImage` → Pexels search by category → upload to Sanity → patch article
+8. `createTelegraphPage` → short unique content + backlink to site → get `telegra.ph` URL
+9. Patch Sanity article with `telegraphUrl`
+10. Mark `article_queue` → `done`, insert into `processed_urls`
+11. `sendTelegram` → `sendPhoto` with Telegraph URL (single CTA)
 
 ---
 
@@ -127,12 +130,22 @@ Title: {title}
 Date: {date} | Category: {category}
 Text: {body.slice(0, 1500)}
 
+Recently published FinCNews titles to avoid:
+1. {category}/{slug} - {recent title}
+2. ...
+
+Uniqueness requirements:
+- Do not reuse the same headline frame, slug phrase, or broad angle from the avoid list.
+- If the source overlaps with an avoid-list story, make the new article narrower: lead with the new entity, number, timeline, legal action, market reaction, or consequence.
+- The title, metaTitle, excerpt, and slug must include the differentiator that makes this article distinct.
+- Avoid generic repeats like "Bitcoin drops", "XRP rally", "SEC crypto case", or "Iran crypto seizure" unless the new fact is explicit.
+
 JSON: {"slug":"kebab-max-60","category":"{category}","tags":["t1","t2","t3"],
 "translations":{"en":{"title":"SEO 50-60 chars","excerpt":"2-3 sentences under 250 chars",
-"body":"400-500 word article: What happened → Why matters → Expert take (first person) → Action. End: Not financial advice.",
+"body":"600-800 word article: What happened → Why matters → Expert take (first person) → What to watch. End: Not financial advice.",
 "metaTitle":"50-60","metaDescription":"150-160 with CTA","telegramText":"ignored"}}}
 
-Rules: facts only, real numbers/dates, slug≤60 chars.
+Rules: facts only, real numbers/dates, slug <= 60 chars.
 ```
 
 **Cost**: ~$0.009/article (Haiku vs $0.035 Sonnet — 75% saving)

@@ -79,6 +79,26 @@ export async function getArticles(category?: Category): Promise<Article[]> {
   return sanity.fetch<Article[]>(query, { category }, { next: { revalidate: 60 } });
 }
 
+export async function getArticlesPage(category: Category, page: number, pageSize: number): Promise<Article[]> {
+  if (!sanity) return [];
+  const start = Math.max(0, (page - 1) * pageSize);
+  const end = start + pageSize;
+  return sanity.fetch<Article[]>(
+    `*[_type == "article" && category == $category && defined(translations.en.title)]
+     | order(publishedAt desc)[$start...$end] {${projection}}`,
+    { category, start, end },
+    { next: { revalidate: 60 } },
+  );
+}
+
+export async function getArticleCount(category?: Category): Promise<number> {
+  if (!sanity) return 0;
+  const filter = category
+    ? `_type == "article" && category == $category && defined(translations.en.title)`
+    : `_type == "article" && defined(translations.en.title)`;
+  return sanity.fetch<number>(`count(*[${filter}])`, { category }, { next: { revalidate: 300 } });
+}
+
 export async function getArticle(slug: string): Promise<Article | null> {
   if (!sanity) return null;
   return sanity.fetch<Article | null>(

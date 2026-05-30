@@ -4,6 +4,8 @@ import { sanity } from "@/lib/sanity";
 
 import { BASE_URL } from "@/lib/config";
 
+const CATEGORY_PAGE_SIZE = 24;
+
 function dateStr(iso?: string): string {
   return new Date(iso ?? Date.now()).toISOString().split("T")[0]; // YYYY-MM-DD
 }
@@ -26,6 +28,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
   }
   const latestOverall = articles[0]?.publishedAt;
+  const categoryArchivePages = categories.flatMap((cat) => {
+    const total = articles.filter((a) => a.category === cat).length;
+    const pages = Math.ceil(total / CATEGORY_PAGE_SIZE);
+    return Array.from({ length: Math.max(0, pages - 1) }, (_, i) => ({
+      page: i + 2,
+      category: cat,
+      lastModified: latestPerCategory[cat] ?? latestOverall,
+    }));
+  });
 
   return [
     { url: BASE_URL, lastModified: dateStr(latestOverall) },
@@ -33,6 +44,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...categories.map((cat) => ({
       url: `${BASE_URL}/${cat}`,
       lastModified: dateStr(latestPerCategory[cat] ?? latestOverall),
+    })),
+
+    ...categoryArchivePages.map((p) => ({
+      url: `${BASE_URL}/${p.category}/page/${p.page}`,
+      lastModified: dateStr(p.lastModified),
     })),
 
     ...articles.map((a) => ({

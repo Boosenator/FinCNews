@@ -9,8 +9,7 @@ import ArticleCard from "@/components/ArticleCard";
 import TelegramCTA from "@/components/TelegramCTA";
 import { getArticle, getRelatedArticles, findArticleByTopic, readingTime, timeAgo, type PortableTextBlock } from "@/lib/sanity";
 import { isCategory, categoryLabels, type Category } from "@/lib/i18n";
-
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? "https://fincnews.com";
+import { BASE_URL } from "@/lib/config";
 
 type Props = { params: { category: string; slug: string } };
 
