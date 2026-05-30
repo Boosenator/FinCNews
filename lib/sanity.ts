@@ -35,6 +35,17 @@ export type Article = {
   en: ArticleTranslation;
 };
 
+export type TopicHub = {
+  _id: string;
+  slug: string;
+  title: string;
+  description?: string;
+  updatedAt?: string;
+  keywords?: string[];
+  body?: PortableTextBlock[] | string;
+  faqs?: Array<{ question: string; answer: string }>;
+};
+
 const projectId =
   process.env.NEXT_PUBLIC_SANITY_PROJECT_ID ?? process.env.SANITY_PROJECT_ID;
 const dataset =
@@ -128,6 +139,56 @@ export async function findArticleByTopic(topic: string): Promise<{ slug: string;
       translations.en.title match $pattern
     )] | order(publishedAt desc)[0] { "slug": slug.current, category }`,
     { pattern },
+    { next: { revalidate: 300 } },
+  );
+}
+
+export async function getTopicHubs(): Promise<TopicHub[]> {
+  if (!sanity) return [];
+  return sanity.fetch<TopicHub[]>(
+    `*[_type == "topicHub" && defined(slug.current)] | order(title asc) {
+      _id,
+      "slug": slug.current,
+      title,
+      description,
+      updatedAt,
+      keywords,
+      body,
+      faqs
+    }`,
+    {},
+    { next: { revalidate: 300 } },
+  );
+}
+
+export async function getTopicHub(slug: string): Promise<TopicHub | null> {
+  if (!sanity) return null;
+  return sanity.fetch<TopicHub | null>(
+    `*[_type == "topicHub" && slug.current == $slug][0] {
+      _id,
+      "slug": slug.current,
+      title,
+      description,
+      updatedAt,
+      keywords,
+      body,
+      faqs
+    }`,
+    { slug },
+    { next: { revalidate: 300 } },
+  );
+}
+
+export async function getArticlesForTopic(keywords: string[], limit = 12): Promise<Article[]> {
+  if (!sanity || keywords.length === 0) return [];
+  const pattern = keywords.map((kw) => `${kw}*`).join(" ");
+  return sanity.fetch<Article[]>(
+    `*[_type == "article" && defined(translations.en.title) && (
+      translations.en.title match $pattern ||
+      translations.en.excerpt match $pattern ||
+      tags[] match $pattern
+    )] | order(publishedAt desc)[0...$limit] {${projection}}`,
+    { pattern, limit },
     { next: { revalidate: 300 } },
   );
 }
