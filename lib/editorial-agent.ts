@@ -2,7 +2,7 @@ import { createClient } from "@sanity/client";
 import { sanityAdmin, type PortableTextBlock } from "@/lib/sanity";
 import { buildTopicArticleFilter } from "@/lib/topic-matching";
 
-type TopicPlan = {
+export type TopicPlan = {
   slug: string;
   title: string;
   keywords: string[];
@@ -31,6 +31,28 @@ export type EditorialAgentResult = {
   title: string;
   relatedArticles: number;
   sanityId: string;
+};
+
+type HotTopic = TopicPlan & {
+  score: number;
+  recent24h: number;
+  recent72h: number;
+};
+
+type DailyHotTopicPlan = {
+  _id: string;
+  _type: "editorialHotPlan";
+  date: string;
+  selectedAt: string;
+  topics: HotTopic[];
+};
+
+export type ScheduledEditorialAgentResult = EditorialAgentResult & {
+  slot: "morning" | "evening";
+  hotPlanDate: string;
+  hotScore: number;
+  recent24h: number;
+  recent72h: number;
 };
 
 export async function runEditorialAgent(slug?: string): Promise<EditorialAgentResult> {
@@ -71,6 +93,100 @@ export async function runEditorialAgent(slug?: string): Promise<EditorialAgentRe
     relatedArticles: related.length,
     sanityId: doc._id,
   };
+}
+
+export async function runScheduledEditorialAgent(slot: "morning" | "evening"): Promise<ScheduledEditorialAgentResult> {
+  const dailyPlan = await getOrCreateDailyHotTopicPlan();
+  const topicIndex = slot === "morning" ? 0 : 1;
+  const selected = dailyPlan.topics[topicIndex] ?? dailyPlan.topics[0];
+  if (!selected) throw new Error("No hot topics available for editorial schedule");
+
+  const result = await runEditorialAgent(selected.slug);
+  return {
+    ...result,
+    slot,
+    hotPlanDate: dailyPlan.date,
+    hotScore: selected.score,
+    recent24h: selected.recent24h,
+    recent72h: selected.recent72h,
+  };
+}
+
+async function getOrCreateDailyHotTopicPlan(): Promise<DailyHotTopicPlan> {
+  if (!sanityAdmin) throw new Error("Sanity is not configured");
+  if (!process.env.SANITY_TOKEN) throw new Error("SANITY_TOKEN is not configured");
+
+  const date = kyivDateKey();
+  const id = `editorialHotPlan-${date}`;
+  const existing = await sanityAdmin.fetch<DailyHotTopicPlan | null>(
+    `*[_type == "editorialHotPlan" && _id == $id][0]`,
+    { id },
+  );
+  if (existing?.topics?.length) return existing;
+
+  const topics = await rankHotTopics();
+  const sanity = createClient({
+    projectId: process.env.SANITY_PROJECT_ID ?? process.env.NEXT_PUBLIC_SANITY_PROJECT_ID!,
+    dataset: process.env.SANITY_DATASET ?? "production",
+    token: process.env.SANITY_TOKEN!,
+    apiVersion: "2024-01-01",
+    useCdn: false,
+  });
+
+  const doc = await sanity.createOrReplace({
+    _id: id,
+    _type: "editorialHotPlan",
+    date,
+    selectedAt: new Date().toISOString(),
+    topics: topics.slice(0, 2),
+  });
+  return doc as DailyHotTopicPlan;
+}
+
+async function rankHotTopics(): Promise<HotTopic[]> {
+  if (!sanityAdmin) return [];
+  const client = sanityAdmin;
+  const cutoff24 = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const cutoff72 = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
+
+  const scored = await Promise.all(
+    TOPIC_HUB_PLANS.map(async (plan) => {
+      const { filter, params } = buildTopicArticleFilter(plan.keywords);
+      const [recent24h, recent72h] = await Promise.all([
+        client.fetch<number>(
+          `count(*[_type == "article" && defined(translations.en.title) && publishedAt >= $cutoff24 && (${filter})])`,
+          { ...params, cutoff24 },
+        ),
+        client.fetch<number>(
+          `count(*[_type == "article" && defined(translations.en.title) && publishedAt >= $cutoff72 && (${filter})])`,
+          { ...params, cutoff72 },
+        ),
+      ]);
+      return {
+        ...plan,
+        recent24h,
+        recent72h,
+        score: recent24h * 3 + recent72h,
+      };
+    }),
+  );
+
+  return scored.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    if (b.recent24h !== a.recent24h) return b.recent24h - a.recent24h;
+    return a.title.localeCompare(b.title);
+  });
+}
+
+function kyivDateKey() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Kiev",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
 async function pickNextTopicHub(): Promise<TopicPlan> {
