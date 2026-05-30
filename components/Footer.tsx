@@ -66,6 +66,11 @@ export default function Footer() {
                   </Link>
                 </li>
               ))}
+              <li>
+                <Link href="/topics" className="text-sm text-zinc-500 transition hover:text-white">
+                  Topic Hubs
+                </Link>
+              </li>
             </ul>
           </div>
 

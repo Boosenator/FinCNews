@@ -34,6 +34,12 @@ export default function Header() {
               {categoryLabels[cat]}
             </Link>
           ))}
+          <Link
+            href="/topics"
+            className="rounded-md px-3 py-1.5 text-sm font-medium text-zinc-400 transition hover:bg-white/[0.05] hover:text-white"
+          >
+            Topics
+          </Link>
         </nav>
 
         {/* Right */}
@@ -83,6 +89,9 @@ export default function Header() {
                 {categoryLabels[cat]}
               </Link>
             ))}
+            <Link href="/topics" onClick={() => setOpen(false)} className="rounded-lg px-3 py-2.5 text-sm font-medium text-zinc-400 transition hover:bg-white/[0.05] hover:text-white">
+              Topics
+            </Link>
           </nav>
           <div className="mt-3 border-t border-white/[0.04] pt-3">
             <a href="https://t.me/FinCNews" target="_blank" rel="noreferrer"

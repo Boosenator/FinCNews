@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import HeroSection from "@/components/HeroSection";
 import ArticleCard from "@/components/ArticleCard";
 import TelegramCTA from "@/components/TelegramCTA";
-import { getArticles } from "@/lib/sanity";
+import { getArticles, getTopicHubs } from "@/lib/sanity";
 import { categories, categoryLabels } from "@/lib/i18n";
 import Link from "next/link";
 import { BASE_URL } from "@/lib/config";
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 };
 
 export default async function HomePage() {
-  const articles = await getArticles();
+  const [articles, hubs] = await Promise.all([getArticles(), getTopicHubs()]);
 
   const hero = articles.slice(0, 5);
   const latest = articles.slice(5);
@@ -84,6 +84,8 @@ export default async function HomePage() {
                 </div>
               </section>
 
+              <ResearchHubs hubs={hubs} />
+
               {/* Latest + sidebar */}
               {latest.length > 0 && (
                 <section className="mb-10">
@@ -140,6 +142,50 @@ export default async function HomePage() {
         </div>
       </main>
     </>
+  );
+}
+
+const FALLBACK_HUBS = [
+  { slug: "bitcoin", title: "Bitcoin", description: "Market structure, ETF flows, treasury adoption and the forces moving BTC." },
+  { slug: "ethereum", title: "Ethereum", description: "Staking, upgrades, institutional adoption and the economics behind ETH." },
+  { slug: "sec-crypto", title: "SEC Crypto Regulation", description: "Broker-dealer rules, tokenized assets and the evolving US regulatory map." },
+  { slug: "federal-reserve", title: "Federal Reserve Policy", description: "Rates, CPI, liquidity and the macro signals shaping risk assets." },
+];
+
+function ResearchHubs({ hubs }: { hubs: Awaited<ReturnType<typeof getTopicHubs>> }) {
+  const cards = hubs.length > 0
+    ? hubs.slice(0, 4).map((hub) => ({
+        slug: hub.slug,
+        title: hub.title,
+        description: hub.description ?? "Evergreen context, latest developments and related FinCNews coverage.",
+      }))
+    : FALLBACK_HUBS;
+
+  return (
+    <section aria-label="Research hubs" className="mb-10 border-y border-white/[0.06] py-6">
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <div>
+          <SectionHeader label="Research Hubs" />
+          <p className="-mt-2 text-sm text-zinc-600">Durable context pages maintained by the editorial agent.</p>
+        </div>
+        <Link href="/topics" className="shrink-0 text-xs font-semibold text-zinc-500 transition hover:text-cyan-400">
+          All topics →
+        </Link>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {cards.map((hub) => (
+          <Link
+            key={hub.slug}
+            href={`/topics/${hub.slug}`}
+            className="group rounded-xl border border-white/[0.06] bg-zinc-900/30 p-4 transition hover:border-cyan-400/30 hover:bg-zinc-900/70"
+          >
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-cyan-400/80">Topic</p>
+            <h2 className="text-base font-black tracking-tight text-white transition group-hover:text-cyan-50">{hub.title}</h2>
+            <p className="mt-2 line-clamp-3 text-xs leading-5 text-zinc-500">{hub.description}</p>
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }
 
