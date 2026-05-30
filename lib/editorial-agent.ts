@@ -54,7 +54,7 @@ export async function runEditorialAgent(slug?: string): Promise<EditorialAgentRe
   });
 
   const doc = await sanity.createOrReplace({
-    _id: `topicHub.${plan.slug}`,
+    _id: `topicHub-${plan.slug}`,
     _type: "topicHub",
     slug: { _type: "slug", current: plan.slug },
     title: generated.title,
