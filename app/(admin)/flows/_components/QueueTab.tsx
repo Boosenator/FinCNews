@@ -41,6 +41,16 @@ function ScoreBadge({ score }: { score: number }) {
   return <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold tabular-nums ${cls}`}>{score}</span>;
 }
 
+async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs = 70000) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
 export default function QueueTab() {
   const [activeStatus, setActiveStatus] = useState<StatusTab>("pending");
   const [items, setItems] = useState<QueueItem[]>([]);
@@ -53,9 +63,11 @@ export default function QueueTab() {
   const load = useCallback(async (status: StatusTab) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/queue?status=${status}`);
+      const res = await fetchWithTimeout(`/api/admin/queue?status=${status}`, {}, 20000);
       const data = await res.json();
       setItems(data.items ?? []);
+    } catch (e) {
+      setLastResult(e instanceof DOMException && e.name === "AbortError" ? "Error: queue request timed out" : `Error: ${String(e)}`);
     } finally {
       setLoading(false);
     }
@@ -68,9 +80,11 @@ export default function QueueTab() {
   async function reject(id: string) {
     setRejecting(id);
     try {
-      await fetch(`/api/admin/queue/${id}`, { method: "DELETE" });
+      await fetchWithTimeout(`/api/admin/queue/${id}`, { method: "DELETE" }, 20000);
       setItems((prev) => prev.filter((i) => i.id !== id));
       setLastResult("Rejected");
+    } catch (e) {
+      setLastResult(e instanceof DOMException && e.name === "AbortError" ? "Error: reject timed out" : `Error: ${String(e)}`);
     } finally {
       setRejecting(null);
     }
@@ -80,7 +94,7 @@ export default function QueueTab() {
     setPublishing(id);
     setLastResult(null);
     try {
-      const res = await fetch(`/api/admin/queue/${id}`, { method: "POST" });
+      const res = await fetchWithTimeout(`/api/admin/queue/${id}`, { method: "POST" });
       const data = await res.json();
       if (data.error) {
         setLastResult(`Error: ${data.error}`);
@@ -93,6 +107,8 @@ export default function QueueTab() {
         );
         setItems((prev) => prev.filter((i) => i.id !== id));
       }
+    } catch (e) {
+      setLastResult(e instanceof DOMException && e.name === "AbortError" ? "Error: publish timed out" : `Error: ${String(e)}`);
     } finally {
       setPublishing(null);
     }
@@ -102,10 +118,12 @@ export default function QueueTab() {
     if (!confirm(`Delete all ${items.length} pending items? This cannot be undone.`)) return;
     setClearing(true);
     try {
-      const res = await fetch("/api/admin/queue", { method: "DELETE" });
+      const res = await fetchWithTimeout("/api/admin/queue", { method: "DELETE" }, 30000);
       const data = await res.json();
       setItems([]);
       setLastResult(`Cleared ${data.deleted} items`);
+    } catch (e) {
+      setLastResult(e instanceof DOMException && e.name === "AbortError" ? "Error: clear timed out" : `Error: ${String(e)}`);
     } finally {
       setClearing(false);
     }
