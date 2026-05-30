@@ -6,7 +6,7 @@ type TopicPlan = {
   slug: string;
   title: string;
   keywords: string[];
-  status: "planned" | "published";
+  status: "planned" | "published" | "private";
   updatedAt: string | null;
   currentTitle: string | null;
   relatedCount: number;
@@ -89,7 +89,8 @@ export default function ContentPlanTab() {
   }
 
   const published = topics.filter((t) => t.status === "published").length;
-  const planned = topics.length - published;
+  const privateCount = topics.filter((t) => t.status === "private").length;
+  const planned = topics.length - published - privateCount;
 
   return (
     <div className="space-y-6">
@@ -122,9 +123,9 @@ export default function ContentPlanTab() {
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {[
           { label: "Planned topics", value: String(topics.length), sub: "agent scope" },
-          { label: "Published hubs", value: String(published), sub: `${planned} remaining` },
+          { label: "Published hubs", value: String(published), sub: `${planned} planned, ${privateCount} private` },
           { label: "Related articles", value: String(topics.reduce((sum, t) => sum + t.relatedCount, 0)), sub: "coverage signals" },
-          { label: "Next target", value: topics.find((t) => t.status === "planned")?.title ?? topics[0]?.title ?? "-", sub: "oldest missing" },
+          { label: "Next target", value: topics.find((t) => t.status !== "published")?.title ?? topics[0]?.title ?? "-", sub: "oldest missing" },
         ].map((s) => (
           <div key={s.label} className="rounded-xl border border-white/[0.06] bg-zinc-900/40 p-4">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-600">{s.label}</p>
@@ -175,7 +176,11 @@ export default function ContentPlanTab() {
                     </td>
                     <td className="px-4 py-3">
                       <span className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase ${
-                        topic.status === "published" ? "bg-emerald-500/15 text-emerald-400" : "bg-amber-500/15 text-amber-400"
+                        topic.status === "published"
+                          ? "bg-emerald-500/15 text-emerald-400"
+                          : topic.status === "private"
+                            ? "bg-red-500/15 text-red-400"
+                            : "bg-amber-500/15 text-amber-400"
                       }`}>
                         {topic.status}
                       </span>
@@ -194,7 +199,7 @@ export default function ContentPlanTab() {
                           className="flex items-center gap-1.5 rounded border border-cyan-400/20 bg-cyan-400/5 px-2.5 py-1 text-[11px] font-semibold text-cyan-300 transition hover:bg-cyan-400/10 disabled:cursor-wait disabled:opacity-40"
                         >
                           {isRunning && <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border border-current border-t-transparent" />}
-                          {topic.status === "published" ? "Refresh hub" : "Create hub"}
+                          {topic.status === "published" ? "Refresh hub" : topic.status === "private" ? "Republish hub" : "Create hub"}
                         </button>
                         {topic.url && (
                           <a

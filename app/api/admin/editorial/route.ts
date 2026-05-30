@@ -10,8 +10,9 @@ export async function GET(req: NextRequest) {
   if (!isAuthed(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const existing = sanityAdmin
-    ? await sanityAdmin.fetch<Array<{ slug: string; title: string; updatedAt?: string }>>(
+    ? await sanityAdmin.fetch<Array<{ _id: string; slug: string; title: string; updatedAt?: string }>>(
         `*[_type == "topicHub" && defined(slug.current)] {
+          _id,
           "slug": slug.current,
           title,
           updatedAt
@@ -19,7 +20,8 @@ export async function GET(req: NextRequest) {
         {},
       )
     : [];
-  const existingBySlug = new Map(existing.map((hub) => [hub.slug, hub]));
+  const publicBySlug = new Map(existing.filter((hub) => !hub._id.includes(".")).map((hub) => [hub.slug, hub]));
+  const privateBySlug = new Map(existing.filter((hub) => hub._id.includes(".")).map((hub) => [hub.slug, hub]));
 
   const topics = await Promise.all(
     TOPIC_HUB_PLANS.map(async (plan) => {
@@ -30,12 +32,13 @@ export async function GET(req: NextRequest) {
             params,
           )
         : 0;
-      const hub = existingBySlug.get(plan.slug);
+      const hub = publicBySlug.get(plan.slug);
+      const privateHub = privateBySlug.get(plan.slug);
       return {
         ...plan,
-        status: hub ? "published" : "planned",
-        updatedAt: hub?.updatedAt ?? null,
-        currentTitle: hub?.title ?? null,
+        status: hub ? "published" : privateHub ? "private" : "planned",
+        updatedAt: hub?.updatedAt ?? privateHub?.updatedAt ?? null,
+        currentTitle: hub?.title ?? privateHub?.title ?? null,
         relatedCount,
         url: hub ? `/topics/${plan.slug}` : null,
       };
