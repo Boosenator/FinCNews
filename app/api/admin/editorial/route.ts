@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isAuthed } from "@/lib/auth";
 import { runEditorialAgent, TOPIC_HUB_PLANS } from "@/lib/editorial-agent";
 import { sanityAdmin } from "@/lib/sanity";
+import { buildTopicArticleFilter } from "@/lib/topic-matching";
 
 export const maxDuration = 60;
 
@@ -22,15 +23,11 @@ export async function GET(req: NextRequest) {
 
   const topics = await Promise.all(
     TOPIC_HUB_PLANS.map(async (plan) => {
-      const pattern = plan.keywords.map((kw) => `${kw}*`).join(" ");
+      const { filter, params } = buildTopicArticleFilter(plan.keywords);
       const relatedCount = sanityAdmin
         ? await sanityAdmin.fetch<number>(
-            `count(*[_type == "article" && defined(translations.en.title) && (
-              translations.en.title match $pattern ||
-              translations.en.excerpt match $pattern ||
-              tags[] match $pattern
-            )])`,
-            { pattern },
+            `count(*[_type == "article" && defined(translations.en.title) && (${filter})])`,
+            params,
           )
         : 0;
       const hub = existingBySlug.get(plan.slug);

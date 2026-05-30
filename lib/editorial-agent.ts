@@ -1,5 +1,6 @@
 import { createClient } from "@sanity/client";
 import { sanityAdmin, type PortableTextBlock } from "@/lib/sanity";
+import { buildTopicArticleFilter } from "@/lib/topic-matching";
 
 type TopicPlan = {
   slug: string;
@@ -93,20 +94,17 @@ async function pickNextTopicHub(): Promise<TopicPlan> {
 
 async function fetchRelatedArticleInputs(plan: TopicPlan) {
   if (!sanityAdmin) return [];
-  const pattern = plan.keywords.map((kw) => `${kw}*`).join(" ");
+  const { filter, params } = buildTopicArticleFilter(plan.keywords);
   return sanityAdmin.fetch<Array<{ title: string; excerpt?: string; slug: string; category: string; publishedAt?: string }>>(
-    `*[_type == "article" && defined(translations.en.title) && (
-      translations.en.title match $pattern ||
-      translations.en.excerpt match $pattern ||
-      tags[] match $pattern
-    )] | order(publishedAt desc)[0...20] {
+    `*[_type == "article" && defined(translations.en.title) && (${filter})]
+     | order(publishedAt desc)[0...20] {
       "title": translations.en.title,
       "excerpt": translations.en.excerpt,
       "slug": slug.current,
       category,
       publishedAt
     }`,
-    { pattern },
+    params,
   );
 }
 

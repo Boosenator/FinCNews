@@ -1,5 +1,6 @@
 import { createClient } from "@sanity/client";
 import type { Category } from "@/lib/i18n";
+import { buildTopicArticleFilter } from "@/lib/topic-matching";
 
 export type ArticleTranslation = {
   title: string;
@@ -181,14 +182,11 @@ export async function getTopicHub(slug: string): Promise<TopicHub | null> {
 
 export async function getArticlesForTopic(keywords: string[], limit = 12): Promise<Article[]> {
   if (!sanity || keywords.length === 0) return [];
-  const pattern = keywords.map((kw) => `${kw}*`).join(" ");
+  const { filter, params } = buildTopicArticleFilter(keywords);
   return sanity.fetch<Article[]>(
-    `*[_type == "article" && defined(translations.en.title) && (
-      translations.en.title match $pattern ||
-      translations.en.excerpt match $pattern ||
-      tags[] match $pattern
-    )] | order(publishedAt desc)[0...$limit] {${projection}}`,
-    { pattern, limit },
+    `*[_type == "article" && defined(translations.en.title) && (${filter})]
+     | order(publishedAt desc)[0...$limit] {${projection}}`,
+    { ...params, limit },
     { next: { revalidate: 300 } },
   );
 }
