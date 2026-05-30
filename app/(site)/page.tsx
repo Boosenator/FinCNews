@@ -165,8 +165,8 @@ function ResearchHubs({ hubs }: { hubs: Awaited<ReturnType<typeof getTopicHubs>>
     <section aria-label="Research hubs" className="mb-10 border-y border-white/[0.06] py-6">
       <div className="mb-4 flex items-center justify-between gap-4">
         <div>
-          <SectionHeader label="Research Hubs" />
-          <p className="-mt-2 text-sm text-zinc-600">Durable context pages maintained by the editorial agent.</p>
+          <SectionHeader label="Market Guides" />
+          <p className="-mt-2 text-sm text-zinc-600">Plain-English explainers for the forces moving crypto, markets and policy.</p>
         </div>
         <Link href="/topics" className="shrink-0 text-xs font-semibold text-zinc-500 transition hover:text-cyan-400">
           All topics →
@@ -179,7 +179,7 @@ function ResearchHubs({ hubs }: { hubs: Awaited<ReturnType<typeof getTopicHubs>>
             href={`/topics/${hub.slug}`}
             className="group rounded-xl border border-white/[0.06] bg-zinc-900/30 p-4 transition hover:border-cyan-400/30 hover:bg-zinc-900/70"
           >
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-cyan-400/80">Topic</p>
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-cyan-400/80">Guide</p>
             <h2 className="text-base font-black tracking-tight text-white transition group-hover:text-cyan-50">{hub.title}</h2>
             <p className="mt-2 line-clamp-3 text-xs leading-5 text-zinc-500">{hub.description}</p>
           </Link>
