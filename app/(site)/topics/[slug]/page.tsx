@@ -161,7 +161,7 @@ function normalizeTopicBody(body: PortableTextBlock[] | string | undefined): Por
     const h2 = line.match(/^##\s+(.+)$/);
     const h3 = line.match(/^###\s+(.+)$/);
     const bullet = line.match(/^[-*]\s+(.+)$/);
-    const sectionHeading = line.match(/^(What It Is|Why It Matters|Latest Developments|What to Watch|How FinCNews Covers It)$/i);
+    const sectionHeading = line.match(/^(What It Is|Why It Matters|Latest Developments|What to Watch|FinCNews View|How FinCNews Covers It)$/i);
 
     const style = h2 || sectionHeading ? "h2" : h3 ? "h3" : "normal";
     const textValue = h2?.[1] ?? h3?.[1] ?? bullet?.[1] ?? sectionHeading?.[1] ?? line;

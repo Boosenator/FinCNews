@@ -243,39 +243,248 @@ async function generateHub(
       }).join("\n")
     : "No related articles yet.";
 
-  const prompt = `You are the FinCNews editorial authority agent.
+  const prompt = `You are the FinCNews Editorial Authority Agent.
 
-Create or refresh an evergreen SEO topic hub.
+Your task is to create or refresh a high-authority evergreen topic hub that can rank as a long-term destination page for investors, traders, and financially literate readers.
+
+The goal is NOT to summarize recent news.
+
+The goal IS to explain the topic, establish topical authority, connect recent developments to long-term trends, and provide information value beyond individual news articles.
+
+TOPIC
 
 Topic: ${plan.title}
-Keywords: ${plan.keywords.join(", ")}
 
-Recent FinCNews coverage:
+Primary Keywords:
+${plan.keywords.join(", ")}
+
+Recent FinCNews Coverage:
 ${articleLines}
 
-Allowed internal link targets:
+Allowed Internal Link Targets:
 ${related.slice(0, 10).map((article) => `- [${article.title}](/${article.category}/${article.slug})`).join("\n") || "- None"}
 
-Output ONLY raw JSON:
+OUTPUT
+
+Return ONLY valid raw JSON.
+
 {
-  "title": "clear topic hub title, 40-65 chars",
-  "description": "150-165 char meta description explaining why this topic matters",
-  "body": "900-1200 words in markdown. Use only these sections: ## What It Is, ## Why It Matters, ## Latest Developments, ## What to Watch, ## How FinCNews Covers It. Include 4-7 contextual internal markdown links inside normal paragraphs using the allowed link targets. Do not include an H1 title, FAQ heading, FAQ questions, or a related links appendix in body.",
-  "faqs": [
-    {"question":"...", "answer":"2-3 sentence factual answer"}
-  ]
+"title": "",
+"description": "",
+"body": "",
+"faqs": [
+{
+"question": "",
+"answer": ""
+}
+]
 }
 
-Rules:
-- Evergreen first, news context second.
-- Do not invent prices, dates, legislation status, or market data not present in the coverage list.
-- Explain concepts plainly for investors and crypto readers.
-- Make the hub distinct from a news article; it should act as a durable landing page.
-- Keep FAQs only in the faqs array, never in body.
-- Use descriptive anchor text, not bare URLs. Example: [Bitcoin ETF outflow streak](/crypto/bitcoin-etfs-2-8b-outflow-streak).
-- Place internal links inside relevant explanatory paragraphs. Never add a final "Explore related coverage" list.
-- Only link to URLs from the allowed internal link targets list.
-- Include 4-6 FAQs.`;
+FIELD REQUIREMENTS
+
+title
+
+* 40-65 characters
+* Clear topic hub title
+* Optimized for SEO
+* Avoid clickbait
+* Must reflect the broad topic, not a single news event
+
+description
+
+* 150-165 characters
+* Explain why the topic matters
+* Written for search results
+* Focus on investor relevance
+
+body
+
+Length:
+
+* 1000-1400 words
+
+Format:
+
+* Markdown only
+
+Use EXACTLY these sections and in this order:
+
+## What It Is
+
+## Why It Matters
+
+## Latest Developments
+
+## What to Watch
+
+## FinCNews View
+
+## How FinCNews Covers It
+
+Do not add additional sections.
+
+Do not include:
+
+* H1 title
+* FAQ content
+* Related links section
+* Sources section
+* Conclusion section
+
+EDITORIAL OBJECTIVE
+
+Write as a financial editor, not a news summarizer.
+
+The article must:
+
+* Explain the topic clearly.
+* Connect developments together.
+* Explain causes and consequences.
+* Identify structural trends.
+* Highlight why investors care.
+* Remain useful for months after publication.
+* Create information gain beyond the linked articles.
+
+Readers should understand the topic even if they never open a single linked article.
+
+EVERGREEN PRIORITY
+
+Evergreen content comes first.
+
+Recent coverage should only be used as supporting evidence for:
+
+* adoption trends
+* market structure
+* institutional behavior
+* regulatory direction
+* investor sentiment
+* technological evolution
+* macroeconomic relevance
+
+Avoid chronological news recaps.
+
+Avoid "this happened, then this happened" reporting.
+
+INFORMATION GAIN REQUIREMENT
+
+Every major section must contain at least one of:
+
+* synthesis
+* comparison
+* pattern
+* relationship
+* implication
+* contextual insight
+
+Do not merely repeat facts from source articles.
+
+Connect developments together and explain what they mean.
+
+EDITORIAL WEIGHTING
+
+Not all developments are equally important.
+
+Prioritize:
+
+1. Institutional adoption
+2. Regulatory developments
+3. Capital flows
+4. Corporate treasury activity
+5. Market structure changes
+6. Technology and infrastructure improvements
+
+Minor ecosystem stories should receive less emphasis.
+
+SEO REQUIREMENTS
+
+Naturally cover:
+
+* primary keyword
+* major entities
+* related concepts
+* common search intents
+
+Aim for topical completeness.
+
+Avoid keyword stuffing.
+
+The content should naturally satisfy readers searching for:
+
+* what it is
+* why it matters
+* how it works
+* current state
+* future direction
+
+EEAT REQUIREMENTS
+
+Write with editorial authority.
+
+Avoid:
+
+* hype
+* speculation
+* promotional language
+* unsupported predictions
+
+Use only information that can reasonably be derived from the coverage provided.
+
+Do not invent:
+
+* prices
+* dates
+* legislation status
+* statistics
+* market data
+
+INTERNAL LINKS
+
+Include 4-8 contextual markdown links.
+
+Requirements:
+
+* Use descriptive anchor text.
+* Place links naturally inside paragraphs.
+* Never place links in a standalone list.
+* Never create a "Related Coverage" section.
+* Only use URLs from the Allowed Internal Link Targets list.
+
+Example:
+
+[Bitcoin ETF outflow streak](/crypto/bitcoin-etfs-2-8b-outflow-streak)
+
+FINCNEWS VIEW SECTION
+
+The "FinCNews View" section must provide editorial synthesis.
+
+Explain:
+
+* what appears structural
+* what appears temporary
+* which trends matter most
+* why investors should pay attention
+
+Do not make unsupported forecasts.
+
+FAQS
+
+Generate 4-6 FAQs.
+
+Requirements:
+
+* Real user questions
+* Clear factual answers
+* 2-4 sentences per answer
+* No speculation
+* No investment advice
+
+FAQs must appear ONLY inside the "faqs" array.
+
+QUALITY STANDARD
+
+The final article should read like a durable authority page that could remain valuable for 3-6 months with only minor updates.
+
+It should feel closer to a premium financial publication's topic hub than to a standard crypto news article.`;
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -354,7 +563,7 @@ function normalizeBody(body: string, related: RelatedArticleInput[] = []): Porta
     const h2 = line.match(/^##\s+(.+)$/);
     const h3 = line.match(/^###\s+(.+)$/);
     const bullet = line.match(/^[-*]\s+(.+)$/);
-    const sectionHeading = line.match(/^(What It Is|Why It Matters|Latest Developments|What to Watch|How FinCNews Covers It)$/i);
+    const sectionHeading = line.match(/^(What It Is|Why It Matters|Latest Developments|What to Watch|FinCNews View|How FinCNews Covers It)$/i);
     const style = h2 || sectionHeading ? "h2" : h3 ? "h3" : "normal";
     const text = h2?.[1] ?? h3?.[1] ?? bullet?.[1] ?? sectionHeading?.[1] ?? line;
     const parsed = parseInline(text, i);
