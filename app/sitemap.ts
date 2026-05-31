@@ -1,8 +1,10 @@
 import type { MetadataRoute } from "next";
+import { headers } from "next/headers";
 import { categories } from "@/lib/i18n";
 import { sanity } from "@/lib/sanity";
 
 import { BASE_URL } from "@/lib/config";
+import { isProductionHost } from "@/lib/seo-host";
 
 const CATEGORY_PAGE_SIZE = 24;
 
@@ -11,6 +13,10 @@ function dateStr(iso?: string): string {
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  if (!isProductionHost(headers().get("host"))) {
+    return [];
+  }
+
   const [articles, topicHubs] = sanity
     ? await Promise.all([
       sanity.fetch<{ slug: string; category: string; publishedAt?: string }[]>(

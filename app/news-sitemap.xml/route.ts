@@ -2,12 +2,22 @@ import { NextResponse } from "next/server";
 import { sanity } from "@/lib/sanity";
 
 import { BASE_URL } from "@/lib/config";
+import { isProductionHost } from "@/lib/seo-host";
 
 function esc(s: string) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+  if (!isProductionHost(req.headers.get("host"))) {
+    return new NextResponse(null, {
+      status: 404,
+      headers: {
+        "X-Robots-Tag": "noindex, nofollow",
+      },
+    });
+  }
+
   const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
 
   const articles = sanity

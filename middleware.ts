@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isProductionHost } from "@/lib/seo-host";
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -7,8 +8,8 @@ export function middleware(req: NextRequest) {
     return new NextResponse(null, { status: 404 });
   }
 
-  if (!pathname.startsWith("/flows")) return NextResponse.next();
-  if (pathname === "/flows/login") return NextResponse.next();
+  if (!pathname.startsWith("/flows")) return withPreviewNoindex(req, NextResponse.next());
+  if (pathname === "/flows/login") return withPreviewNoindex(req, NextResponse.next());
 
   const cookie = req.cookies.get("admin_key")?.value;
   const adminKey = process.env.ADMIN_KEY;
@@ -17,10 +18,17 @@ export function middleware(req: NextRequest) {
     const login = req.nextUrl.clone();
     login.pathname = "/flows/login";
     login.searchParams.set("from", pathname);
-    return NextResponse.redirect(login);
+    return withPreviewNoindex(req, NextResponse.redirect(login));
   }
 
-  return NextResponse.next();
+  return withPreviewNoindex(req, NextResponse.next());
+}
+
+function withPreviewNoindex(req: NextRequest, res: NextResponse): NextResponse {
+  if (!isProductionHost(req.headers.get("host"))) {
+    res.headers.set("X-Robots-Tag", "noindex, nofollow");
+  }
+  return res;
 }
 
 function isProbePath(pathname: string): boolean {
@@ -36,6 +44,7 @@ function isProbePath(pathname: string): boolean {
 
 export const config = {
   matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|icon.jpg).*)",
     "/flows",
     "/flows/:path*",
     "/wp-admin/:path*",
