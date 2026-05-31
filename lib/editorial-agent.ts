@@ -266,19 +266,7 @@ ${related.slice(0, 10).map((article) => `- [${article.title}](/${article.categor
 
 OUTPUT
 
-Return ONLY valid raw JSON.
-
-{
-"title": "",
-"description": "",
-"body": "",
-"faqs": [
-{
-"question": "",
-"answer": ""
-}
-]
-}
+Return the topic hub through the create_topic_hub tool.
 
 FIELD REQUIREMENTS
 
@@ -496,6 +484,46 @@ It should feel closer to a premium financial publication's topic hub than to a s
     body: JSON.stringify({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 5200,
+      tools: [
+        {
+          name: "create_topic_hub",
+          description: "Create or refresh a FinCNews evergreen topic hub.",
+          input_schema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              title: {
+                type: "string",
+                description: "Clear SEO topic hub title, 40-65 characters.",
+              },
+              description: {
+                type: "string",
+                description: "Search-result meta description, 150-165 characters.",
+              },
+              body: {
+                type: "string",
+                description: "Markdown body using the required section structure.",
+              },
+              faqs: {
+                type: "array",
+                minItems: 4,
+                maxItems: 6,
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    question: { type: "string" },
+                    answer: { type: "string" },
+                  },
+                  required: ["question", "answer"],
+                },
+              },
+            },
+            required: ["title", "description", "body", "faqs"],
+          },
+        },
+      ],
+      tool_choice: { type: "tool", name: "create_topic_hub" },
       messages: [{ role: "user", content: prompt }],
     }),
     signal: AbortSignal.timeout(55000),
@@ -503,13 +531,7 @@ It should feel closer to a premium financial publication's topic hub than to a s
 
   if (!res.ok) throw new Error(`Editorial agent API error: ${res.status}`);
   const data = await res.json();
-  const text: string = data.content?.[0]?.text ?? "";
-  const jsonText = extractJsonObject(text);
-  if (!jsonText) {
-    throw new Error(`Editorial agent returned non-JSON: ${text.slice(0, 240) || "empty response"}`);
-  }
-
-  const parsed = JSON.parse(jsonText) as GeneratedHub;
+  const parsed = extractToolInput(data);
   if (!parsed.title || !parsed.description || !parsed.body) {
     throw new Error("Editorial agent returned incomplete topic hub");
   }
@@ -520,34 +542,19 @@ It should feel closer to a premium financial publication's topic hub than to a s
   };
 }
 
-function extractJsonObject(text: string): string | null {
-  const start = text.indexOf("{");
-  if (start === -1) return null;
+function extractToolInput(data: unknown): GeneratedHub {
+  const content = (data as { content?: unknown[] })?.content;
+  const block = content?.find((item) => {
+    const candidate = item as { type?: string; name?: string };
+    return candidate.type === "tool_use" && candidate.name === "create_topic_hub";
+  }) as { input?: unknown } | undefined;
 
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-  for (let i = start; i < text.length; i++) {
-    const char = text[i];
-    if (escaped) {
-      escaped = false;
-      continue;
-    }
-    if (char === "\\") {
-      escaped = true;
-      continue;
-    }
-    if (char === "\"") {
-      inString = !inString;
-      continue;
-    }
-    if (inString) continue;
-    if (char === "{") depth += 1;
-    if (char === "}") depth -= 1;
-    if (depth === 0) return text.slice(start, i + 1);
+  if (!block?.input || typeof block.input !== "object") {
+    const preview = JSON.stringify(data).slice(0, 240);
+    throw new Error(`Editorial agent did not call create_topic_hub tool: ${preview}`);
   }
 
-  return null;
+  return block.input as GeneratedHub;
 }
 
 function ensureContextualInternalLinks(body: string, related: RelatedArticleInput[]): string {
