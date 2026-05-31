@@ -18,7 +18,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!hub) return {};
 
   return {
-    title: `${hub.title} | FinCNews Topic Hub`,
+    title: `${hub.title} Topic Hub`,
     description: hub.description,
     alternates: { canonical: `/topics/${hub.slug}` },
     openGraph: {
