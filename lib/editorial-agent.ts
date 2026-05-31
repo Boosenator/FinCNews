@@ -249,7 +249,7 @@ Output ONLY raw JSON:
 {
   "title": "clear topic hub title, 40-65 chars",
   "description": "150-165 char meta description explaining why this topic matters",
-  "body": "900-1200 words in markdown. Use sections: ## What It Is, ## Why It Matters, ## Latest Developments, ## What to Watch, ## How FinCNews Covers It. Link to internal article paths when useful using plain URLs from the recent coverage list.",
+  "body": "900-1200 words in markdown. Use only these sections: ## What It Is, ## Why It Matters, ## Latest Developments, ## What to Watch, ## How FinCNews Covers It. Use markdown links like [article title](/crypto/example-slug) for internal links. Do not include an H1 title, FAQ heading, FAQ questions, or a related links appendix in body.",
   "faqs": [
     {"question":"...", "answer":"2-3 sentence factual answer"}
   ]
@@ -260,6 +260,8 @@ Rules:
 - Do not invent prices, dates, legislation status, or market data not present in the coverage list.
 - Explain concepts plainly for investors and crypto readers.
 - Make the hub distinct from a news article; it should act as a durable landing page.
+- Keep FAQs only in the faqs array, never in body.
+- Use internal links sparingly inside relevant paragraphs, not as plain pasted URLs.
 - Include 4-6 FAQs.`;
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -294,19 +296,63 @@ Rules:
 }
 
 function normalizeBody(body: string): PortableTextBlock[] {
-  return body
-    .split(/\n{2,}/)
-    .map((text) => text.trim())
+  const beforeFaq = body.split(/\n\s*FAQ\s*\n/i)[0] ?? body;
+  const lines = beforeFaq
+    .split(/\r?\n/)
+    .map((line) => line.trim())
     .filter(Boolean)
-    .map((text, i) => {
-      const h2 = text.match(/^##\s+(.+)$/);
-      const h3 = text.match(/^###\s+(.+)$/);
-      return {
-        _type: "block" as const,
-        _key: `hub-${i}`,
-        style: (h2 ? "h2" : h3 ? "h3" : "normal") as string,
-        markDefs: [],
-        children: [{ _type: "span" as const, _key: `hub-s-${i}`, text: h2?.[1] ?? h3?.[1] ?? text, marks: [] }],
-      };
-    });
+    .filter((line, index) => !(index === 0 && /^#\s+/.test(line)));
+
+  let listIndex = 0;
+  return lines.flatMap((line, i) => {
+    if (/^---+$/.test(line)) return [];
+
+    const h2 = line.match(/^##\s+(.+)$/);
+    const h3 = line.match(/^###\s+(.+)$/);
+    const bullet = line.match(/^[-*]\s+(.+)$/);
+    const sectionHeading = line.match(/^(What It Is|Why It Matters|Latest Developments|What to Watch|How FinCNews Covers It)$/i);
+    const style = h2 || sectionHeading ? "h2" : h3 ? "h3" : "normal";
+    const text = h2?.[1] ?? h3?.[1] ?? bullet?.[1] ?? sectionHeading?.[1] ?? line;
+    const parsed = parseInline(text, i);
+
+    return [{
+      _type: "block" as const,
+      _key: bullet ? `hub-list-${listIndex++}` : `hub-${i}`,
+      style,
+      ...(bullet ? { listItem: "bullet", level: 1 } : {}),
+      markDefs: parsed.markDefs,
+      children: parsed.children,
+    } as PortableTextBlock];
+  });
+}
+
+function parseInline(text: string, blockIndex: number) {
+  const markDefs: Array<{ _type: "link"; _key: string; href: string }> = [];
+  const children: Array<{ _type: "span"; _key: string; text: string; marks: string[] }> = [];
+  const re = /(\*\*([^*]+)\*\*)|\[([^\]]+)\]\(([^)]+)\)|(\/(?:crypto|markets|economy|fintech|policy|companies)\/[a-z0-9-]+)/g;
+  let last = 0;
+  let spanIndex = 0;
+  let match: RegExpExecArray | null;
+
+  function pushSpan(value: string, marks: string[] = []) {
+    if (!value) return;
+    children.push({ _type: "span", _key: `hub-s-${blockIndex}-${spanIndex++}`, text: value, marks });
+  }
+
+  while ((match = re.exec(text)) !== null) {
+    pushSpan(text.slice(last, match.index));
+    if (match[2]) {
+      pushSpan(match[2], ["strong"]);
+    } else {
+      const label = match[3] ?? match[5];
+      const href = match[4] ?? match[5];
+      const key = `hub-link-${blockIndex}-${spanIndex}`;
+      markDefs.push({ _type: "link", _key: key, href });
+      pushSpan(label, [key]);
+    }
+    last = match.index + match[0].length;
+  }
+
+  pushSpan(text.slice(last));
+  return { markDefs, children };
 }
