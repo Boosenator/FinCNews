@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAuthed } from "@/lib/auth";
-import { runEditorialAgent, TOPIC_HUB_PLANS } from "@/lib/editorial-agent";
+import {
+  approveTopicSuggestion,
+  dismissTopicSuggestion,
+  getTopicHubPlans,
+  getTopicSuggestions,
+  runEditorialAgent,
+  runTopicDiscoveryAgent,
+} from "@/lib/editorial-agent";
 import { sanityAdmin } from "@/lib/sanity";
 import { buildTopicArticleFilter } from "@/lib/topic-matching";
 
@@ -23,8 +30,9 @@ export async function GET(req: NextRequest) {
   const publicBySlug = new Map(existing.filter((hub) => !hub._id.includes(".")).map((hub) => [hub.slug, hub]));
   const privateBySlug = new Map(existing.filter((hub) => hub._id.includes(".")).map((hub) => [hub.slug, hub]));
 
+  const plans = await getTopicHubPlans();
   const topics = await Promise.all(
-    TOPIC_HUB_PLANS.map(async (plan) => {
+    plans.map(async (plan) => {
       const { filter, params } = buildTopicArticleFilter(plan.keywords);
       const relatedCount = sanityAdmin
         ? await sanityAdmin.fetch<number>(
@@ -45,14 +53,39 @@ export async function GET(req: NextRequest) {
     }),
   );
 
-  return NextResponse.json({ topics });
+  const suggestions = await getTopicSuggestions();
+  return NextResponse.json({ topics, suggestions });
 }
 
 export async function POST(req: NextRequest) {
   if (!isAuthed(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const body = (await req.json().catch(() => ({}))) as { slug?: string };
+    const body = (await req.json().catch(() => ({}))) as {
+      action?: "refresh" | "discover" | "approve-suggestion" | "dismiss-suggestion" | "create-suggestion";
+      slug?: string;
+    };
+    if (body.action === "discover") {
+      const result = await runTopicDiscoveryAgent();
+      return NextResponse.json({ ok: true, action: "discover", ...result });
+    }
+    if (body.action === "approve-suggestion") {
+      if (!body.slug) throw new Error("Missing suggestion slug");
+      const plan = await approveTopicSuggestion(body.slug);
+      return NextResponse.json({ ok: true, action: "approve-suggestion", plan });
+    }
+    if (body.action === "dismiss-suggestion") {
+      if (!body.slug) throw new Error("Missing suggestion slug");
+      const result = await dismissTopicSuggestion(body.slug);
+      return NextResponse.json({ ok: true, action: "dismiss-suggestion", ...result });
+    }
+    if (body.action === "create-suggestion") {
+      if (!body.slug) throw new Error("Missing suggestion slug");
+      await approveTopicSuggestion(body.slug);
+      const result = await runEditorialAgent(body.slug);
+      return NextResponse.json({ ok: true, action: "create-suggestion", ...result });
+    }
+
     const result = await runEditorialAgent(body.slug);
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {

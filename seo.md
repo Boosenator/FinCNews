@@ -85,16 +85,37 @@ Sanity treats dotted IDs as private paths that require a token, so the public fr
 
 ## Topic Hub Agent
 
-The topic hub agent refreshes durable evergreen pages. It is designed to explain broad topics, not recap recent news.
+The topic hub system has two agents:
+
+- Topic Discovery Agent: suggests new evergreen hub candidates for human approval.
+- Topic Hub Agent: refreshes approved durable evergreen pages.
+
+The refresh agent is designed to explain broad topics, not recap recent news.
 
 Schedule:
 
+- Discovery: `/api/cron/editorial/discovery` at `02:30 UTC`, currently `05:30 Kyiv`
 - Morning: `/api/cron/editorial/morning` at `03:00 UTC`, currently `06:00 Kyiv`
 - Evening: `/api/cron/editorial/evening` at `14:00 UTC`, currently `17:00 Kyiv`
 
-Logic:
+Discovery logic:
 
-1. Once per Kyiv day, score configured topic plans by recent related coverage.
+1. Analyze FinCNews articles from the last 72 hours.
+2. Compare emerging themes against approved static and dynamic topic plans.
+3. Suggest only missing topics that can stay evergreen for 3-6 months.
+4. Require at least 3 related recent articles or a clear multi-article pattern.
+5. Store candidates as `editorialTopicSuggestion-{slug}` with `suggested`, `approved`, or `dismissed` status.
+
+Admin actions:
+
+- `Analyze new topics` runs discovery manually.
+- `Approve` adds the suggestion as an approved dynamic topic plan.
+- `Create hub` approves the suggestion and immediately creates the hub.
+- `Dismiss` removes it from the pending suggestions list.
+
+Refresh logic:
+
+1. Once per Kyiv day, score configured and approved topic plans by recent related coverage.
 2. Use recent 24-hour and 72-hour article counts.
 3. Select the top two hot topics.
 4. Refresh the first in the morning and the second in the evening.

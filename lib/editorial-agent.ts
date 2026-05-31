@@ -23,7 +23,31 @@ type RelatedArticleInput = {
   publishedAt?: string;
 };
 
-export const TOPIC_HUB_PLANS: TopicPlan[] = [
+type DiscoveryArticleInput = RelatedArticleInput & {
+  tags?: string[];
+};
+
+export type TopicSuggestion = TopicPlan & {
+  reason: string;
+  relatedArticleCount: number;
+  priority: "high" | "medium" | "low";
+  status: "suggested" | "approved" | "dismissed";
+  discoveredAt?: string;
+};
+
+type DiscoveryResult = {
+  suggestions: Array<{
+    title: string;
+    slug: string;
+    keywords: string[];
+    reason: string;
+    relatedArticleCount?: number;
+    priority: "high" | "medium" | "low";
+    shouldCreateHub: boolean;
+  }>;
+};
+
+export const STATIC_TOPIC_HUB_PLANS: TopicPlan[] = [
   { slug: "bitcoin", title: "Bitcoin", keywords: ["bitcoin", "btc", "spot bitcoin etf", "bitcoin treasury"] },
   { slug: "ethereum", title: "Ethereum", keywords: ["ethereum", "eth", "staking", "layer 2"] },
   { slug: "crypto-etfs", title: "Crypto ETFs", keywords: ["bitcoin etf", "ethereum etf", "spot etf", "etf inflows"] },
@@ -33,6 +57,8 @@ export const TOPIC_HUB_PLANS: TopicPlan[] = [
   { slug: "xrp", title: "XRP", keywords: ["xrp", "ripple", "xrpl", "xrp etf"] },
   { slug: "solana", title: "Solana", keywords: ["solana", "sol", "solana defi", "solana etf"] },
 ];
+
+export const TOPIC_HUB_PLANS = STATIC_TOPIC_HUB_PLANS;
 
 export type EditorialAgentResult = {
   slug: string;
@@ -68,8 +94,9 @@ export async function runEditorialAgent(slug?: string): Promise<EditorialAgentRe
   if (!process.env.SANITY_TOKEN) throw new Error("SANITY_TOKEN is not configured");
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not configured");
 
+  const plans = await getTopicHubPlans();
   const plan = slug
-    ? TOPIC_HUB_PLANS.find((item) => item.slug === slug)
+    ? plans.find((item) => item.slug === slug)
     : await pickNextTopicHub();
   if (!plan) throw new Error(`Unknown topic hub: ${slug}`);
 
@@ -120,6 +147,156 @@ export async function runScheduledEditorialAgent(slot: "morning" | "evening"): P
   };
 }
 
+export async function getTopicHubPlans(): Promise<TopicPlan[]> {
+  if (!sanityAdmin) return STATIC_TOPIC_HUB_PLANS;
+  const dynamic = await sanityAdmin.fetch<TopicPlan[]>(
+    `*[_type == "editorialTopicPlan" && status == "approved" && defined(slug.current)]
+     | order(title asc) {
+      "slug": slug.current,
+      title,
+      keywords
+    }`,
+    {},
+  );
+  const bySlug = new Map(STATIC_TOPIC_HUB_PLANS.map((plan) => [plan.slug, plan]));
+  for (const plan of dynamic ?? []) {
+    if (plan.slug && plan.title && Array.isArray(plan.keywords) && plan.keywords.length > 0) {
+      bySlug.set(plan.slug, plan);
+    }
+  }
+  return Array.from(bySlug.values());
+}
+
+export async function runTopicDiscoveryAgent(): Promise<{ suggestions: TopicSuggestion[]; analyzedArticles: number }> {
+  if (!sanityAdmin) throw new Error("Sanity is not configured");
+  if (!process.env.SANITY_TOKEN) throw new Error("SANITY_TOKEN is not configured");
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not configured");
+
+  const existingPlans = await getTopicHubPlans();
+  const articles = await fetchRecentDiscoveryArticles();
+  if (articles.length < 3) return { suggestions: [], analyzedArticles: articles.length };
+
+  const discovered = await discoverTopicSuggestions(articles, existingPlans);
+  const existingSlugs = new Set(existingPlans.map((plan) => plan.slug));
+  const saved: TopicSuggestion[] = [];
+
+  const sanity = createClient({
+    projectId: process.env.SANITY_PROJECT_ID ?? process.env.NEXT_PUBLIC_SANITY_PROJECT_ID!,
+    dataset: process.env.SANITY_DATASET ?? "production",
+    token: process.env.SANITY_TOKEN!,
+    apiVersion: "2024-01-01",
+    useCdn: false,
+  });
+
+  for (const item of discovered.suggestions) {
+    const slug = normalizeSlug(item.slug || item.title);
+    if (!slug || existingSlugs.has(slug) || item.shouldCreateHub === false) continue;
+    const keywords = normalizeKeywords(item.keywords, item.title);
+    if (keywords.length < 2) continue;
+
+    const relatedArticleCount = await countRelatedArticlesForKeywords(keywords);
+    if (relatedArticleCount < 3) continue;
+
+    const doc = await sanity.createOrReplace({
+      _id: `editorialTopicSuggestion-${slug}`,
+      _type: "editorialTopicSuggestion",
+      slug: { _type: "slug", current: slug },
+      title: item.title,
+      keywords,
+      reason: item.reason,
+      relatedArticleCount,
+      priority: item.priority,
+      status: "suggested",
+      discoveredAt: new Date().toISOString(),
+      analysisWindowHours: 72,
+    });
+    saved.push({
+      slug,
+      title: doc.title,
+      keywords: doc.keywords,
+      reason: doc.reason,
+      relatedArticleCount: doc.relatedArticleCount,
+      priority: item.priority,
+      status: "suggested",
+      discoveredAt: doc.discoveredAt,
+    });
+  }
+
+  return { suggestions: saved, analyzedArticles: articles.length };
+}
+
+export async function getTopicSuggestions(): Promise<TopicSuggestion[]> {
+  if (!sanityAdmin) return [];
+  return sanityAdmin.fetch<TopicSuggestion[]>(
+    `*[_type == "editorialTopicSuggestion" && status == "suggested" && defined(slug.current)]
+     | order(priority asc, relatedArticleCount desc, discoveredAt desc)[0...20] {
+      "slug": slug.current,
+      title,
+      keywords,
+      reason,
+      relatedArticleCount,
+      priority,
+      status,
+      discoveredAt
+    }`,
+    {},
+  );
+}
+
+export async function approveTopicSuggestion(slug: string): Promise<TopicPlan> {
+  if (!sanityAdmin) throw new Error("Sanity is not configured");
+  if (!process.env.SANITY_TOKEN) throw new Error("SANITY_TOKEN is not configured");
+
+  const suggestion = await sanityAdmin.fetch<TopicSuggestion | null>(
+    `*[_type == "editorialTopicSuggestion" && slug.current == $slug][0] {
+      "slug": slug.current,
+      title,
+      keywords,
+      reason,
+      relatedArticleCount,
+      priority,
+      status
+    }`,
+    { slug },
+  );
+  if (!suggestion) throw new Error(`Unknown topic suggestion: ${slug}`);
+
+  const sanity = createClient({
+    projectId: process.env.SANITY_PROJECT_ID ?? process.env.NEXT_PUBLIC_SANITY_PROJECT_ID!,
+    dataset: process.env.SANITY_DATASET ?? "production",
+    token: process.env.SANITY_TOKEN!,
+    apiVersion: "2024-01-01",
+    useCdn: false,
+  });
+
+  await sanity.createOrReplace({
+    _id: `editorialTopicPlan-${slug}`,
+    _type: "editorialTopicPlan",
+    slug: { _type: "slug", current: slug },
+    title: suggestion.title,
+    keywords: suggestion.keywords,
+    status: "approved",
+    approvedAt: new Date().toISOString(),
+    sourceSuggestionId: `editorialTopicSuggestion-${slug}`,
+  });
+  await sanity.patch(`editorialTopicSuggestion-${slug}`).set({ status: "approved", approvedAt: new Date().toISOString() }).commit();
+
+  return { slug, title: suggestion.title, keywords: suggestion.keywords };
+}
+
+export async function dismissTopicSuggestion(slug: string): Promise<{ slug: string; status: "dismissed" }> {
+  if (!process.env.SANITY_TOKEN) throw new Error("SANITY_TOKEN is not configured");
+  const sanity = createClient({
+    projectId: process.env.SANITY_PROJECT_ID ?? process.env.NEXT_PUBLIC_SANITY_PROJECT_ID!,
+    dataset: process.env.SANITY_DATASET ?? "production",
+    token: process.env.SANITY_TOKEN!,
+    apiVersion: "2024-01-01",
+    useCdn: false,
+  });
+  await sanity.patch(`editorialTopicSuggestion-${slug}`).set({ status: "dismissed", dismissedAt: new Date().toISOString() }).commit();
+  return { slug, status: "dismissed" };
+}
+
 async function getOrCreateDailyHotTopicPlan(): Promise<DailyHotTopicPlan> {
   if (!sanityAdmin) throw new Error("Sanity is not configured");
   if (!process.env.SANITY_TOKEN) throw new Error("SANITY_TOKEN is not configured");
@@ -154,11 +331,12 @@ async function getOrCreateDailyHotTopicPlan(): Promise<DailyHotTopicPlan> {
 async function rankHotTopics(): Promise<HotTopic[]> {
   if (!sanityAdmin) return [];
   const client = sanityAdmin;
+  const plans = await getTopicHubPlans();
   const cutoff24 = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const cutoff72 = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
 
   const scored = await Promise.all(
-    TOPIC_HUB_PLANS.map(async (plan) => {
+    plans.map(async (plan) => {
       const { filter, params } = buildTopicArticleFilter(plan.keywords);
       const [recent24h, recent72h] = await Promise.all([
         client.fetch<number>(
@@ -198,7 +376,8 @@ function kyivDateKey() {
 }
 
 async function pickNextTopicHub(): Promise<TopicPlan> {
-  if (!sanityAdmin) return TOPIC_HUB_PLANS[0];
+  const plans = await getTopicHubPlans();
+  if (!sanityAdmin) return plans[0];
   const existing = await sanityAdmin.fetch<Array<{ slug: string; updatedAt?: string }>>(
     `*[_type == "topicHub" && defined(slug.current)] {
       "slug": slug.current,
@@ -207,7 +386,7 @@ async function pickNextTopicHub(): Promise<TopicPlan> {
     {},
   );
   const bySlug = new Map(existing.map((hub) => [hub.slug, hub.updatedAt]));
-  return TOPIC_HUB_PLANS
+  return plans
     .slice()
     .sort((a, b) => {
       const aTime = bySlug.get(a.slug) ? new Date(bySlug.get(a.slug)!).getTime() : 0;
@@ -230,6 +409,160 @@ async function fetchRelatedArticleInputs(plan: TopicPlan) {
     }`,
     params,
   );
+}
+
+async function fetchRecentDiscoveryArticles(): Promise<DiscoveryArticleInput[]> {
+  if (!sanityAdmin) return [];
+  const cutoff = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
+  return sanityAdmin.fetch<DiscoveryArticleInput[]>(
+    `*[_type == "article" && publishedAt >= $cutoff && defined(translations.en.title)]
+     | order(publishedAt desc)[0...80] {
+      "title": translations.en.title,
+      "excerpt": translations.en.excerpt,
+      "slug": slug.current,
+      category,
+      publishedAt,
+      tags
+    }`,
+    { cutoff },
+  );
+}
+
+async function discoverTopicSuggestions(
+  articles: DiscoveryArticleInput[],
+  existingPlans: TopicPlan[],
+): Promise<DiscoveryResult> {
+  const articleLines = articles
+    .map((article, i) => {
+      const date = article.publishedAt ? article.publishedAt.slice(0, 10) : "unknown date";
+      const tags = article.tags?.length ? ` tags: ${article.tags.slice(0, 5).join(", ")}` : "";
+      return `${i + 1}. ${date} /${article.category}/${article.slug} - ${article.title}: ${(article.excerpt ?? "").slice(0, 180)}${tags}`;
+    })
+    .join("\n");
+  const existingLines = existingPlans
+    .map((plan) => `- ${plan.title} (${plan.slug}): ${plan.keywords.join(", ")}`)
+    .join("\n");
+
+  const prompt = `You are the FinCNews Topic Discovery Agent.
+
+Analyze FinCNews articles from the last 72 hours and suggest NEW evergreen topic hubs.
+
+Do not write topic hubs. Only suggest candidates for human approval.
+
+Existing approved topic hubs:
+${existingLines}
+
+Recent FinCNews articles:
+${articleLines}
+
+Discovery criteria:
+- Suggest only topics missing from the approved list.
+- A topic must be evergreen for at least 3-6 months.
+- A topic should have at least 3 related recent articles or a clear multi-article pattern.
+- Prefer durable themes: regulation, capital flows, institutional adoption, market structure, corporate treasury activity, technology infrastructure.
+- Avoid one-off incidents, one-company stories, temporary rumors, narrow price moves, or duplicate variants of existing hubs.
+- Return no more than 5 suggestions.
+
+Each suggestion needs:
+- title: broad topic title, not a headline
+- slug: lowercase kebab-case
+- keywords: 3-6 matching phrases
+- reason: concise explanation of the multi-article pattern
+- relatedArticleCount: estimated count from the provided article list
+- priority: high, medium, or low
+- shouldCreateHub: true only if this is worth human review`;
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": process.env.ANTHROPIC_API_KEY!,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 1800,
+      tools: [
+        {
+          name: "suggest_topic_hubs",
+          description: "Suggest new evergreen topic hub candidates for FinCNews.",
+          input_schema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              suggestions: {
+                type: "array",
+                maxItems: 5,
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    title: { type: "string" },
+                    slug: { type: "string" },
+                    keywords: {
+                      type: "array",
+                      minItems: 3,
+                      maxItems: 6,
+                      items: { type: "string" },
+                    },
+                    reason: { type: "string" },
+                    relatedArticleCount: { type: "number" },
+                    priority: { type: "string", enum: ["high", "medium", "low"] },
+                    shouldCreateHub: { type: "boolean" },
+                  },
+                  required: ["title", "slug", "keywords", "reason", "relatedArticleCount", "priority", "shouldCreateHub"],
+                },
+              },
+            },
+            required: ["suggestions"],
+          },
+        },
+      ],
+      tool_choice: { type: "tool", name: "suggest_topic_hubs" },
+      messages: [{ role: "user", content: prompt }],
+    }),
+    signal: AbortSignal.timeout(40000),
+  });
+
+  if (!res.ok) throw new Error(`Topic discovery API error: ${res.status}`);
+  const data = await res.json();
+  const content = (data as { content?: unknown[] })?.content;
+  const block = content?.find((item) => {
+    const candidate = item as { type?: string; name?: string };
+    return candidate.type === "tool_use" && candidate.name === "suggest_topic_hubs";
+  }) as { input?: unknown } | undefined;
+  if (!block?.input || typeof block.input !== "object") {
+    const preview = JSON.stringify(data).slice(0, 240);
+    throw new Error(`Topic discovery did not call suggest_topic_hubs tool: ${preview}`);
+  }
+
+  return block.input as DiscoveryResult;
+}
+
+async function countRelatedArticlesForKeywords(keywords: string[]): Promise<number> {
+  if (!sanityAdmin || keywords.length === 0) return 0;
+  const { filter, params } = buildTopicArticleFilter(keywords);
+  const cutoff = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
+  return sanityAdmin.fetch<number>(
+    `count(*[_type == "article" && defined(translations.en.title) && publishedAt >= $cutoff && (${filter})])`,
+    { ...params, cutoff },
+  );
+}
+
+function normalizeSlug(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+}
+
+function normalizeKeywords(keywords: string[] | undefined, title: string): string[] {
+  const unique = new Set([...(keywords ?? []), title]);
+  return Array.from(unique)
+    .map((keyword) => keyword.trim().toLowerCase())
+    .filter((keyword) => keyword.length > 2)
+    .slice(0, 6);
 }
 
 async function generateHub(

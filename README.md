@@ -35,6 +35,7 @@ Vercel cron schedules:
 - `/api/cron/generate` hourly
 - `/api/cron/editorial/morning` at `03:00 UTC` / currently `06:00 Kyiv`
 - `/api/cron/editorial/evening` at `14:00 UTC` / currently `17:00 Kyiv`
+- `/api/cron/editorial/discovery` at `02:30 UTC` / currently `05:30 Kyiv`
 
 News pipeline:
 
@@ -53,12 +54,14 @@ News pipeline:
 
 Topic hub pipeline:
 
-1. Rank configured topic plans by recent FinCNews coverage.
-2. Pick the hottest two topics once per Kyiv day.
-3. Refresh one hub in the morning and one in the evening.
-4. Use Anthropic tool output to avoid broken JSON.
-5. Store public Sanity documents as `topicHub-{slug}`.
-6. Render hubs at `/topics/{slug}` with FAQ schema and contextual internal links.
+1. Run Topic Discovery Agent at 05:30 Kyiv to suggest new evergreen hub candidates from the last 72 hours.
+2. Let admins approve, dismiss, or approve-and-create suggested topics from Content Plan.
+3. Rank approved topic plans by recent FinCNews coverage.
+4. Pick the hottest two topics once per Kyiv day.
+5. Refresh one hub in the morning and one in the evening.
+6. Use Anthropic tool output to avoid broken JSON.
+7. Store public Sanity documents as `topicHub-{slug}`.
+8. Render hubs at `/topics/{slug}` with FAQ schema and contextual internal links.
 
 Configured topic hubs include Bitcoin, Ethereum, Crypto ETFs, SEC Crypto Regulation, Federal Reserve Policy, Stablecoins, XRP, and Solana.
 
@@ -76,6 +79,8 @@ Main tabs include:
 - Content Plan for topic hubs
 
 The Content Plan tab shows planned/published/private topic hubs, related article counts, refresh actions, and public URLs. Legacy Sanity IDs with dots, such as `topicHub.bitcoin`, are treated as private because Sanity does not expose them publicly without a token.
+
+It also shows Suggested Topics discovered by the Topic Discovery Agent. Admins can run discovery manually, approve a suggestion into the dynamic topic plan, create a hub immediately, or dismiss the suggestion.
 
 ## SEO Features
 
