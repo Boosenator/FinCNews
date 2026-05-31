@@ -15,6 +15,14 @@ type GeneratedHub = {
   faqs: Array<{ question: string; answer: string }>;
 };
 
+type RelatedArticleInput = {
+  title: string;
+  excerpt?: string;
+  slug: string;
+  category: string;
+  publishedAt?: string;
+};
+
 export const TOPIC_HUB_PLANS: TopicPlan[] = [
   { slug: "bitcoin", title: "Bitcoin", keywords: ["bitcoin", "btc", "spot bitcoin etf", "bitcoin treasury"] },
   { slug: "ethereum", title: "Ethereum", keywords: ["ethereum", "eth", "staking", "layer 2"] },
@@ -83,7 +91,7 @@ export async function runEditorialAgent(slug?: string): Promise<EditorialAgentRe
     description: generated.description,
     updatedAt: new Date().toISOString(),
     keywords: plan.keywords,
-    body: normalizeBody(generated.body),
+    body: normalizeBody(generated.body, related),
     faqs: generated.faqs,
   });
 
@@ -211,7 +219,7 @@ async function pickNextTopicHub(): Promise<TopicPlan> {
 async function fetchRelatedArticleInputs(plan: TopicPlan) {
   if (!sanityAdmin) return [];
   const { filter, params } = buildTopicArticleFilter(plan.keywords);
-  return sanityAdmin.fetch<Array<{ title: string; excerpt?: string; slug: string; category: string; publishedAt?: string }>>(
+  return sanityAdmin.fetch<RelatedArticleInput[]>(
     `*[_type == "article" && defined(translations.en.title) && (${filter})]
      | order(publishedAt desc)[0...20] {
       "title": translations.en.title,
@@ -226,7 +234,7 @@ async function fetchRelatedArticleInputs(plan: TopicPlan) {
 
 async function generateHub(
   plan: TopicPlan,
-  related: Array<{ title: string; excerpt?: string; slug: string; category: string; publishedAt?: string }>,
+  related: RelatedArticleInput[],
 ): Promise<GeneratedHub> {
   const articleLines = related.length
     ? related.map((article, i) => {
@@ -245,11 +253,14 @@ Keywords: ${plan.keywords.join(", ")}
 Recent FinCNews coverage:
 ${articleLines}
 
+Allowed internal link targets:
+${related.slice(0, 10).map((article) => `- [${article.title}](/${article.category}/${article.slug})`).join("\n") || "- None"}
+
 Output ONLY raw JSON:
 {
   "title": "clear topic hub title, 40-65 chars",
   "description": "150-165 char meta description explaining why this topic matters",
-  "body": "900-1200 words in markdown. Use only these sections: ## What It Is, ## Why It Matters, ## Latest Developments, ## What to Watch, ## How FinCNews Covers It. Use markdown links like [article title](/crypto/example-slug) for internal links. Do not include an H1 title, FAQ heading, FAQ questions, or a related links appendix in body.",
+  "body": "900-1200 words in markdown. Use only these sections: ## What It Is, ## Why It Matters, ## Latest Developments, ## What to Watch, ## How FinCNews Covers It. Include 4-7 contextual internal markdown links inside normal paragraphs using the allowed link targets. Do not include an H1 title, FAQ heading, FAQ questions, or a related links appendix in body.",
   "faqs": [
     {"question":"...", "answer":"2-3 sentence factual answer"}
   ]
@@ -261,7 +272,9 @@ Rules:
 - Explain concepts plainly for investors and crypto readers.
 - Make the hub distinct from a news article; it should act as a durable landing page.
 - Keep FAQs only in the faqs array, never in body.
-- Use internal links sparingly inside relevant paragraphs, not as plain pasted URLs.
+- Use descriptive anchor text, not bare URLs. Example: [Bitcoin ETF outflow streak](/crypto/bitcoin-etfs-2-8b-outflow-streak).
+- Place internal links inside relevant explanatory paragraphs. Never add a final "Explore related coverage" list.
+- Only link to URLs from the allowed internal link targets list.
 - Include 4-6 FAQs.`;
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -291,12 +304,43 @@ Rules:
   }
   return {
     ...parsed,
+    body: ensureContextualInternalLinks(parsed.body, related),
     faqs: Array.isArray(parsed.faqs) ? parsed.faqs.slice(0, 6) : [],
   };
 }
 
-function normalizeBody(body: string): PortableTextBlock[] {
-  const beforeFaq = body.split(/\n\s*FAQ\s*\n/i)[0] ?? body;
+function ensureContextualInternalLinks(body: string, related: RelatedArticleInput[]): string {
+  const clean = stripRelatedAppendix(body);
+  const linkCount = (clean.match(/\[[^\]]+\]\(\/(?:crypto|markets|economy|fintech|policy|companies)\/[a-z0-9-]+\)/g) ?? []).length;
+  if (linkCount >= 4 || related.length === 0) return clean;
+
+  const links = related.slice(0, 5).map((article) => ({
+    title: article.title
+      .replace(/\s+/g, " ")
+      .replace(/[:|].*$/, "")
+      .trim(),
+    href: `/${article.category}/${article.slug}`,
+  }));
+  const sentence = `For recent FinCNews reporting, compare ${links
+    .map((link) => `[${link.title}](${link.href})`)
+    .join(", ")} to see how this topic is developing across live market coverage.`;
+
+  const marker = "## How FinCNews Covers It";
+  if (clean.includes(marker)) {
+    return clean.replace(marker, `${marker}\n\n${sentence}`);
+  }
+  return `${clean.trim()}\n\n## How FinCNews Covers It\n\n${sentence}`;
+}
+
+function stripRelatedAppendix(body: string): string {
+  return body
+    .replace(/\n-{3,}\s*\n(?:\*\*)?Explore related coverage:?(?:\*\*)?[\s\S]*?(?=\n##\s+FAQ|\nFAQ\s*$|$)/i, "\n")
+    .replace(/\n(?:\*\*)?Explore related coverage:?(?:\*\*)?[\s\S]*?(?=\n##\s+FAQ|\nFAQ\s*$|$)/i, "\n");
+}
+
+function normalizeBody(body: string, related: RelatedArticleInput[] = []): PortableTextBlock[] {
+  const linkedBody = ensureContextualInternalLinks(body, related);
+  const beforeFaq = linkedBody.split(/\n\s*FAQ\s*\n/i)[0] ?? linkedBody;
   const lines = beforeFaq
     .split(/\r?\n/)
     .map((line) => line.trim())
