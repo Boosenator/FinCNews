@@ -3,6 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
+  if (isProbePath(pathname)) {
+    return new NextResponse(null, { status: 404 });
+  }
+
   if (!pathname.startsWith("/flows")) return NextResponse.next();
   if (pathname === "/flows/login") return NextResponse.next();
 
@@ -19,6 +23,26 @@ export function middleware(req: NextRequest) {
   return NextResponse.next();
 }
 
+function isProbePath(pathname: string): boolean {
+  return (
+    pathname.endsWith(".php") ||
+    pathname.startsWith("/wp-admin") ||
+    pathname.startsWith("/wp-content") ||
+    pathname.startsWith("/wp-includes") ||
+    pathname === "/wp-login.php" ||
+    pathname === "/xmlrpc.php"
+  );
+}
+
 export const config = {
-  matcher: ["/flows", "/flows/:path*"],
+  matcher: [
+    "/flows",
+    "/flows/:path*",
+    "/wp-admin/:path*",
+    "/wp-content/:path*",
+    "/wp-includes/:path*",
+    "/wp-login.php",
+    "/xmlrpc.php",
+    "/:path*.php",
+  ],
 };
