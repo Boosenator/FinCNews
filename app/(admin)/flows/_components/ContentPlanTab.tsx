@@ -78,9 +78,10 @@ export default function ContentPlanTab() {
         },
         70000,
       );
-      const data = await res.json();
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : { error: `Editorial agent returned empty response (${res.status})` };
       setLastResult(data);
-      await load();
+      if (res.ok) await load();
     } catch (e) {
       setLastResult({ error: e instanceof DOMException && e.name === "AbortError" ? "Editorial agent timed out" : String(e) });
     } finally {

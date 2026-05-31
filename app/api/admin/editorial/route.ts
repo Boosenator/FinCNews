@@ -51,7 +51,12 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   if (!isAuthed(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = (await req.json().catch(() => ({}))) as { slug?: string };
-  const result = await runEditorialAgent(body.slug);
-  return NextResponse.json({ ok: true, ...result });
+  try {
+    const body = (await req.json().catch(() => ({}))) as { slug?: string };
+    const result = await runEditorialAgent(body.slug);
+    return NextResponse.json({ ok: true, ...result });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+  }
 }

@@ -495,7 +495,7 @@ It should feel closer to a premium financial publication's topic hub than to a s
     },
     body: JSON.stringify({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 2600,
+      max_tokens: 5200,
       messages: [{ role: "user", content: prompt }],
     }),
     signal: AbortSignal.timeout(55000),
@@ -504,10 +504,12 @@ It should feel closer to a premium financial publication's topic hub than to a s
   if (!res.ok) throw new Error(`Editorial agent API error: ${res.status}`);
   const data = await res.json();
   const text: string = data.content?.[0]?.text ?? "";
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error("Editorial agent returned non-JSON");
+  const jsonText = extractJsonObject(text);
+  if (!jsonText) {
+    throw new Error(`Editorial agent returned non-JSON: ${text.slice(0, 240) || "empty response"}`);
+  }
 
-  const parsed = JSON.parse(jsonMatch[0]) as GeneratedHub;
+  const parsed = JSON.parse(jsonText) as GeneratedHub;
   if (!parsed.title || !parsed.description || !parsed.body) {
     throw new Error("Editorial agent returned incomplete topic hub");
   }
@@ -516,6 +518,36 @@ It should feel closer to a premium financial publication's topic hub than to a s
     body: ensureContextualInternalLinks(parsed.body, related),
     faqs: Array.isArray(parsed.faqs) ? parsed.faqs.slice(0, 6) : [],
   };
+}
+
+function extractJsonObject(text: string): string | null {
+  const start = text.indexOf("{");
+  if (start === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i++) {
+    const char = text[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (char === "\"") {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (char === "{") depth += 1;
+    if (char === "}") depth -= 1;
+    if (depth === 0) return text.slice(start, i + 1);
+  }
+
+  return null;
 }
 
 function ensureContextualInternalLinks(body: string, related: RelatedArticleInput[]): string {
