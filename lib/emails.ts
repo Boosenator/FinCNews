@@ -259,10 +259,9 @@ export function digestEmail(opts: {
     <tr>
       <td style="padding:18px 0;border-top:1px solid ${BORDER};">
         <p style="margin:0 0 4px;font-size:10px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:${FOOTER};">${a.category}</p>
-        <a href="${a.url}" style="text-decoration:none;">
-          <p style="margin:0 0 6px;font-size:15px;font-weight:600;color:${WHITE};line-height:1.35;">${a.headline}</p>
-        </a>
-        <p style="margin:0;font-size:13px;color:${TEXT};line-height:1.6;">${a.excerpt}</p>
+        <p style="margin:0 0 7px;font-size:15px;font-weight:600;color:${WHITE};line-height:1.35;">${a.headline}</p>
+        <p style="margin:0 0 12px;font-size:13px;color:${TEXT};line-height:1.6;">${a.excerpt}</p>
+        <a href="${a.url}" style="display:inline-block;padding:7px 16px;background:transparent;border:1px solid ${BORDER};border-radius:6px;font-size:12px;font-weight:600;color:${CYAN};text-decoration:none;letter-spacing:0.01em;">Read article &rarr;</a>
       </td>
     </tr>`
     )
