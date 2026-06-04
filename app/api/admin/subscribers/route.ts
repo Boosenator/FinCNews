@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
     db.from("subscribers").select("*", { count: "exact", head: true }).eq("status", "pending"),
     db.from("subscribers").select("*", { count: "exact", head: true }).eq("status", "unsubscribed"),
     db.from("email_logs").select("*").order("sent_at", { ascending: false }).limit(50),
-    db.from("subscribers").select("email, status, confirmed_at, created_at").order("created_at", { ascending: false }).limit(100),
+    db.from("subscribers").select("email, status, confirmed_at, unsubscribed_at, created_at").order("created_at", { ascending: false }).limit(200),
   ]);
 
   return NextResponse.json({

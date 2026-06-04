@@ -24,6 +24,7 @@ type Subscriber = {
   email: string;
   status: "pending" | "confirmed" | "unsubscribed";
   confirmed_at: string | null;
+  unsubscribed_at: string | null;
   created_at: string;
 };
 
@@ -80,7 +81,7 @@ function StatCard({ label, value, sub }: { label: string; value: number; sub?: s
   );
 }
 
-type SubTab = "logs" | "subscribers";
+type SubTab = "logs" | "subscribers" | "unsubscribed";
 
 export default function EmailTab() {
   const [data, setData] = useState<Data | null>(null);
@@ -142,17 +143,23 @@ export default function EmailTab() {
 
       {/* Sub-tabs */}
       <div className="flex gap-1 rounded-xl border border-white/[0.06] bg-zinc-900/40 p-1">
-        {(["logs", "subscribers"] as SubTab[]).map((t) => (
-          <button
-            key={t}
-            onClick={() => setSubTab(t)}
-            className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold capitalize transition ${
-              subTab === t ? "bg-white/[0.08] text-white" : "text-zinc-500 hover:text-zinc-300"
-            }`}
-          >
-            {t === "logs" ? `Email Sends (${logs.length})` : `Subscribers (${subscribers.length})`}
-          </button>
-        ))}
+        {(["logs", "subscribers", "unsubscribed"] as SubTab[]).map((t) => {
+          const label =
+            t === "logs" ? `Email Sends (${logs.length})`
+            : t === "subscribers" ? `Active (${subscribers.filter(s => s.status !== "unsubscribed").length})`
+            : `Unsubscribed (${subscribers.filter(s => s.status === "unsubscribed").length})`;
+          return (
+            <button
+              key={t}
+              onClick={() => setSubTab(t)}
+              className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                subTab === t ? "bg-white/[0.08] text-white" : "text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              {label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Email Logs */}
@@ -206,45 +213,81 @@ export default function EmailTab() {
       )}
 
       {/* Subscribers */}
-      {subTab === "subscribers" && (
-        <div className="overflow-hidden rounded-xl border border-white/[0.06]">
-          {subscribers.length === 0 ? (
-            <div className="py-12 text-center text-xs text-zinc-600">No subscribers yet</div>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-white/[0.06] bg-zinc-900/60">
-                  {["Email", "Status", "Confirmed", "Signed up"].map((h) => (
-                    <th key={h} className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-zinc-600">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/[0.04]">
-                {subscribers.map((sub, i) => (
-                  <tr key={i} className="transition hover:bg-white/[0.02]">
-                    <td className="px-4 py-3 font-mono text-xs text-zinc-400">
-                      {maskEmail(sub.email)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs font-semibold capitalize ${STATUS_COLOR[sub.status]}`}>
-                        {sub.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-[11px] tabular-nums text-zinc-600">
-                      {sub.confirmed_at ? timeAgo(sub.confirmed_at) : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-[11px] tabular-nums text-zinc-600">
-                      {timeAgo(sub.created_at)}
-                    </td>
+      {subTab === "subscribers" && (() => {
+        const active = subscribers.filter(s => s.status !== "unsubscribed");
+        return (
+          <div className="overflow-hidden rounded-xl border border-white/[0.06]">
+            {active.length === 0 ? (
+              <div className="py-12 text-center text-xs text-zinc-600">No active subscribers yet</div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-white/[0.06] bg-zinc-900/60">
+                    {["Email", "Status", "Confirmed", "Signed up"].map((h) => (
+                      <th key={h} className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-zinc-600">{h}</th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
+                </thead>
+                <tbody className="divide-y divide-white/[0.04]">
+                  {active.map((sub, i) => (
+                    <tr key={i} className="transition hover:bg-white/[0.02]">
+                      <td className="px-4 py-3 font-mono text-xs text-zinc-400">{maskEmail(sub.email)}</td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs font-semibold capitalize ${STATUS_COLOR[sub.status]}`}>{sub.status}</span>
+                      </td>
+                      <td className="px-4 py-3 text-[11px] tabular-nums text-zinc-600">
+                        {sub.confirmed_at ? timeAgo(sub.confirmed_at) : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-[11px] tabular-nums text-zinc-600">
+                        {timeAgo(sub.created_at)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        );
+      })()}
+
+      {subTab === "unsubscribed" && (() => {
+        const unsubs = subscribers.filter(s => s.status === "unsubscribed");
+        return (
+          <div className="overflow-hidden rounded-xl border border-white/[0.06]">
+            {unsubs.length === 0 ? (
+              <div className="py-12 text-center text-xs text-zinc-600">No unsubscribes yet</div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-white/[0.06] bg-zinc-900/60">
+                    {["Email", "Unsubscribed", "Was confirmed", "Signed up"].map((h) => (
+                      <th key={h} className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-zinc-600">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/[0.04]">
+                  {unsubs
+                    .sort((a, b) => new Date(b.unsubscribed_at ?? b.created_at).getTime() - new Date(a.unsubscribed_at ?? a.created_at).getTime())
+                    .map((sub, i) => (
+                      <tr key={i} className="transition hover:bg-white/[0.02]">
+                        <td className="px-4 py-3 font-mono text-xs text-zinc-600">{maskEmail(sub.email)}</td>
+                        <td className="px-4 py-3 text-[11px] tabular-nums text-zinc-500">
+                          {sub.unsubscribed_at ? timeAgo(sub.unsubscribed_at) : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-[11px] tabular-nums text-zinc-600">
+                          {sub.confirmed_at ? timeAgo(sub.confirmed_at) : <span className="text-zinc-700">never confirmed</span>}
+                        </td>
+                        <td className="px-4 py-3 text-[11px] tabular-nums text-zinc-600">
+                          {timeAgo(sub.created_at)}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
