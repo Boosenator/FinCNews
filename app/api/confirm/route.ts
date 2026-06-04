@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { supabaseAdmin } from "@/lib/supabase";
-import { welcomeEmail } from "@/lib/emails";
+import { welcomeEmail, listUnsubscribeHeaders } from "@/lib/emails";
 import { BASE_URL, EMAIL_FROM_TECH } from "@/lib/config";
 
 export async function GET(req: NextRequest) {
@@ -31,6 +31,7 @@ export async function GET(req: NextRequest) {
     subject: SUBJECT,
     html,
     text,
+    headers: listUnsubscribeHeaders(data.confirm_token, BASE_URL),
   });
 
   await db.from("email_logs").insert({

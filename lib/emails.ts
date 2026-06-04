@@ -71,6 +71,13 @@ function unsubLink(token: string, baseUrl: string): string {
 
 export type EmailContent = { html: string; text: string };
 
+export function listUnsubscribeHeaders(token: string, baseUrl: string) {
+  return {
+    "List-Unsubscribe": `<mailto:tech@e.finc.news?subject=unsubscribe>, <${baseUrl}/api/unsubscribe?token=${token}>`,
+    "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+  };
+}
+
 // ─── Confirmation (DOI) ──────────────────────────────────────────────────────
 
 export function confirmationEmail(confirmUrl: string): EmailContent {
