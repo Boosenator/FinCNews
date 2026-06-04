@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import PriceTicker from "@/components/PriceTicker";
+import NewsletterBar from "@/components/NewsletterBar";
 
 export default function SiteLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -12,6 +13,7 @@ export default function SiteLayout({ children }: { children: React.ReactNode }) 
       <Header />
       {children}
       <Footer />
+      <NewsletterBar />
     </>
   );
 }
