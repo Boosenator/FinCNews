@@ -3,7 +3,7 @@ import { Resend } from "resend";
 import { supabaseAdmin } from "@/lib/supabase";
 import { isAuthed } from "@/lib/auth";
 import { breakingEmail, digestEmail, listUnsubscribeHeaders, type DigestArticle } from "@/lib/emails";
-import { BASE_URL, EMAIL_FROM_TECH, EMAIL_FROM_NEWS } from "@/lib/config";
+import { BASE_URL, EMAIL_FROM_NEWS } from "@/lib/config";
 
 // Send a campaign to all confirmed subscribers
 export async function POST(
@@ -86,7 +86,7 @@ export async function POST(
           status: "sent",
         });
       }
-    } catch (e) {
+    } catch {
       failed++;
     }
   }
