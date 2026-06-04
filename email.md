@@ -17,9 +17,11 @@
 | 6 | Форма підписки (floating bar) | ✅ Done |
 | 7 | DOI флоу (`/api/subscribe` → confirm email → `/api/confirm`) | ✅ Done |
 | 8 | Email templates (confirmation, welcome, breaking, digest) | ✅ Done |
-| 9 | Email tab в адмінці (stats, logs, subscriber list) | ✅ Done |
+| 9 | Email tab в адмінці (stats, logs, subscriber list, unsubscribed) | ✅ Done |
 | 10 | `e.finc.news` → redirect на `finc.news` (next.config) | ✅ Done |
 | 11 | Plain-text версія листів + підвищення контрасту | ✅ Done |
+| 12 | `List-Unsubscribe` + `List-Unsubscribe-Post` headers (RFC 8058) | ✅ Done |
+| — | `e.finc.news` A-запис + Vercel domain (веб-редірект) | 🔜 Pending — треба vercel dns add + Vercel Domains |
 | — | Breaking alert: підключити тригер (n8n або API route) | 🔜 Pending |
 | — | Weekly digest: cron + pull статей із Sanity | 🔜 Pending |
 | — | Підписна форма: A/B тест позиціонування | 🔜 Optional |
@@ -43,7 +45,9 @@
 - `lib/emails.ts`: колір `FOOTER` = `#a1a1aa` замість `#52525b`
 - `lib/emails.ts`: confirmation email містить опис сервісу + 2 bullet-секції
 - `lib/emails.ts`: всі функції тепер повертають `{ html, text }` — додана plain-text версія
+- `lib/emails.ts`: `listUnsubscribeHeaders(token, baseUrl)` — хелпер для RFC 8058 заголовків
 - `app/api/subscribe/route.ts` + `confirm/route.ts`: відправляють `html` + `text`
+- `app/api/confirm/route.ts`: welcome email містить `List-Unsubscribe` + `List-Unsubscribe-Post` headers
 
 ---
 
@@ -80,8 +84,16 @@
   → redirect → /unsubscribed
 ```
 
+### List-Unsubscribe (RFC 8058)
+Додано до всіх листів крім confirmation (там ще немає підтвердженого підписника):
+```
+List-Unsubscribe: <mailto:tech@e.finc.news?subject=unsubscribe>, <https://finc.news/api/unsubscribe?token=TOKEN>
+List-Unsubscribe-Post: List-Unsubscribe=One-Click
+```
+Gmail і Outlook показують нативну кнопку "Unsubscribe" поряд з адресою відправника.
+
 ### Supabase таблиці
-- `subscribers` — email, status, confirm_token, confirmed_at (migration_006)
+- `subscribers` — email, status, confirm_token, confirmed_at, unsubscribed_at (migration_006)
 - `email_logs` — type, recipient, status, resend_id, sent_at (migration_007)
 
 ---
