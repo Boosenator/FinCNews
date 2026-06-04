@@ -22,12 +22,22 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL("/subscribed?already=1", BASE_URL));
   }
 
+  const SUBJECT = "Welcome to FinCNews — you're in!";
   const resend = new Resend(process.env.RESEND_API_KEY);
-  await resend.emails.send({
+  const { data: sent, error: mailError } = await resend.emails.send({
     from: EMAIL_FROM_TECH,
     to: data.email,
-    subject: "Welcome to FinCNews — you're in!",
+    subject: SUBJECT,
     html: welcomeEmail(data.confirm_token, BASE_URL),
+  });
+
+  await db.from("email_logs").insert({
+    type: "welcome",
+    recipient: data.email,
+    subject: SUBJECT,
+    status: mailError ? "failed" : "sent",
+    resend_id: sent?.id ?? null,
+    error: mailError ? String(mailError) : null,
   });
 
   return NextResponse.redirect(new URL("/subscribed", BASE_URL));

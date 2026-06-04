@@ -11,10 +11,10 @@ export default function UnsubscribedPage() {
     <main className="flex min-h-[60vh] items-center justify-center px-4">
       <div className="max-w-md text-center">
         <h1 className="mb-3 text-2xl font-bold tracking-tight text-zinc-100">
-          You've unsubscribed.
+          You&apos;ve unsubscribed.
         </h1>
         <p className="mb-8 text-sm leading-relaxed text-zinc-500">
-          You won't receive any more emails from FinCNews. You can resubscribe any time from the site.
+          You won&apos;t receive any more emails from FinCNews. You can resubscribe any time from the site.
         </p>
         <Link
           href="/"

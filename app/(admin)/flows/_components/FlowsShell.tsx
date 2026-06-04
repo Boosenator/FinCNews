@@ -7,6 +7,7 @@ import AnalyticsTab from "./AnalyticsTab";
 import SettingsTab from "./SettingsTab";
 import QueueTab from "./QueueTab";
 import ContentPlanTab from "./ContentPlanTab";
+import EmailTab from "./EmailTab";
 
 type Props = {
   sources: RssSource[];
@@ -27,6 +28,7 @@ const TABS = [
   { key: "content", label: "Content Plan", icon: "CP" },
   { key: "analytics", label: "Analytics", icon: "A" },
   { key: "settings", label: "Settings", icon: "S" },
+  { key: "email", label: "Email", icon: "✉" },
 ] as const;
 
 type Tab = (typeof TABS)[number]["key"];
@@ -71,6 +73,7 @@ export default function FlowsShell({ sources, logs, totalProcessed, queuePending
         {tab === "content" && <ContentPlanTab />}
         {tab === "analytics" && <AnalyticsTab sources={sources} logs={logs} />}
         {tab === "settings" && <SettingsTab sources={sources} />}
+        {tab === "email" && <EmailTab />}
       </div>
     </div>
   );

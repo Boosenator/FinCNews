@@ -57,12 +57,22 @@ export async function POST(req: NextRequest) {
 
   const confirmUrl = `${BASE_URL}/api/confirm?token=${token}`;
 
+  const SUBJECT = "Confirm your FinCNews subscription";
   const resend = new Resend(process.env.RESEND_API_KEY);
-  const { error: mailError } = await resend.emails.send({
+  const { data: sent, error: mailError } = await resend.emails.send({
     from: EMAIL_FROM_TECH,
     to: email,
-    subject: "Confirm your FinCNews subscription",
+    subject: SUBJECT,
     html: confirmationEmail(confirmUrl),
+  });
+
+  await db.from("email_logs").insert({
+    type: "confirmation",
+    recipient: email,
+    subject: SUBJECT,
+    status: mailError ? "failed" : "sent",
+    resend_id: sent?.id ?? null,
+    error: mailError ? String(mailError) : null,
   });
 
   if (mailError) {
