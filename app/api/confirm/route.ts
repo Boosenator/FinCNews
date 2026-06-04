@@ -23,12 +23,14 @@ export async function GET(req: NextRequest) {
   }
 
   const SUBJECT = "Welcome to FinCNews — you're in!";
+  const { html, text } = welcomeEmail(data.confirm_token, BASE_URL);
   const resend = new Resend(process.env.RESEND_API_KEY);
   const { data: sent, error: mailError } = await resend.emails.send({
     from: EMAIL_FROM_TECH,
     to: data.email,
     subject: SUBJECT,
-    html: welcomeEmail(data.confirm_token, BASE_URL),
+    html,
+    text,
   });
 
   await db.from("email_logs").insert({
