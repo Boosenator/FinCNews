@@ -87,6 +87,7 @@ export default function EmailTab() {
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
   const [subTab, setSubTab] = useState<SubTab>("logs");
+  const [busyUnsub, setBusyUnsub] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -97,6 +98,21 @@ export default function EmailTab() {
       setLoading(false);
     }
   }, []);
+
+  const unsubscribeUser = async (email: string) => {
+    if (!confirm(`Unsubscribe ${email}?`)) return;
+    setBusyUnsub(email);
+    try {
+      await fetch("/api/admin/subscribers", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      await load();
+    } finally {
+      setBusyUnsub(null);
+    }
+  };
 
   useEffect(() => { load(); }, [load]);
 
@@ -223,7 +239,7 @@ export default function EmailTab() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-white/[0.06] bg-zinc-900/60">
-                    {["Email", "Status", "Confirmed", "Signed up"].map((h) => (
+                    {["Email", "Status", "Confirmed", "Signed up", ""].map((h) => (
                       <th key={h} className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-zinc-600">{h}</th>
                     ))}
                   </tr>
@@ -240,6 +256,15 @@ export default function EmailTab() {
                       </td>
                       <td className="px-4 py-3 text-[11px] tabular-nums text-zinc-600">
                         {timeAgo(sub.created_at)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => unsubscribeUser(sub.email)}
+                          disabled={busyUnsub === sub.email}
+                          className="rounded border border-white/[0.06] px-2.5 py-1 text-[10px] font-semibold text-zinc-600 transition hover:border-red-500/20 hover:text-red-400 disabled:opacity-40"
+                        >
+                          {busyUnsub === sub.email ? "…" : "Unsub"}
+                        </button>
                       </td>
                     </tr>
                   ))}

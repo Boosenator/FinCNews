@@ -34,3 +34,20 @@ export async function GET(req: NextRequest) {
     subscribers: recent ?? [],
   });
 }
+
+export async function PATCH(req: NextRequest) {
+  if (!isAuthed(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { email } = await req.json();
+  if (!email) return NextResponse.json({ error: "Missing email" }, { status: 400 });
+
+  const db = supabaseAdmin();
+  const { error } = await db
+    .from("subscribers")
+    .update({ status: "unsubscribed", unsubscribed_at: new Date().toISOString() })
+    .eq("email", email)
+    .neq("status", "unsubscribed");
+
+  if (error) return NextResponse.json({ error: "DB error" }, { status: 500 });
+  return NextResponse.json({ ok: true });
+}
