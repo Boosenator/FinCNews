@@ -36,10 +36,7 @@ export default function NewsletterBar() {
       });
       const body = await res.json();
 
-      if (!res.ok) {
-        setStatus("error");
-        return;
-      }
+      if (!res.ok) { setStatus("error"); return; }
 
       if (body.message === "already_subscribed") {
         setStatus("duplicate");
@@ -56,91 +53,80 @@ export default function NewsletterBar() {
 
   const sent = status === "sent";
   const duplicate = status === "duplicate";
+  const done = sent || duplicate;
 
   return (
     <div
-      className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/[0.06] bg-zinc-950/95 px-4 py-4 backdrop-blur-md sm:px-6"
+      className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/[0.06] bg-zinc-950/95 px-4 py-3 backdrop-blur-md sm:px-6 sm:py-4"
       role="complementary"
       aria-label="Newsletter subscription"
     >
-      <div className="mx-auto flex max-w-4xl items-center gap-4">
-        {/* Text */}
-        <div className="hidden min-w-0 flex-1 sm:block">
-          {sent || duplicate ? (
-            <p className="text-sm font-medium text-cyan-400">
-              {sent ? "Check your inbox to confirm." : "You're already subscribed."}
-            </p>
-          ) : (
-            <>
-              <p className="truncate text-sm font-semibold text-zinc-200">
-                Get breaking finance news
-              </p>
-              <p className="text-xs text-zinc-600">
-                Crypto · Markets · Macro — straight to your inbox
-              </p>
-            </>
-          )}
-        </div>
+      <div className="mx-auto max-w-4xl">
 
-        {/* Mobile headline when not sent */}
-        {!sent && !duplicate && (
-          <div className="min-w-0 flex-1 sm:hidden">
-            <p className="truncate text-sm font-semibold text-zinc-200">Get breaking finance news</p>
+        {/* ── Success / duplicate state ── */}
+        {done && (
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-medium text-cyan-400">
+              {sent ? "Check your inbox to confirm your subscription." : "You're already subscribed."}
+            </p>
+            <button onClick={dismiss} aria-label="Dismiss" className="shrink-0 text-zinc-600 hover:text-zinc-400">
+              <XIcon />
+            </button>
           </div>
         )}
 
-        {/* Form */}
-        {!sent && !duplicate && (
-          <form onSubmit={submit} className="flex items-center gap-2">
-            <input
-              ref={inputRef}
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="your@email.com"
-              disabled={status === "loading"}
-              className="h-9 w-44 rounded-md border border-white/10 bg-zinc-900 px-3 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-cyan-400/40 focus:outline-none focus:ring-1 focus:ring-cyan-400/20 disabled:opacity-50 sm:w-56"
-            />
-            <button
-              type="submit"
-              disabled={status === "loading"}
-              className="h-9 whitespace-nowrap rounded-md bg-cyan-400 px-4 text-sm font-semibold text-black transition hover:bg-cyan-300 disabled:opacity-60"
-            >
-              {status === "loading" ? "..." : "Subscribe"}
-            </button>
-          </form>
+        {/* ── Default state ── */}
+        {!done && (
+          <>
+            {/* Row 1: headline + dismiss */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-zinc-200">Get breaking finance news</p>
+                <p className="hidden text-xs text-zinc-600 sm:block">
+                  Crypto · Markets · Macro — straight to your inbox
+                </p>
+              </div>
+              <button onClick={dismiss} aria-label="Dismiss" className="shrink-0 text-zinc-600 hover:text-zinc-400">
+                <XIcon />
+              </button>
+            </div>
+
+            {/* Row 2: form */}
+            <form onSubmit={submit} className="mt-2.5 flex items-center gap-2">
+              <input
+                ref={inputRef}
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="your@email.com"
+                disabled={status === "loading"}
+                className="h-9 min-w-0 flex-1 rounded-md border border-white/10 bg-zinc-900 px-3 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-cyan-400/40 focus:outline-none focus:ring-1 focus:ring-cyan-400/20 disabled:opacity-50"
+              />
+              <button
+                type="submit"
+                disabled={status === "loading"}
+                className="h-9 shrink-0 rounded-md bg-cyan-400 px-4 text-sm font-semibold text-black transition hover:bg-cyan-300 disabled:opacity-60"
+              >
+                {status === "loading" ? "…" : "Subscribe"}
+              </button>
+            </form>
+
+            {status === "error" && (
+              <p className="mt-1.5 text-xs text-red-400">Something went wrong. Please try again.</p>
+            )}
+          </>
         )}
 
-        {/* Sent / duplicate state on mobile */}
-        {(sent || duplicate) && (
-          <p className="flex-1 text-sm font-medium text-cyan-400 sm:hidden">
-            {sent ? "Check your inbox to confirm." : "Already subscribed."}
-          </p>
-        )}
-
-        {/* Dismiss */}
-        <button
-          onClick={dismiss}
-          aria-label="Dismiss"
-          className="flex-shrink-0 text-zinc-600 transition hover:text-zinc-400"
-        >
-          <svg
-            viewBox="0 0 20 20"
-            fill="currentColor"
-            className="h-4 w-4"
-          >
-            <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
-          </svg>
-        </button>
       </div>
-
-      {/* Error message */}
-      {status === "error" && (
-        <p className="mt-2 text-center text-xs text-red-400">
-          Something went wrong. Please try again.
-        </p>
-      )}
     </div>
+  );
+}
+
+function XIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+      <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+    </svg>
   );
 }
