@@ -59,7 +59,11 @@ ${topSignals.map((s) => `- [${s.type}] ${s.description} (strength: ${s.strength}
 
 SENTIMENT:
 - Fear & Greed: ${data.fearGreedCurrent}/100 (${data.fearGreedDelta7d > 0 ? '+' : ''}${data.fearGreedDelta7d} vs 7 days ago)
-- Sentiment: ${data.sentimentBreakdown.positive} positive / ${data.sentimentBreakdown.negative} negative stories
+- Sentiment: ${
+    data.sentimentBreakdown.positive + data.sentimentBreakdown.negative > 0
+      ? `${data.sentimentBreakdown.positive} positive / ${data.sentimentBreakdown.negative} negative stories`
+      : 'news sentiment not available'
+  }
 - Trending coins: ${data.trendingCoins.slice(0, 5).map((c) => `${c.name} (${c.symbol})`).join(', ')}
 
 TOP REDDIT POSTS:

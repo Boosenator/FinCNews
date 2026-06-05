@@ -121,7 +121,7 @@ export async function executeSelfWork(
 
   // Fire-and-forget: embed, extract forecast + position
   if (memId) void saveEmbedding(memId, `${article.title}\n\n${article.excerpt}`);
-  void extractAndSaveForecast(article.title, article.body, slug);
+  void extractAndSaveForecast(article.title, article.body, slug, data);
   void extractAndSavePosition(article.title, article.excerpt, article.body);
 
   return {

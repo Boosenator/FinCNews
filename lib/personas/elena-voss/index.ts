@@ -109,7 +109,7 @@ export async function runElenaVoss(): Promise<RunResult> {
 
     // Fire-and-forget: embed, extract forecast, extract position (never block main flow)
     if (memRow?.id) void saveEmbedding(memRow.id, memContent);
-    void extractAndSaveForecast(article.title, article.body, slug);
+    void extractAndSaveForecast(article.title, article.body, slug, data);
     void extractAndSavePosition(article.title, article.excerpt, article.body);
 
     await supabase

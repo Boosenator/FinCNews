@@ -84,21 +84,39 @@ export async function updateNarrativeTracker(trendingCoins: TrendingCoin[]): Pro
 
     let newStage: NarrativeCycleStage = n.currentStage;
 
-    if (inTrending) {
-      if (daysSinceFirst < 2) newStage = 'emerging';
-      else if (daysSinceFirst < 7) newStage = 'growing';
-      else newStage = 'peak';
-    } else {
-      if (n.currentStage === 'emerging') newStage = 'dead';
-      else if (n.currentStage === 'growing') newStage = 'fading';
-      else if (n.currentStage === 'peak') newStage = 'fading';
-      else if (n.currentStage === 'fading') newStage = 'dead';
-    }
-
     const score = inTrending
       ? Math.max(10, 100 - (trendingCoins.find((c) =>
           c.name.toLowerCase() === n.narrative.toLowerCase())?.score ?? 7) * 10)
       : 0;
+
+    // Rolling 3-day average for smoother transitions
+    const recentHistory = [...n.trendScores.slice(-2), score];
+    const recentAvg     = recentHistory.reduce((a, b) => a + b, 0) / recentHistory.length;
+    const peakRatio     = n.peakScore > 0 ? recentAvg / n.peakScore : 1;
+
+    if (inTrending) {
+      if (daysSinceFirst < 3) {
+        newStage = 'emerging';
+      } else if (daysSinceFirst < 7) {
+        // Started declining from peak while still in trending → peak
+        newStage = peakRatio < 0.55 ? 'peak' : 'growing';
+      } else {
+        // 7+ days: near historical max → peak, declining → fading
+        newStage = peakRatio >= 0.65 ? 'peak' : 'fading';
+      }
+    } else {
+      // Not in trending — use peakScore ratio for decay speed
+      if (n.currentStage === 'emerging') {
+        newStage = 'dead';
+      } else if (n.currentStage === 'growing') {
+        newStage = 'fading';
+      } else if (n.currentStage === 'peak') {
+        newStage = 'fading';
+      } else if (n.currentStage === 'fading') {
+        // Dead only when well below peak (not just a 1-day dip)
+        newStage = peakRatio < 0.12 ? 'dead' : 'fading';
+      }
+    }
 
     const updated: NarrativeState = {
       ...n,

@@ -79,7 +79,11 @@ ${signals.map((s) => `- [${s.type}] strength=${s.strength} — ${s.description}`
 
 CURRENT SENTIMENT:
 - Fear & Greed: ${data.fearGreedCurrent}/100 (${data.fearGreedDelta7d > 0 ? '+' : ''}${data.fearGreedDelta7d} pts 7d change)
-- Sentiment breakdown: ${data.sentimentBreakdown.positive} positive / ${data.sentimentBreakdown.negative} negative / ${data.sentimentBreakdown.neutral} neutral
+- Sentiment breakdown: ${
+    data.sentimentBreakdown.positive + data.sentimentBreakdown.negative + data.sentimentBreakdown.neutral > 0
+      ? `${data.sentimentBreakdown.positive} positive / ${data.sentimentBreakdown.negative} negative / ${data.sentimentBreakdown.neutral} neutral`
+      : 'not available (CryptoPanic not configured)'
+  }
 
 TRENDING COINS: ${data.trendingCoins.map((c) => c.name).join(', ') || 'none'}
 

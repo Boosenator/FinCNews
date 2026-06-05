@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase';
+import { callClaude, parseClaudeJson } from '@/lib/personas/shared';
 import type { EditorialSession, PersonaFeedback } from './evaluate';
 import type { AnalystContext } from './data-collector';
 
@@ -180,7 +181,7 @@ export async function updateEditorialStandards(session: EditorialSession): Promi
   }
 }
 
-// Check previous directives against today's article (mark as followed/not followed)
+// Check previous directives against today's article — LLM-based verification
 export async function verifyPreviousDirectives(
   personaId: string,
   todayArticle: { title: string; body: string } | null
@@ -195,28 +196,50 @@ export async function verifyPreviousDirectives(
     .eq('memory_type', 'directive_history')
     .filter('metadata->>persona_ref', 'eq', personaId)
     .filter('metadata->>followed', 'is', null)
-    .limit(5);
+    .limit(3);
 
   if (!openDirectives?.length) return;
 
   for (const row of openDirectives) {
     const m = row.metadata as { directive?: string };
-    const directive = (m.directive ?? '').toLowerCase();
-    const articleText = (todayArticle.title + ' ' + todayArticle.body).toLowerCase();
+    if (!m.directive) continue;
 
-    // Simple heuristic: if directive mentions "question" and article doesn't end with "?", it was followed
-    let followed: boolean | null = null;
-    if (directive.includes('question') || directive.includes('close with')) {
-      followed = !articleText.trimEnd().endsWith('?');
-    } else if (directive.includes('vary') || directive.includes('different opening')) {
-      followed = true; // assume followed if they published at all (can't reliably check)
-    }
+    // LLM-based verification (haiku — fast and cheap)
+    const followed = await verifyDirectiveWithLLM(m.directive, todayArticle);
 
     if (followed !== null) {
       await db.from('persona_memory').update({
         metadata: { ...m, followed, followed_at: new Date().toISOString() },
       }).eq('id', row.id);
     }
+  }
+}
+
+// ── LLM directive verification ────────────────────────────────────────────────
+
+async function verifyDirectiveWithLLM(
+  directive:    string,
+  article:      { title: string; body: string }
+): Promise<boolean | null> {
+  const prompt = `Did the writer apply this specific directive in their new article?
+
+DIRECTIVE: "${directive}"
+
+NEW ARTICLE:
+Title: "${article.title}"
+Body preview: "${article.body.slice(0, 700)}..."
+
+Answer based only on the article text — did they follow the specific instruction?
+Be strict: partial compliance counts as not followed.
+
+Return ONLY valid JSON: { "followed": boolean, "reason": "one sentence" }`;
+
+  try {
+    const res    = await callClaude({ model: 'claude-haiku-4-5-20251001', max_tokens: 120, messages: [{ role: 'user', content: prompt }] });
+    const parsed = await parseClaudeJson<{ followed: boolean; reason: string }>(res);
+    return parsed.followed;
+  } catch {
+    return null; // best-effort, don't block
   }
 }
 

@@ -105,7 +105,7 @@ export async function runMarcusWebb(): Promise<RunResult> {
     }).select('id').single();
 
     if (memRow?.id) void saveEmbedding(memRow.id, memContent);
-    void extractAndSaveForecast(article.title, article.body, slug, data.btcPrice);
+    void extractAndSaveForecast(article.title, article.body, slug, data);
     void extractAndSavePosition(article.title, article.excerpt, article.body);
     void updateBaseline(data);
 
