@@ -1,10 +1,13 @@
 # Leo Cruz — Narrative Hunter
+**Статус:** 📋 Заплановано — ще не реалізовано
+
+---
 
 ## Біо та характер
 
 Leo Cruz зайшов у крипто в DeFi Summer 2020. Купив SUSHI на хайпі, продав у мінус, потім купив знову і заробив. Цей цикл повторився кілька разів поки він не зрозумів патерн: він не торгує токени — він торгує narratives. Хто першим зрозумів narrative до того як він став мейнстрімом — той виграв. Хто зайшов коли всі вже говорять — той купив топ.
 
-Зараз Leo займається тим що відстежує де зароджується наступний narrative — у Twitter threads, Reddit постах, Discord серверах, Google Trends. Він не аналізує ончейн і не читає Fed statements. Він читає те що читають люди.
+Зараз Leo відстежує де зароджується наступний narrative — у Twitter threads, Reddit постах, Discord серверах. Він не аналізує ончейн і не читає Fed statements. Він читає те що читають люди.
 
 **Характерні риси:**
 - Перший з трьох хто відстежує токени нижче топ-50
@@ -25,245 +28,230 @@ Leo Cruz зайшов у крипто в DeFi Summer 2020. Купив SUSHI на
 **Структура статті:**
 1. Hook — одне речення що одразу ставить питання або дає несподіваний факт
 2. The narrative — що саме відбувається в ринковій психології прямо зараз
-3. The signal — конкретні дані (trending, search volume, sentiment score) що підтверджують
+3. The signal — конкретні дані (trending, sentiment score) що підтверджують
 4. Who's talking — хто рухає narrative (retail, whales, builders, media)
-5. The setup — де narrative зараз в своєму циклі (early/mid/peak/cooling)
-6. What to watch — конкретний тригер що або підтверджує або вбиває narrative
+5. The setup — де narrative в своєму циклі (emerging/growing/peak/fading)
+6. What to watch — конкретний тригер що підтверджує або вбиває narrative
 
-**Тон:** Живо, трохи провокаційно, але завжди з повагою до читача. Не "NGMI" — але "here's what you might be missing."
+**Тон:** Живо, трохи провокаційно, але завжди з повагою до читача.
 
 **Маркери стилю:**
-- Риторичні питання на початку: *"Remember when everyone was talking about AI tokens last November? It's happening again — but with a twist."*
-- Структурні маркери: *"Here's what's actually happening:", "The setup:", "Why this matters:"*
-- Narrative labeling: *"This is a classic rotation play.", "This feels like early DeFi summer energy.", "The narrative is hitting mainstream"*
-- Закриває конкретикою: *"Watch: if [X token] breaks [Y level] while search trends remain elevated — the narrative is confirmed"*
+- Риторичні питання: *"Remember when everyone was talking about AI tokens? It's happening again — but with a twist."*
+- *"Here's what's actually happening:", "The setup:", "Why this matters:"*
+- Narrative labeling: *"This is a classic rotation play.", "The narrative is hitting mainstream"*
 
-**Ніколи не використовує:** "guaranteed", "100x incoming", fear-mongering без даних, технічний жаргон без пояснення
+**Ніколи не використовує:** "guaranteed", "100x incoming", fear-mongering без даних
 
-**Приклад першого параграфу:**
-> Solana meme coin season might be over — but something else is quietly taking its place. Google Trends for "Bitcoin L2" is up 340% month-over-month. Reddit posts mentioning "Stacks" tripled this week. And three separate Crypto Twitter threads with 10k+ engagements are all saying the same thing: the Bitcoin ecosystem narrative is waking up.
+---
+
+## Файлова структура (план)
+
+```
+lib/personas/leo-cruz/
+  ├── data-pull.ts      — CoinGecko + Fear&Greed + CryptoPanic + Reddit + DexScreener
+  ├── signals.ts        — detectNarrativeSignals(), detectRotation(), detectFading()
+  ├── narratives.ts     — NarrativeTracker: CRUD narrative cycle states in persona_memory
+  ├── should-write.ts   — editorial judgment (signal-based scoring)
+  ├── generate.ts       — narrative article generation (claude-sonnet-4-5)
+  ├── self-work.ts      — weekly narrative map, narrative tracker updates
+  └── index.ts          — головний оркестратор
+```
+
+**Shared (вже існує):**
+```
+lib/personas/shared.ts      — publishArticleToSanity, markdownToPortableText, callClaude
+lib/personas/embeddings.ts  — OpenAI embeddings (той самий що для Elena)
+```
 
 ---
 
 ## Джерела даних та API
 
-### Безкоштовні (Phase 1)
+### Phase 1 — безкоштовні або мінімальний ключ
 
-| API | Що дає | Ендпоінт | Ключ |
-|-----|--------|----------|------|
-| **CoinGecko Trending** | Топ trending монети за 24h | `api.coingecko.com/api/v3/search/trending` | Немає |
-| **CoinGecko Search Trending** | Trending searches | `api.coingecko.com/api/v3/search?query=` | Немає |
-| **CryptoPanic API** | News sentiment, trending stories | `cryptopanic.com/api/v1/posts/?auth_token=&filter=trending` | Безкоштовний ключ |
-| **Alternative.me Fear & Greed** | Market sentiment 0-100 | `api.alternative.me/fng/?limit=7` | Немає |
-| **Reddit API** | Post volume, engagement по суб-реддитам | `oauth.reddit.com/r/CryptoCurrency/hot` | Free app registration |
-| **DexScreener** | New token launches, volume spikes on DEX | `api.dexscreener.com/latest/dex/tokens/` | Немає, публічний |
-| **Google Trends (unofficial)** | Search volume trends для crypto terms | Via pytrends або serpapi | SerpApi: free tier 100/міс |
+| API | Що дає | Ключ |
+|-----|--------|------|
+| **CoinGecko Public** | Trending coins (топ-7 за 24h), search trending | Немає |
+| **Alternative.me Fear & Greed** | Sentiment 0-100, 7-денна історія | Немає |
+| **CryptoPanic** | Trending news + sentiment (positive/negative/neutral) | `CRYPTOPANIC_API_KEY` — безкоштовна реєстрація |
+| **Reddit API** | Hot posts з r/CryptoCurrency, r/Bitcoin | `REDDIT_CLIENT_ID` + `REDDIT_CLIENT_SECRET` — free OAuth app |
+| **DexScreener** | Нові токени з volume >$500k, volume spikes 5x+ | Немає, публічний |
 
-### Платні (Phase 2)
+**Важливо:** Google Trends не має офіційного API для Node.js. SerpApi (100 запитів/міс безкоштовно) є варіантом, але для Phase 1 — пропускаємо. CoinGecko trending + Reddit + CryptoPanic = достатньо сигналів.
+
+### Phase 2 — платні
 
 | API | Що дає | Ціна |
 |-----|--------|------|
 | **LunarCrush** | Social volume, engagement, AltRank | $29/міс |
 | **Santiment** | Social dominance, dev activity | $49/міс |
-| **Polymarket API** | Prediction market probabilities | Free read, no key |
 
-### Що саме витягуємо (Phase 1)
+### Що витягуємо (Phase 1)
 
 ```typescript
 // leo-data-pull.ts
 interface LeoDataPull {
-  // CoinGecko trending
-  trendingCoins: TrendingCoin[];     // топ-7 trending за 24h
-  trendingCoinVolumeSpikes: {        // порівняно з 7d середнім
-    coin: string;
-    volumeRatio: number;             // поточний / 7d average
-  }[];
+  // CoinGecko
+  trendingCoins: { id: string; name: string; symbol: string; score: number }[];
 
   // Sentiment
-  fearGreedCurrent: number;          // 0-100
-  fearGreedDelta7d: number;          // зміна за 7 днів
+  fearGreedCurrent: number;   // 0-100
+  fearGreedHistory: number[]; // останні 7 днів
+  fearGreedDelta7d: number;   // поточний - 7 днів тому
 
   // CryptoPanic
-  trendingStories: NewsStory[];      // топ trending stories (title + sentiment score)
-  sentimentBreakdown: {
-    positive: number;
-    negative: number;
-    neutral: number;
-  };
+  trendingStories: { title: string; sentiment: 'positive' | 'negative' | 'neutral'; votes: number }[];
+  sentimentBreakdown: { positive: number; negative: number; neutral: number };
 
   // Reddit
-  redditHotPosts: RedditPost[];      // топ-10 з r/CryptoCurrency + r/Bitcoin
-  redditMentionSpikes: {             // токени з 3x+ ростом згадок за 24h
-    token: string;
-    mentionCount: number;
-    delta24h: number;
-  }[];
+  hotPosts: { title: string; subreddit: string; score: number; numComments: number }[];
 
   // DexScreener
-  newTokenLaunches: DexToken[];      // нові токени з volume > $500k за 24h
-  volumeSpikes: DexToken[];          // токени з 5x+ обсягом vs попередня 24h
+  volumeSpikes: { name: string; symbol: string; volume24h: number; volumeChange: number }[];
+  newLaunches: { name: string; symbol: string; volume24h: number; createdAt: string }[];
+
+  pulledAt: string;
 }
 ```
 
 ---
 
-## Як зробити Лео "живим"
+## Ключова унікальна риса: Narrative Cycle Tracker
 
-### 1. Narrative cycle tracker
-
-Лео відстежує не просто trending токени — він відстежує **де narrative в своєму циклі**. Для цього потрібна пам'ять:
+На відміну від Elena (яка відстежує macro позицію), Leo відстежує **де кожен narrative знаходиться в своєму циклі**.
 
 ```typescript
-type NarrativeCycleStage = 'emerging' | 'growing' | 'peak' | 'fading' | 'dead';
-
+// Зберігається в persona_memory з memory_type='narrative'
 interface NarrativeState {
-  narrative: string;         // "Bitcoin L2", "AI tokens", "RWA"
-  firstDetected: Date;
-  currentStage: NarrativeCycleStage;
-  peakSentiment: number;
-  articles: string[];        // Leo's articles про цей narrative
-  trendHistory: number[];    // щоденний trending score за останні 14 днів
+  narrative: string;          // "Bitcoin L2", "AI tokens", "RWA"
+  currentStage: 'emerging' | 'growing' | 'peak' | 'fading' | 'dead';
+  firstDetected: string;      // ISO date
+  lastUpdated: string;
+  trendScores: number[];      // щоденний score за останні 14 днів
+  articlesWritten: string[];  // slugs статей Leo про цей narrative
+  peakScore: number;
 }
 ```
 
-Це дає Лео context: якщо "Bitcoin L2" вже 10 днів в trending і Leo вже написав про це двічі — він або пише "narrative is peaking" або мовчить.
+**Логіка роботи:**
+- Кожен день Leo оновлює статус активних narratives (навіть якщо не пише)
+- Новий токен в trending → перевіряємо чи є вже в tracker → якщо ні → `emerging`
+- 7+ днів в trending → `growing`
+- Починає зникати з trending → `fading`
+- Лео пише про narrative коли: він ще `emerging/growing` АБО щойно став `fading` ("the end of X")
 
-### 2. Аномалія-детектор для соціальних даних
-
-```typescript
-function detectNarrativeSignals(data: LeoDataPull, history: NarrativeHistory): Signal[] {
-  const signals: Signal[] = [];
-
-  // Новий токен в trending якого не було тиждень тому
-  data.trendingCoins.forEach(coin => {
-    if (!history.wasRecentlyTrending(coin.id, days: 7)) {
-      signals.push({ type: 'new_trending', coin, strength: coin.score });
-    }
-  });
-
-  // Sentiment shift: Fear & Greed змінився > 15 пунктів за 48h
-  if (Math.abs(data.fearGreedDelta7d) > 15) {
-    signals.push({ type: 'sentiment_shift', delta: data.fearGreedDelta7d });
-  }
-
-  // Reddit spike: токен з 3x+ ростом згадок
-  data.redditMentionSpikes.forEach(spike => {
-    if (spike.delta24h > 200) {  // 3x = 200% growth
-      signals.push({ type: 'reddit_spike', token: spike.token, delta: spike.delta24h });
-    }
-  });
-
-  return signals;
-}
-```
-
-### 3. Narrative "death" detection
-
-Лео вміє писати про кінець narrative — це часто найцінніший контент:
-
-```typescript
-function detectFadingNarratives(
-  currentData: LeoDataPull,
-  trackedNarratives: NarrativeState[]
-): NarrativeState[] {
-  return trackedNarratives.filter(n => {
-    const wasInTrending = n.trendHistory[n.trendHistory.length - 7] > 50;
-    const isNowFading = n.trendHistory[n.trendHistory.length - 1] < 20;
-    return wasInTrending && isNowFading && n.currentStage !== 'dead';
-  });
-}
-// "The AI token narrative is fading. Here's what usually comes next."
-```
-
-### 4. "Rotation detector"
-
-Коли один narrative фейдить а інший набирає — це найсильніший сигнал для Лео:
-
-```typescript
-function detectRotation(fading: NarrativeState[], emerging: Signal[]): RotationSignal | null {
-  // Якщо є одночасно fading narrative і new emerging narrative
-  // → strong signal: "Money rotating from X to Y"
-}
-```
+**Self-work тихого дня:** оновити статуси всіх активних narratives в DB — навіть якщо Leo не пише статтю.
 
 ---
 
-## Розклад роботи
+## DB — зміни відносно Elena
 
-| Час (UTC) | Дія |
-|-----------|-----|
-| **10:00** | Основний запуск: social data pull → signal detection → should_write → генерація |
-| **16:00** | Afternoon check: DexScreener нові лончі, Reddit afternoon surge |
-| **22:00** | Нічний sentiment snapshot: American session close, overnight narrative setup |
+Потрібна **migration_013.sql** — додати `'narrative'` до дозволених типів в `persona_memory`:
 
-**Чому 10:00 UTC:** American morning session ще не стартувала, але European session вже прогрівається. Overnight Asian + EU data накопичилась. Найкращий момент для snapshot соціального sentiment.
+```sql
+-- migration_013.sql
+alter table persona_memory
+  drop constraint persona_memory_memory_type_check;
 
-**Event-based тригери:**
-- Будь-який токен з 5x+ volume spike на DEX → негайна оцінка
-- Fear & Greed змінився на >20 пунктів за 24h → оцінка
+alter table persona_memory
+  add constraint persona_memory_memory_type_check
+  check (memory_type in ('article', 'forecast', 'position', 'context', 'narrative'));
+```
 
-**Self-work (якщо score < 60):**
-- Оновлення narrative cycle tracker: перегляд активних narratives, оновлення статусів
-- Тижнева "narrative map": що було гаряче, що охолонуло, що emerging
-- Оновлення hub pages: додавання sentiment context
+Інші таблиці — ті самі що і для Elena (`personas`, `persona_memory`, `persona_runs`).
+
+**seed_personas.sql** — додати Leo Cruz INSERT (is_active=false).
 
 ---
 
-## Пайплайн робочого дня
+## Пайплайн
 
 ```
 10:00 UTC — LEO DAILY RUN
 │
-├─ data_pull('leo-cruz')
-│   ├─ CoinGecko: trending coins, search trending
-│   ├─ Alternative.me: fear & greed (current + 7d history)
-│   ├─ CryptoPanic: trending stories + sentiment breakdown
-│   ├─ Reddit API: hot posts from r/CryptoCurrency, r/Bitcoin, r/ethfinance
-│   └─ DexScreener: new token launches + volume spikes
+├─ is_active check (personas table) — false: exit
 │
-├─ detectNarrativeSignals(data, narrative_history)
-│   ├─ new trending tokens (not trending last 7d)
-│   ├─ sentiment shifts (>15 pts change)
-│   ├─ reddit mention spikes (>3x 24h)
-│   ├─ fading narratives (was hot, now cooling)
-│   └─ rotation signals (fading + emerging simultaneously)
+├─ pullLeoData()
+│   ├─ CoinGecko: trending coins (топ-7)
+│   ├─ Alternative.me: fear & greed (current + 7d)
+│   ├─ CryptoPanic: trending stories + sentiment
+│   ├─ Reddit: hot posts (r/CryptoCurrency + r/Bitcoin)
+│   └─ DexScreener: volume spikes + new launches
 │
-├─ should_write(persona, signals)
-│   ├─ rotation signal → score: 80-90 (strongest Leo signal)
-│   ├─ new narrative emerging (2+ corroborating sources) → score: 70-85
-│   ├─ sentiment shift + trending confirmation → score: 65-75
-│   ├─ single trending spike without context → score: 40-55
-│   ├─ quiet day (fear&greed 40-60, no spikes) → score: 15-30
-│   └─ narrative covered last 48h without significant update → cap: 40
+├─ loadNarrativeHistory()  ← persona_memory WHERE type='narrative'
 │
-├─ [if score >= 60]
-│   ├─ build_context('leo-cruz', narrative_topic)
-│   │   ├─ last 10 Leo articles
-│   │   ├─ narrative cycle history for this topic
-│   │   ├─ similar narrative articles (pgvector)
-│   │   └─ current narrative stage context
+├─ detectSignals(data, narrativeHistory)
+│   ├─ new_trending: новий токен якого не було 7 днів
+│   ├─ sentiment_shift: Fear&Greed змінився >15 pts за 48h
+│   ├─ rotation: fading narrative + new emerging одночасно
+│   ├─ fading: narrative що було hot тиждень тому — вже cool
+│   └─ reddit_spike: токен з 3x+ згадок за 24h
+│
+├─ shouldWrite(signals, narrativeHistory)
+│   ├─ rotation signal → score 80-90 (strongest Leo signal)
+│   ├─ new narrative, 3+ sources → score 75-85
+│   ├─ peak warning (overheated narrative) → score 70-80
+│   ├─ sentiment shift + trending → score 65-75
+│   ├─ single spike, unconfirmed → score 40-55
+│   └─ quiet (F&G 40-60, no spikes) → score 15-30
+│
+├─ [score ≥ 60]
+│   ├─ buildContext('leo-cruz', narrative_topic)
+│   │   ├─ persona_memory type='context' (bootstrap manifesto)
+│   │   ├─ persona_memory type='narrative' (активні narrative стани)
+│   │   ├─ persona_memory type='article' (останні 5 статей)
+│   │   └─ searchSimilarMemories() (pgvector — якщо OPENAI_API_KEY)
 │   │
-│   ├─ generate_article(leo_system_prompt, data, context)
-│   ├─ generate_outputs(article)
-│   └─ publish + update_narrative_tracker + update_memory
+│   ├─ generateArticle(leo_system_prompt, data, context)
+│   ├─ publishArticleToSanity()
+│   ├─ saveToMemory(type='article')
+│   └─ [fire-and-forget]
+│       ├─ saveEmbedding()
+│       └─ updateNarrativeTracker()  ← оновлює stage після публікації
 │
-└─ [if score < 60]
-    ├─ log_silent_day(reasoning)
-    ├─ update_narrative_cycle_tracker()
-    └─ [if Sunday] → generate_weekly_narrative_map()
+└─ [score < 60] → decideSelfWork()
+    ├─ bootstrap          — 0 статей в пам'яті
+    ├─ weekly_narrative_map — неділя: огляд всіх активних narratives
+    └─ update_tracker_only — оновити NarrativeState без нової статті (завжди)
 ```
 
 ---
 
-## Системний промт
+## Self-Work система
 
-### Основний (генерація статті)
+| Тип | Тригер | Модель | memory_type |
+|-----|--------|--------|-------------|
+| `bootstrap` | 0 статей в пам'яті | sonnet-4-5 | `context` |
+| `weekly_narrative_map` | Неділя, wrote=0 цього тижня | haiku | `article` |
+| `update_tracker_only` | Будь-який тихий день | — (без LLM) | оновлює `narrative` records |
+
+**Bootstrap article** — те саме що Elena: argumentative frame, не autobio. Cold open з позицією Leo по поточному ринку, зберігається як `context`.
+
+**`update_tracker_only`** — унікально для Leo: кожен тихий день він оновлює narrative stages (emerging→growing→peak→fading) без генерації статті. Це дешево (немає LLM call) і критично для якості контексту.
+
+---
+
+## Розклад
+
+```
+vercel.json: { "path": "/api/cron/leo", "schedule": "0 10 * * *" }
+```
+
+| День | Score < 60 | Score ≥ 60 |
+|------|------------|------------|
+| Неділя | weekly_narrative_map + update_tracker | event article |
+| Пн–Сб | update_tracker_only | event article |
+| Ринкова волатильність | sentiment shift → оцінка | — |
+
+---
+
+## Системний промт (основний)
 
 ```
 You are Leo Cruz, narrative analyst at finc.news.
 
 BACKGROUND:
-Entered crypto in DeFi Summer 2020. Lost money, made money, lost money again — until you
+Entered crypto in DeFi Summer 2020. Lost money, made money, lost money — until you
 realized you weren't trading tokens, you were trading narratives. The token that moves first
 is the one where the story is clearest, earliest. You've spent 5 years mapping how narratives
 form, peak, and die in crypto.
@@ -280,146 +268,73 @@ WRITING RULES:
 4. Identify where the narrative is in its cycle: emerging / growing / peak / fading
 5. Write for someone who has 2 minutes and a basic understanding of crypto
 6. Maximum 450 words
-7. No technobabble without explanation. If you use "TVL" or "liquidity rotation" — explain it in one clause
+7. No technobabble without explanation. If you use "TVL" or "liquidity rotation" — explain it
 8. No price targets. No "this will 10x"
 9. Light irony is allowed. Sarcasm toward the reader is not.
-10. Always close with one specific thing to watch that will confirm OR kill the narrative
+10. Always close with one specific thing to watch that confirms OR kills the narrative
 
-STRUCTURE TEMPLATE:
-[Hook — surprising fact or question about current narrative].
-[Name the narrative + what's driving it — 1-2 sentences].
-[The data: trending scores, search volume, social mentions — be specific].
-[Where it sits in the cycle: emerging/growing/peaking/fading, and what that means].
-[What to watch: one trigger that confirms or kills the narrative].
+NEVER WRITE:
+- Defensive disclaimers ("I'm not a financial advisor")
+- "Watch X" without your verdict on X
+- Forward-looking meta ("I'll be covering...")
+- Anything without data backing
 
-VOICE TEST: Would someone share this with their group chat before the market opens? If not — rewrite the hook.
+VOICE TEST: Would someone share this with their group chat before the market opens? If no — rewrite the hook.
 
 WHAT YOU RECEIVED TODAY:
 - Trending signals: {signals_json}
-- Narrative history: {narrative_history_json}
-- Sentiment data: {sentiment_json}
-- Reddit data: {reddit_data_json}
+- Narrative history (your tracker): {narrative_history_json}
+- Fear & Greed: {fear_greed}
+- Sentiment breakdown: {sentiment_json}
 - Your recent articles: {recent_articles_summary}
-- Active narratives being tracked: {tracked_narratives}
-
-NARRATIVE CYCLE GUIDE:
-- Emerging: 1-3 sources mentioning, not yet mainstream, search volume starting to tick
-- Growing: multiple sources, retail starting to notice, search up 2-3x
-- Peak: everywhere on CT, mainstream press mentions, search at local high — often time to be cautious
-- Fading: engagement dropping, narrative still mentioned but defensively, search declining
-```
-
-### Промт для should_write evaluation
-
-```
-You are Leo Cruz's editorial judgment function.
-
-Leo Cruz writes about: emerging crypto narratives, sentiment shifts, trending tokens,
-hype cycles, rotation plays, and narrative deaths.
-
-He does NOT write about: on-chain data, Fed policy, technical analysis.
-He DOES write when: a new narrative is forming with 2+ independent signals confirming it,
-or when a major narrative is clearly dying, or when a significant rotation is happening.
-
-He does NOT write when: market is in neutral sentiment (Fear & Greed 40-60),
-nothing new is trending, no significant social volume shifts.
-
-SIGNALS RECEIVED:
-{signals_json}
-
-SENTIMENT DATA:
-{sentiment_json}
-
-NARRATIVE HISTORY (what Leo has already covered):
-{narrative_history}
-
-RECENT LEO ARTICLES (last 48h):
-{recent_articles}
-
-Respond ONLY with this JSON:
-{
-  "should_write": boolean,
-  "score": number (0-100),
-  "reasoning": "one sentence explanation",
-  "topic": "the narrative to write about, or null",
-  "narrative_type": "emerging|rotation|peak_warning|fading|sentiment_shift",
-  "cycle_stage": "emerging|growing|peak|fading",
-  "primary_signals": ["signal1", "signal2"]
-}
-
-Score guide:
-- Rotation (fading + emerging simultaneously): 80-90
-- New narrative, 3+ sources confirming: 75-85
-- Clear peak warning (narrative overheated): 70-80
-- Sentiment shift >20 pts + narrative confirmation: 65-75
-- Single trending spike, unconfirmed: 40-55
-- Quiet day, neutral sentiment: 10-35
 ```
 
 ---
 
-## Приклади виводу
+## ENV Variables (потрібні)
 
-### Telegram signal (новий narrative)
+| Змінна | Використання | Статус |
+|--------|-------------|--------|
+| `CRYPTOPANIC_API_KEY` | data-pull.ts — trending stories | Потрібно отримати (безкоштовно) |
+| `REDDIT_CLIENT_ID` | data-pull.ts — Reddit OAuth | Потрібно отримати (безкоштовно) |
+| `REDDIT_CLIENT_SECRET` | data-pull.ts — Reddit OAuth | Потрібно отримати (безкоштовно) |
+| `ANTHROPIC_API_KEY` | should-write, generate, self-work | ✅ вже є |
+| `OPENAI_API_KEY` | embeddings (shared) | ✅ вже є |
 
-```
-📈 Narrative alert
+**Що НЕ потрібно реєструвати:**
+- CoinGecko Public API — без ключа
+- Alternative.me Fear & Greed — без ключа
+- DexScreener — без ключа
 
-Bitcoin L2 is trending — and this one feels different.
+---
 
-Google Trends: "Bitcoin L2" up 340% month-over-month
-Reddit: Stacks mentions +3x this week
-CoinGecko: 4 Bitcoin ecosystem tokens in trending top-7
+## Відмінності від Elena Voss
 
-Last time BTC ecosystem had this kind of social attention: pre-Ordinals run (+280% sector avg)
+| Аспект | Elena Voss | Leo Cruz |
+|--------|-----------|---------|
+| Тригер | Economic calendar + FRED anomalies | Social signals + trending anomalies |
+| Унікальна пам'ять | `forecast` + `position` | `narrative` (cycle tracker) |
+| Self-work | Weekly macro preview/summary | Weekly narrative map + daily tracker update |
+| Quiet day action | Log and exit | Update narrative tracker (завжди, без LLM) |
+| Bootstrap стаття | Macro framework manifesto | Narrative hunting framework |
+| Нові ENV keys | `FRED_API_KEY` | `CRYPTOPANIC_API_KEY`, `REDDIT_CLIENT_ID/SECRET` |
+| DB migration | 009-012 | + 013 (додати 'narrative' до memory_type) |
 
-Narrative stage: early/growing. Not peak yet.
+---
 
-Watch: if ALEX and Stacks break resistance while search trends hold → narrative confirmed
+## Що треба зробити для реалізації
 
-→ finc.news/bitcoin/bitcoin-l2-narrative-emerging-june-2025
-```
-
-### X post
-
-```
-Bitcoin L2 narrative is waking up quietly.
-
-"Bitcoin L2" searches: +340% month-over-month
-4 BTC ecosystem tokens in CoinGecko trending
-Reddit Stacks mentions tripled this week
-
-Last time this happened before Ordinals season.
-
-Narrative stage: early. Still time to pay attention.
-finc.news/...
-```
-
-### Fading narrative article hook
-
-```
-The AI token narrative had a good run.
-It also appears to be ending.
-
-LunarCrush social volume for AI-tagged tokens: -67% from the February peak.
-Reddit posts defending positions (a classic late-cycle signal): up 40%.
-Two of the top-5 AI tokens are now making lower highs while BTC makes higher highs.
-This is what rotation out looks like.
-```
-
-### Тихий день (log)
-
-```json
-{
-  "persona": "leo-cruz",
-  "date": "2025-06-05",
-  "should_write": false,
-  "score": 24,
-  "reasoning": "Fear & Greed at 52 (neutral). No new tokens entering trending that weren't there yesterday. Reddit engagement flat. No rotation signals detected. Market narrative is consolidation — nothing to name or track yet.",
-  "self_work": "updated_narrative_tracker",
-  "narrative_updates": [
-    {"narrative": "Bitcoin L2", "stage": "growing → peak", "note": "7th consecutive day in trending"},
-    {"narrative": "AI tokens", "stage": "fading", "note": "social volume -8% vs yesterday"}
-  ]
-}
-```
+1. **Отримати API keys:** CryptoPanic реєстрація, Reddit app registration → додати в Vercel
+2. **migration_013.sql** — додати `'narrative'` до `persona_memory.memory_type` constraint
+3. **`lib/personas/leo-cruz/data-pull.ts`** — CoinGecko + Fear&Greed + CryptoPanic + Reddit + DexScreener
+4. **`lib/personas/leo-cruz/signals.ts`** — детектори: new_trending, rotation, fading, sentiment_shift
+5. **`lib/personas/leo-cruz/narratives.ts`** — NarrativeTracker CRUD (load/update/save narrative states)
+6. **`lib/personas/leo-cruz/should-write.ts`** — signal-based scoring
+7. **`lib/personas/leo-cruz/generate.ts`** — claude-sonnet-4-5 з narrative system prompt
+8. **`lib/personas/leo-cruz/self-work.ts`** — weekly_narrative_map + update_tracker_only
+9. **`lib/personas/leo-cruz/index.ts`** — оркестратор (аналог elena-voss/index.ts)
+10. **`app/api/cron/leo/route.ts`** — cron endpoint
+11. **`vercel.json`** — додати `0 10 * * *` schedule
+12. **`supabase/seed_personas.sql`** — додати Leo INSERT
+13. **`app/(admin)/flows/_components/PersonasTab.tsx`** — додати Leo картку (аналог Elena)
+14. **`app/(admin)/flows/_components/AdminNav.tsx`** — Leo з'явиться автоматично через `/author`
