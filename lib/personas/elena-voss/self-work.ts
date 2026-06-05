@@ -1,5 +1,8 @@
 import { supabaseAdmin } from '@/lib/supabase';
 import { publishArticleToSanity, callClaude, parseClaudeJson, type PublishableArticle } from '@/lib/personas/shared';
+import { saveEmbedding } from '@/lib/personas/embeddings';
+import { extractAndSaveForecast } from './forecasts';
+import { extractAndSavePosition } from './position';
 import type { ElenaDataPull } from './data-pull';
 
 const PERSONA_ID = 'elena-voss';
@@ -113,10 +116,13 @@ export async function executeSelfWork(
 
   const { slug, id } = await publishArticleToSanity(article, PERSONA_ID);
 
-  // Bootstrap gets stored as 'context' so it's always in future prompts;
-  // all others as regular 'article'
   const memoryType = task.type === 'bootstrap' ? 'context' : 'article';
-  await saveMemory(slug, id, article, memoryType, task.type);
+  const memId = await saveMemory(slug, id, article, memoryType, task.type);
+
+  // Fire-and-forget: embed, extract forecast + position
+  if (memId) void saveEmbedding(memId, `${article.title}\n\n${article.excerpt}`);
+  void extractAndSaveForecast(article.title, article.body, slug);
+  void extractAndSavePosition(article.title, article.excerpt, article.body);
 
   return {
     wrote: true,
@@ -324,9 +330,9 @@ async function saveMemory(
   article: PublishableArticle,
   memoryType: 'article' | 'context',
   taskType: SelfWorkType
-) {
+): Promise<string | null> {
   const db = supabaseAdmin();
-  await db.from('persona_memory').insert({
+  const { data } = await db.from('persona_memory').insert({
     persona_id:  PERSONA_ID,
     memory_type: memoryType,
     content:     `${article.title}\n\n${article.excerpt}`,
@@ -339,7 +345,8 @@ async function saveMemory(
       self_work:  true,
       task_type:  taskType,
     },
-  });
+  }).select('id').single();
+  return data?.id ?? null;
 }
 
 // ─── Date helpers ────────────────────────────────────────────────────────────

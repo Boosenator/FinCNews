@@ -1,9 +1,12 @@
 import { supabaseAdmin } from '@/lib/supabase';
 import { publishArticleToSanity } from '@/lib/personas/shared';
+import { searchSimilarMemories, saveEmbedding } from '@/lib/personas/embeddings';
 import { pullElenaData } from './data-pull';
 import { shouldWrite } from './should-write';
 import { generateElenaArticle } from './generate';
 import { decideSelfWork, executeSelfWork, type SelfWorkResult } from './self-work';
+import { extractAndSaveForecast, getOpenForecastsContext } from './forecasts';
+import { extractAndSavePosition, getCurrentPosition } from './position';
 
 const PERSONA_ID = 'elena-voss';
 
@@ -42,8 +45,8 @@ export async function runElenaVoss(): Promise<RunResult> {
     return { wrote: false, score: 0, reasoning: `Data pull failed: ${error}`, error };
   }
 
-  // 2. Build context: recent articles + permanent context memories (bootstrap)
-  const recentSummary = await buildContext(supabase);
+  // 2. Build context (populated after should_write to know the topic)
+  const recentSummary = await buildContext(supabase, null);
 
   // 3. Editorial judgment
   let evalResult;
@@ -54,6 +57,11 @@ export async function runElenaVoss(): Promise<RunResult> {
     await logRun(supabase, { should_write: false, score: 0, reasoning: `Eval failed: ${error}`, data_snapshot: data });
     return { wrote: false, score: 0, reasoning: `Eval failed: ${error}`, error };
   }
+
+  // 2b. Rebuild context with known topic for semantic search
+  const contextWithTopic = evalResult.topic
+    ? await buildContext(supabase, evalResult.topic)
+    : recentSummary;
 
   // 4a. Score ≥ 60 — generate and publish event-driven article
   if (evalResult.should_write && evalResult.score >= 60) {
@@ -68,7 +76,7 @@ export async function runElenaVoss(): Promise<RunResult> {
 
     let article;
     try {
-      article = await generateElenaArticle(data, evalResult, recentSummary);
+      article = await generateElenaArticle(data, evalResult, contextWithTopic);
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
       return { wrote: false, score: evalResult.score, reasoning: `Generation failed: ${error}`, error };
@@ -85,10 +93,11 @@ export async function runElenaVoss(): Promise<RunResult> {
       return { wrote: false, score: evalResult.score, reasoning: `Publish failed: ${error}`, error };
     }
 
-    await supabase.from('persona_memory').insert({
+    const memContent = `${article.title}\n\n${article.excerpt}`;
+    const { data: memRow } = await supabase.from('persona_memory').insert({
       persona_id:  PERSONA_ID,
       memory_type: 'article',
-      content:     `${article.title}\n\n${article.excerpt}`,
+      content:     memContent,
       metadata: {
         slug,
         title:     article.title,
@@ -96,7 +105,12 @@ export async function runElenaVoss(): Promise<RunResult> {
         sanity_id: sanityId,
         tags:      article.tags,
       },
-    });
+    }).select('id').single();
+
+    // Fire-and-forget: embed, extract forecast, extract position (never block main flow)
+    if (memRow?.id) void saveEmbedding(memRow.id, memContent);
+    void extractAndSaveForecast(article.title, article.body, slug);
+    void extractAndSavePosition(article.title, article.excerpt, article.body);
 
     await supabase
       .from('persona_runs')
@@ -165,10 +179,27 @@ export async function runElenaVoss(): Promise<RunResult> {
 }
 
 // ─── Context builder ─────────────────────────────────────────────────────────
-// Includes: recent 5 articles + all 'context' memories (bootstrap/manifesto)
+// 1. Permanent context (bootstrap manifesto) — always loaded
+// 2. Recent 5 articles (chronological)
+// 3. Semantically similar articles (pgvector) — if topic + OPENAI_API_KEY available
+// 4. Active forecasts + track record
+// 5. Current position
 
-async function buildContext(supabase: ReturnType<typeof supabaseAdmin>): Promise<string> {
-  const [{ data: recent }, { data: permanent }] = await Promise.all([
+async function buildContext(
+  supabase: ReturnType<typeof supabaseAdmin>,
+  topic?: string | null
+): Promise<string> {
+  const [
+    { data: permanent },
+    { data: recent },
+    forecasts,
+    position,
+  ] = await Promise.all([
+    supabase
+      .from('persona_memory')
+      .select('content')
+      .eq('persona_id', PERSONA_ID)
+      .eq('memory_type', 'context'),
     supabase
       .from('persona_memory')
       .select('content, metadata, created_at')
@@ -176,22 +207,44 @@ async function buildContext(supabase: ReturnType<typeof supabaseAdmin>): Promise
       .eq('memory_type', 'article')
       .order('created_at', { ascending: false })
       .limit(5),
-    supabase
-      .from('persona_memory')
-      .select('content, metadata')
-      .eq('persona_id', PERSONA_ID)
-      .eq('memory_type', 'context'),
+    getOpenForecastsContext(),
+    getCurrentPosition(),
   ]);
+
+  // Semantic search — only if topic is available and OPENAI_API_KEY is set
+  const semanticMatches = topic
+    ? await searchSimilarMemories(PERSONA_ID, topic, 4)
+    : [];
 
   const parts: string[] = [];
 
   if (permanent?.length) {
-    parts.push('=== Elena\'s established framework (always in context) ===');
+    parts.push("=== Elena's analytical foundation ===");
     permanent.forEach(m => parts.push(m.content as string));
   }
 
+  if (position) {
+    parts.push('=== Current position ===');
+    parts.push(`Stance: ${position.stance} on ${position.on}`);
+    parts.push(`Regime: ${position.regime}`);
+    parts.push(`Conviction: ${position.conviction}`);
+  }
+
+  if (forecasts) {
+    parts.push('=== Forecasts ===');
+    parts.push(forecasts);
+  }
+
+  if (semanticMatches.length > 0) {
+    parts.push('=== Semantically related past articles ===');
+    semanticMatches.forEach(m => {
+      const meta = m.metadata as { title?: string };
+      parts.push(`- ${meta.title ?? m.content.slice(0, 80)} [similarity: ${(m.similarity * 100).toFixed(0)}%]`);
+    });
+  }
+
   if (recent?.length) {
-    parts.push('=== Recent articles ===');
+    parts.push('=== Recent articles (chronological) ===');
     recent.forEach(m => {
       const meta = m.metadata as { title?: string; topic?: string };
       parts.push(`- ${meta.title ?? '(no title)'} [topic: ${meta.topic ?? 'unknown'}]`);

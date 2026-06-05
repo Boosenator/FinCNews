@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runElenaVoss } from '@/lib/personas/elena-voss';
+import { verifyOpenForecasts } from '@/lib/personas/elena-voss/forecasts';
 
 export const maxDuration = 60;
 
@@ -14,8 +15,11 @@ async function handle(req: NextRequest) {
   }
 
   try {
-    const result = await runElenaVoss();
-    return NextResponse.json({ ok: true, ...result });
+    const [result, forecasts] = await Promise.all([
+      runElenaVoss(),
+      verifyOpenForecasts(),
+    ]);
+    return NextResponse.json({ ok: true, ...result, forecasts_verified: forecasts });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
