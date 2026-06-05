@@ -20,14 +20,6 @@ export interface ForecastRecord {
 
 // ── Live data fetchers for verification ──────────────────────────────────────
 
-async function fetchCurrentBtcPrice(): Promise<number | null> {
-  try {
-    const res  = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
-    const data = await res.json() as { bitcoin: { usd: number } };
-    return data.bitcoin?.usd ?? null;
-  } catch { return null; }
-}
-
 async function fetchCurrentHashrate(): Promise<number | null> {
   try {
     const res  = await fetch('https://mempool.space/api/v1/mining/hashrate/1m');
