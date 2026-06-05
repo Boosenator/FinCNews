@@ -48,12 +48,6 @@ function fmt(ms: number | null) {
   return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
 }
 
-function statusColor(status: RunLog["status"]) {
-  return status === "success" ? "text-emerald-400"
-    : status === "error"   ? "text-red-400"
-    : status === "partial" ? "text-amber-400"
-    : "text-zinc-400";
-}
 
 export default function DashboardOverview({
   logs, queuePending, queueTotal, activeSources, totalProcessed,
