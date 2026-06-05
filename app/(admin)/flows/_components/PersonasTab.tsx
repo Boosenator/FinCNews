@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react";
 import Image from "next/image";
 
-type PipelineStep = "data-pull" | "should-write" | "generate" | "run";
+type PipelineStep = "data-pull" | "should-write" | "generate" | "self-work" | "run";
 
 interface StepState {
   status: "idle" | "loading" | "ok" | "error" | "skipped";
@@ -43,19 +43,26 @@ const STEPS: { key: PipelineStep; label: string; desc: string; color: string }[]
     color: "border-amber-400/30 text-amber-300 hover:border-amber-400/60",
   },
   {
+    key: "self-work",
+    label: "Self-Work",
+    desc: "Bootstrap / weekly preview / summary / event preview",
+    color: "border-rose-400/30 text-rose-300 hover:border-rose-400/60",
+  },
+  {
     key: "run",
     label: "▶ Full Run",
-    desc: "Generate + publish to site",
+    desc: "Full pipeline: eval → generate or self-work → publish",
     color: "bg-emerald-500 text-zinc-950 border-transparent hover:bg-emerald-400",
   },
 ];
 
 export default function PersonasTab() {
   const [steps, setSteps] = useState<Record<PipelineStep, StepState>>({
-    "data-pull": { status: "idle", result: null },
-    "should-write": { status: "idle", result: null },
-    generate: { status: "idle", result: null },
-    run: { status: "idle", result: null },
+    "data-pull":   { status: "idle", result: null },
+    "should-write":{ status: "idle", result: null },
+    generate:      { status: "idle", result: null },
+    "self-work":   { status: "idle", result: null },
+    run:           { status: "idle", result: null },
   });
   const [activeStep, setActiveStep] = useState<PipelineStep | null>(null);
   const [isActive, setIsActive] = useState<boolean | null>(null);
@@ -382,6 +389,26 @@ function StepResult({ stepKey, result }: { stepKey: PipelineStep; result: unknow
             {String(article.telegramText ?? "")}
           </pre>
         </details>
+      </div>
+    );
+  }
+
+  if (stepKey === "self-work") {
+    if (r.skipped) {
+      return <p className="text-xs text-amber-400">No self-work needed today. {String(r.reason ?? "")}</p>;
+    }
+    const task = r.task as Record<string, unknown> | undefined;
+    return (
+      <div className="space-y-1">
+        <p className={`text-sm font-bold ${Boolean(r.wrote) ? "text-emerald-400" : "text-zinc-500"}`}>
+          {Boolean(r.wrote) ? `✓ ${String(r.type ?? "")} — ${String(r.articleSlug ?? "")}` : "✗ Failed"}
+        </p>
+        {task && <p className="text-xs text-zinc-500">Task: <span className="text-zinc-300">{String(task.type ?? "")}</span>{task.eventName ? ` (${String(task.eventName)})` : ""}</p>}
+        {Boolean(r.articleSlug) && (
+          <a href={`/${String(r.articleCategory ?? "economy")}/${String(r.articleSlug)}`} target="_blank" className="block text-xs text-cyan-400 hover:underline">
+            View article →
+          </a>
+        )}
       </div>
     );
   }

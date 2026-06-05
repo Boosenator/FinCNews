@@ -21,11 +21,13 @@
       "Bash(xargs grep -l \"email\\\\|mail\\\\|send\")",
       "Bash(xargs grep -l \"RESEND\\\\|Resend\")",
       "Bash(node -e \"require\\('resend'\\)\")",
-      "Bash(mkdir -p \"c:/GameDev/SEOtoTG/app/api/admin/personas/[id]\")"
+      "Bash(mkdir -p \"c:/GameDev/SEOtoTG/app/api/admin/personas/[id]\")",
+      "Bash(mkdir -p \"c:/GameDev/SEOtoTG/app/\\(site\\)/author/[slug]\")"
     ],
     "additionalDirectories": [
       "c:\\Users\\boosy\\.claude\\projects\\c--GameDev-SEOtoTG\\memory",
-      "c:\\GameDev\\SEOtoTG\\app\\api\\admin\\personas"
+      "c:\\GameDev\\SEOtoTG\\app\\api\\admin\\personas",
+      "c:\\GameDev\\SEOtoTG\\app\\(site)\\author"
     ]
   }
 }

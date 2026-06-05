@@ -186,6 +186,16 @@ export async function getTopicHub(slug: string): Promise<TopicHub | null> {
   );
 }
 
+export async function getArticlesByPersona(personaId: string, limit = 24): Promise<Article[]> {
+  if (!sanity) return [];
+  return sanity.fetch<Article[]>(
+    `*[_type == "article" && persona == $personaId && defined(translations.en.title)]
+     | order(publishedAt desc)[0...$limit] {${projection}}`,
+    { personaId, limit },
+    { next: { revalidate: 120 } },
+  );
+}
+
 export async function getArticlesForTopic(keywords: string[], limit = 12): Promise<Article[]> {
   if (!sanity || keywords.length === 0) return [];
   const { filter, params } = buildTopicArticleFilter(keywords);

@@ -5,10 +5,11 @@ import { pullElenaData } from '@/lib/personas/elena-voss/data-pull';
 import { shouldWrite } from '@/lib/personas/elena-voss/should-write';
 import { generateElenaArticle } from '@/lib/personas/elena-voss/generate';
 import { runElenaVoss } from '@/lib/personas/elena-voss';
+import { decideSelfWork, executeSelfWork } from '@/lib/personas/elena-voss/self-work';
 
 export const maxDuration = 60;
 
-type Action = 'data-pull' | 'should-write' | 'generate' | 'run' | 'toggle-active' | 'recent-runs';
+type Action = 'data-pull' | 'should-write' | 'generate' | 'run' | 'self-work' | 'toggle-active' | 'recent-runs';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   if (!isAuthed(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -56,6 +57,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       case 'run': {
         const result = await runElenaVoss();
         return NextResponse.json({ ok: true, ...result });
+      }
+
+      case 'self-work': {
+        const data = await pullElenaData();
+        const recentSummary = await getRecentSummary();
+        const task = await decideSelfWork(data);
+        if (!task) {
+          return NextResponse.json({ ok: true, skipped: true, reason: 'No self-work needed today' });
+        }
+        const result = await executeSelfWork(task, data, recentSummary);
+        return NextResponse.json({ ok: true, task, ...result });
       }
 
       case 'toggle-active': {
