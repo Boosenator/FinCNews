@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import Image from "next/image";
 
 type PipelineStep = "data-pull" | "should-write" | "generate" | "self-work" | "run";
@@ -59,6 +59,16 @@ function PersonaCard({ personaId, name, role, avatar, sources, cronTime }: Perso
   const [contextLayers, setContextLayers] = useState<ContextLayer[] | null>(null);
   const [contextLoading, setContextLoading] = useState(false);
   const [contextTopic, setContextTopic]   = useState("");
+
+  // Load actual is_active status from DB on mount
+  useEffect(() => {
+    fetch(`/api/admin/personas/${personaId}`)
+      .then((r) => r.json())
+      .then((d: { persona?: { is_active: boolean } }) => {
+        if (d.persona?.is_active !== undefined) setIsActive(d.persona.is_active);
+      })
+      .catch(() => {/* best-effort */});
+  }, [personaId]);
 
   const setStep = useCallback((key: PipelineStep, patch: Partial<StepState>) => {
     setSteps((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
