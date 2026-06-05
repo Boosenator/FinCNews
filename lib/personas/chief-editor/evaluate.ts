@@ -142,6 +142,7 @@ export async function evaluateAnalyst(
 
   // Baseline mode: no prior feedback AND no active directives → first article ever
   const isBaseline = ctx.recentFeedback.length === 0 && ctx.directives.length === 0;
+  console.log('[Victor Kane]', ctx.personaId, '| isBaseline:', isBaseline, '| feedback:', ctx.recentFeedback.length, '| directives:', ctx.directives.length);
 
   const baselineSection = isBaseline
     ? `BASELINE MODE — FIRST ARTICLE FROM THIS ANALYST:
