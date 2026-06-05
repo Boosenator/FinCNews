@@ -170,22 +170,37 @@ export default async function ArticlePage({ params }: Props) {
 
             {/* Byline + share */}
             <div className="mt-5 flex flex-wrap items-center justify-between gap-4 border-y border-white/[0.06] py-4">
-              <div className="flex items-center gap-2.5">
-                {article.authorAvatar ? (
-                  <Image
-                    src={article.authorAvatar}
-                    alt={article.authorName ?? 'Author'}
-                    width={32}
-                    height={32}
-                    className="rounded-full object-cover"
-                  />
+              <div className="flex items-center gap-3">
+                {article.persona ? (
+                  <Link href="/author" className="group flex-shrink-0">
+                    <div className="relative h-11 w-11 overflow-hidden rounded-full border border-white/[0.1] transition group-hover:border-white/30">
+                      {article.authorAvatar ? (
+                        <Image
+                          src={article.authorAvatar}
+                          alt={article.authorName ?? 'Author'}
+                          fill
+                          className="object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center bg-cyan-400/10 text-xs font-black text-cyan-400">
+                          {(article.authorName ?? 'FC').slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                  </Link>
                 ) : (
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-400/10 text-xs font-black text-cyan-400">
+                  <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-cyan-400/10 text-xs font-black text-cyan-400">
                     FC
                   </div>
                 )}
                 <div className="text-sm">
-                  <p className="font-semibold text-zinc-200">{article.authorName ?? 'FinCNews Editorial'}</p>
+                  {article.persona ? (
+                    <Link href="/author" className="font-semibold text-zinc-200 transition hover:text-white">
+                      {article.authorName ?? 'FinCNews Editorial'}
+                    </Link>
+                  ) : (
+                    <p className="font-semibold text-zinc-200">{article.authorName ?? 'FinCNews Editorial'}</p>
+                  )}
                   {article.sourceUrl && (
                     <a
                       href={article.sourceUrl}

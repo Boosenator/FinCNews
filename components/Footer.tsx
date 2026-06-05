@@ -71,6 +71,11 @@ export default function Footer() {
                   Topic Hubs
                 </Link>
               </li>
+              <li>
+                <Link href="/author" className="text-sm text-zinc-500 transition hover:text-white">
+                  Our Analysts
+                </Link>
+              </li>
             </ul>
           </div>
 

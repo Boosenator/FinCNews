@@ -28,7 +28,14 @@
       "Bash(start c:\\\\tmp\\\\admin-mockup.html)",
       "Bash(Get-ChildItem -Path \"c:\\\\GameDev\\\\SEOtoTG\\\\app\\\\\\(admin\\)\\\\flows\\\\\" -Recurse | Select-Object FullName)",
       "Bash(route.js\")",
-      "Bash(mkdir -p \"c:/GameDev/SEOtoTG/app/api/admin/editorial/sessions/[date]\" \"c:/GameDev/SEOtoTG/app/api/admin/editorial/run\" \"c:/GameDev/SEOtoTG/app/api/admin/editorial/directives\" \"c:/GameDev/SEOtoTG/app/api/admin/editorial/scores\")"
+      "Bash(mkdir -p \"c:/GameDev/SEOtoTG/app/api/admin/editorial/sessions/[date]\" \"c:/GameDev/SEOtoTG/app/api/admin/editorial/run\" \"c:/GameDev/SEOtoTG/app/api/admin/editorial/directives\" \"c:/GameDev/SEOtoTG/app/api/admin/editorial/scores\")",
+      "Bash(node --env-file=.env.local scripts/generate-persona-covers.mjs --dry-run)",
+      "Bash(NEXT_PUBLIC_SUPABASE_URL=\"https://dzlknprhhqreqfnxngij.supabase.co\" SUPABASE_SERVICE_ROLE_KEY=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR6bGtucHJoaHFyZXFmbnhuZ2lqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODYwODU0NCwiZXhwIjoyMDk0MTg0NTQ0fQ.XnuT5DFS38_XLmxReC-RNiIQh_0DFPe-KUdUXx_3KI4\" SANITY_PROJECT_ID=\"x55aaanw\" SANITY_DATASET=\"production\" SANITY_TOKEN=\"skYVwBxhPzkqTKqb5txEYmtWokGMYnqqEpmX1F9OOYOzRPnfXyqvBtvN6baJLrpAEua5HtAKFpPLaIV5ejFomL8jsgTHjwntEjVcYughq6vSx2K88SG8fFuSmw3MzeEcZPGIaTLpkzcQXEQRnoOlp9C5Tx6EnlVPUkzD0TZlguYv2NhLq5PO\" node scripts/generate-persona-covers.mjs --dry-run)",
+      "Bash(NEXT_PUBLIC_SUPABASE_URL=\"https://dzlknprhhqreqfnxngij.supabase.co\" SUPABASE_SERVICE_ROLE_KEY=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR6bGtucHJoaHFyZXFmbnhuZ2lqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODYwODU0NCwiZXhwIjoyMDk0MTg0NTQ0fQ.XnuT5DFS38_XLmxReC-RNiIQh_0DFPe-KUdUXx_3KI4\" SANITY_PROJECT_ID=\"x55aaanw\" SANITY_DATASET=\"production\" SANITY_TOKEN=\"skYVwBxhPzkqTKqb5txEYmtWokGMYnqqEpmX1F9OOYOzRPnfXyqvBtvN6baJLrpAEua5HtAKFpPLaIV5ejFomL8jsgTHjwntEjVcYughq6vSx2K88SG8fFuSmw3MzeEcZPGIaTLpkzcQXEQRnoOlp9C5Tx6EnlVPUkzD0TZlguYv2NhLq5PO\" node scripts/generate-persona-covers.mjs)",
+      "Bash(node -e \"require\\('sharp'\\); console.log\\('sharp OK'\\)\")",
+      "Bash(node -e \"require\\('@resvg/resvg-js'\\); console.log\\('resvg OK'\\)\")",
+      "Bash(node -e \"const {Resvg}=require\\('@resvg/resvg-js'\\);console.log\\('resvg OK'\\)\")",
+      "Bash(NEXT_PUBLIC_SUPABASE_URL=\"https://dzlknprhhqreqfnxngij.supabase.co\" SUPABASE_SERVICE_ROLE_KEY=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR6bGtucHJoaHFyZXFmbnhuZ2lqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODYwODU0NCwiZXhwIjoyMDk0MTg0NTQ0fQ.XnuT5DFS38_XLmxReC-RNiIQh_0DFPe-KUdUXx_3KI4\" SANITY_PROJECT_ID=\"x55aaanw\" SANITY_DATASET=\"production\" SANITY_TOKEN=\"skYVwBxhPzkqTKqb5txEYmtWokGMYnqqEpmX1F9OOYOzRPnfXyqvBtvN6baJLrpAEua5HtAKFpPLaIV5ejFomL8jsgTHjwntEjVcYughq6vSx2K88SG8fFuSmw3MzeEcZPGIaTLpkzcQXEQRnoOlp9C5Tx6EnlVPUkzD0TZlguYv2NhLq5PO\" node scripts/generate-persona-covers.mjs marcus-webb)"
     ],
     "additionalDirectories": [
       "c:\\Users\\boosy\\.claude\\projects\\c--GameDev-SEOtoTG\\memory",
