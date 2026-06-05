@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase';
 import { publishArticleToSanity } from '@/lib/personas/shared';
+import { generateElenaCover } from '@/lib/personas/cover-images';
 import { searchSimilarMemories, saveEmbedding } from '@/lib/personas/embeddings';
 import { pullElenaData } from './data-pull';
 import { shouldWrite } from './should-write';
@@ -82,10 +83,12 @@ export async function runElenaVoss(): Promise<RunResult> {
       return { wrote: false, score: evalResult.score, reasoning: `Generation failed: ${error}`, error };
     }
 
+    const cover = await generateElenaCover(data, evalResult.topic ?? null, evalResult.primary_signal ?? null).catch(() => null);
+
     let slug: string;
     let sanityId: string;
     try {
-      const result = await publishArticleToSanity(article, PERSONA_ID);
+      const result = await publishArticleToSanity(article, PERSONA_ID, cover);
       slug = result.slug;
       sanityId = result.id;
     } catch (err) {

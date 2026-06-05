@@ -96,9 +96,12 @@ function parseInlineMarkdown(text: string, blockIdx: number): PTSpan[] {
   return spans.length > 0 ? spans : [{ _type: 'span', _key: `s-${blockIdx}-0`, text, marks: [] }];
 }
 
+type SanityCoverRef = { _type: 'image'; asset: { _type: 'reference'; _ref: string } };
+
 export async function publishArticleToSanity(
-  article: PublishableArticle,
-  personaId: string
+  article:    PublishableArticle,
+  personaId:  string,
+  coverImage?: SanityCoverRef | null
 ): Promise<{ slug: string; id: string }> {
   const sanity = createClient({
     projectId: process.env.SANITY_PROJECT_ID!,
@@ -119,6 +122,7 @@ export async function publishArticleToSanity(
     persona:      personaId,
     authorName:   PERSONA_NAME[personaId] ?? personaId,
     authorAvatar: PERSONA_AVATAR[personaId] ?? null,
+    ...(coverImage ? { coverImage } : {}),
     translations: {
       en: {
         title:           article.title,

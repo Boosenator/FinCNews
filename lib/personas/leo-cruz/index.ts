@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase';
 import { publishArticleToSanity } from '@/lib/personas/shared';
+import { generateLeoCover } from '@/lib/personas/cover-images';
 import { searchSimilarMemories, saveEmbedding } from '@/lib/personas/embeddings';
 import { pullLeoData } from './data-pull';
 import { detectSignals } from './signals';
@@ -86,10 +87,19 @@ export async function runLeoCruz(): Promise<RunResult> {
       return { wrote: false, score: evalResult.score, reasoning: `Generation failed: ${error}`, error };
     }
 
+    // Find narrative state for the topic
+    const topicNarrative = narratives.find(n =>
+      evalResult.topic && n.narrative.toLowerCase().includes(evalResult.topic.toLowerCase().split(' ')[0])
+    ) ?? null;
+    const cover = await generateLeoCover(
+      data, evalResult.topic ?? 'Narrative Update',
+      evalResult.cycle_stage ?? 'growing', topicNarrative
+    ).catch(() => null);
+
     let slug: string;
     let sanityId: string;
     try {
-      const result = await publishArticleToSanity(article, PERSONA_ID);
+      const result = await publishArticleToSanity(article, PERSONA_ID, cover);
       slug = result.slug;
       sanityId = result.id;
     } catch (err) {

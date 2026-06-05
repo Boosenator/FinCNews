@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase';
 import { publishArticleToSanity } from '@/lib/personas/shared';
+import { generateMarcusCover } from '@/lib/personas/cover-images';
 import { searchSimilarMemories, saveEmbedding } from '@/lib/personas/embeddings';
 import { pullMarcusData } from './data-pull';
 import { loadBaseline, updateBaseline } from './baseline';
@@ -89,9 +90,12 @@ export async function runMarcusWebb(): Promise<RunResult> {
       return { wrote: false, score: evalResult.score, reasoning: `Generation failed: ${error}`, error };
     }
 
+    // Generate data visualization cover (fire before publish, best-effort)
+    const cover = await generateMarcusCover(data, baseline, anomalies, evalResult.primary_metric ?? null).catch(() => null);
+
     let slug: string, sanityId: string;
     try {
-      const r = await publishArticleToSanity(article, PERSONA_ID);
+      const r = await publishArticleToSanity(article, PERSONA_ID, cover);
       slug = r.slug; sanityId = r.id;
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
