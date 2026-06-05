@@ -8,6 +8,8 @@
     { "path": "/api/cron/editorial/morning", "schedule": "0 3 * * *" },
     { "path": "/api/cron/editorial/evening", "schedule": "0 14 * * *" },
     { "path": "/api/cron/elena",             "schedule": "0 8 * * *"  },
-    { "path": "/api/cron/leo",               "schedule": "0 10 * * *" }
+    { "path": "/api/cron/leo",               "schedule": "0 10 * * *" },
+    { "path": "/api/cron/marcus",            "schedule": "0 7 * * *"  },
+    { "path": "/api/cron/marcus",            "schedule": "0 13 * * *" }
   ]
 }

@@ -18,11 +18,20 @@ import { generateLeoArticle } from '@/lib/personas/leo-cruz/generate';
 import { runLeoCruz, getLeoContext } from '@/lib/personas/leo-cruz';
 import { decideSelfWork as leoDecideSelf, executeSelfWork as leoExecSelf } from '@/lib/personas/leo-cruz/self-work';
 
+// Marcus Webb
+import { pullMarcusData } from '@/lib/personas/marcus-webb/data-pull';
+import { loadBaseline } from '@/lib/personas/marcus-webb/baseline';
+import { detectAnomalies } from '@/lib/personas/marcus-webb/anomalies';
+import { shouldWrite as marcusEval } from '@/lib/personas/marcus-webb/should-write';
+import { generateMarcusArticle } from '@/lib/personas/marcus-webb/generate';
+import { runMarcusWebb, getMarcusContext } from '@/lib/personas/marcus-webb';
+import { decideSelfWork as marcusDecideSelf, executeSelfWork as marcusExecSelf } from '@/lib/personas/marcus-webb/self-work';
+
 export const maxDuration = 60;
 
 type Action = 'data-pull' | 'should-write' | 'generate' | 'run' | 'self-work' | 'show-context' | 'toggle-active' | 'recent-runs';
 
-const KNOWN_PERSONAS = ['elena-voss', 'leo-cruz'];
+const KNOWN_PERSONAS = ['elena-voss', 'leo-cruz', 'marcus-webb'];
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   if (!isAuthed(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -125,6 +134,50 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       }
       if (action === 'show-context') {
         const layers = await getLeoContext(topic);
+        return NextResponse.json({ ok: true, layers });
+      }
+    }
+
+    // ── Marcus Webb ─────────────────────────────────────────────────────────
+    if (params.id === 'marcus-webb') {
+      if (action === 'data-pull') {
+        const data = await pullMarcusData();
+        const baseline = await loadBaseline();
+        const anomalies = detectAnomalies(data, baseline);
+        return NextResponse.json({ ok: true, data, anomalies, baseline_samples: baseline.samples });
+      }
+      if (action === 'should-write') {
+        const data = await pullMarcusData();
+        const baseline = await loadBaseline();
+        const anomalies = detectAnomalies(data, baseline);
+        const summary = await getRecentSummary(params.id);
+        const result = await marcusEval(anomalies, baseline, summary);
+        return NextResponse.json({ ok: true, result, anomalies, baseline_samples: baseline.samples });
+      }
+      if (action === 'generate') {
+        const data = await pullMarcusData();
+        const baseline = await loadBaseline();
+        const anomalies = detectAnomalies(data, baseline);
+        const summary = await getRecentSummary(params.id);
+        const evalResult = await marcusEval(anomalies, baseline, summary);
+        if (!evalResult.should_write) return NextResponse.json({ ok: true, skipped: true, score: evalResult.score, reasoning: evalResult.reasoning });
+        const article = await generateMarcusArticle(data, anomalies, evalResult, baseline, summary);
+        return NextResponse.json({ ok: true, dry_run: true, eval: evalResult, article });
+      }
+      if (action === 'run') {
+        const result = await runMarcusWebb();
+        return NextResponse.json({ ok: true, ...result });
+      }
+      if (action === 'self-work') {
+        const data = await pullMarcusData();
+        const baseline = await loadBaseline();
+        const summary = await getRecentSummary(params.id);
+        const task = await marcusDecideSelf();
+        const result = await marcusExecSelf(task, data, baseline, summary);
+        return NextResponse.json({ ok: true, task, ...result });
+      }
+      if (action === 'show-context') {
+        const layers = await getMarcusContext(topic);
         return NextResponse.json({ ok: true, layers });
       }
     }

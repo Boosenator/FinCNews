@@ -278,6 +278,15 @@ export default function PersonasTab() {
       />
 
       <PersonaCard
+        personaId="marcus-webb"
+        name="Marcus Webb"
+        role="On-Chain Analyst"
+        avatar="/authors/marcus-webb.png"
+        sources="CoinGecko / CoinGlass / mempool.space / blockchain.info"
+        cronTime="07:00 + 13:00 UTC"
+      />
+
+      <PersonaCard
         personaId="leo-cruz"
         name="Leo Cruz"
         role="Narrative Hunter"
@@ -310,6 +319,46 @@ function StepResult({ stepKey, personaId, result }: { stepKey: PipelineStep; per
 
   if (stepKey === "data-pull") {
     // Leo returns data + signals; Elena returns data
+    if (personaId === "marcus-webb") {
+      const anomalies = r.anomalies as Array<{ metric: string; label: string; value: number; zScore: number; direction: string; context: string; source: string }> | undefined;
+      const d = r.data as Record<string, unknown> | undefined;
+      return (
+        <div className="space-y-3">
+          {d && (
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-3">
+              {([
+                ["BTC Price",    `$${Number(d.btcPrice).toLocaleString()}`, ""],
+                ["Volume ratio", d.btcVolumeRatio, "x"],
+                ["Exchange flow",d.btcExchangeNetflow, " BTC"],
+                ["Miner outflow",d.minerOutflows, " BTC"],
+                ["Mempool Tx",   d.mempoolTxCount, ""],
+                ["Fear & Greed", d.fearGreedIndex, "/100"],
+              ] as [string, unknown, string][]).map(([label, val, unit]) => (
+                <div key={label} className="flex justify-between gap-2 py-0.5">
+                  <span className="text-zinc-500">{label}</span>
+                  <span className="font-mono font-semibold text-zinc-200">{typeof val === "number" ? val.toFixed(0) : String(val)}{unit}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="text-[11px] text-zinc-600">Baseline samples: {String(r.baseline_samples ?? 0)}/30</div>
+          {anomalies && anomalies.length > 0 && (
+            <div>
+              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-zinc-600">Anomalies (|z| ≥ 1.8)</p>
+              {anomalies.map((a, i) => (
+                <div key={i} className="flex items-center gap-2 py-1 text-xs border-t border-white/[0.04]">
+                  <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${Math.abs(a.zScore) >= 2.5 ? "bg-red-500/15 text-red-400" : "bg-amber-500/15 text-amber-400"}`}>{a.zScore > 0 ? "+" : ""}{a.zScore.toFixed(1)}σ</span>
+                  <span className="text-zinc-400 flex-1">{a.label} — {a.context}</span>
+                  <span className="text-zinc-600 text-[10px]">{a.source}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {anomalies?.length === 0 && <p className="text-xs text-zinc-600">No anomalies detected — all metrics within 1.8σ of baseline</p>}
+        </div>
+      );
+    }
+
     if (personaId === "leo-cruz") {
       const signals = r.signals as Array<{ type: string; strength: number; description: string }> | undefined;
       const d = r.data as Record<string, unknown> | undefined;
