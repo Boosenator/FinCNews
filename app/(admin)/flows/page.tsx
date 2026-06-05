@@ -69,7 +69,7 @@ async function getData() {
 
 export default async function DashboardPage() {
   const {
-    sources, logs, totalProcessed, queuePending, queueTotal,
+    logs, totalProcessed, queuePending, queueTotal,
     recentQueue, elenaLastRun, stats,
   } = await getData();
 
