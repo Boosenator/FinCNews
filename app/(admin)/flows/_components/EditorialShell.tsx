@@ -3,10 +3,12 @@
 import { useState } from "react";
 import PersonasTab from "./PersonasTab";
 import ContentPlanTab from "./ContentPlanTab";
+import EditorialDeskTab from "./EditorialDeskTab";
 
 const TABS = [
   { key: "personas", label: "Personas", badge: "AI" },
   { key: "content",  label: "Content Plan" },
+  { key: "desk",     label: "Editorial Desk" },
 ] as const;
 
 type Tab = (typeof TABS)[number]["key"];
@@ -45,6 +47,7 @@ export default function EditorialShell() {
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
         {tab === "personas" && <PersonasTab />}
         {tab === "content"  && <ContentPlanTab />}
+        {tab === "desk"     && <EditorialDeskTab />}
       </div>
     </div>
   );

@@ -27,12 +27,14 @@
       "Bash(node scripts/rewrite-elena-bootstrap.mjs *)",
       "Bash(start c:\\\\tmp\\\\admin-mockup.html)",
       "Bash(Get-ChildItem -Path \"c:\\\\GameDev\\\\SEOtoTG\\\\app\\\\\\(admin\\)\\\\flows\\\\\" -Recurse | Select-Object FullName)",
-      "Bash(route.js\")"
+      "Bash(route.js\")",
+      "Bash(mkdir -p \"c:/GameDev/SEOtoTG/app/api/admin/editorial/sessions/[date]\" \"c:/GameDev/SEOtoTG/app/api/admin/editorial/run\" \"c:/GameDev/SEOtoTG/app/api/admin/editorial/directives\" \"c:/GameDev/SEOtoTG/app/api/admin/editorial/scores\")"
     ],
     "additionalDirectories": [
       "c:\\Users\\boosy\\.claude\\projects\\c--GameDev-SEOtoTG\\memory",
       "c:\\GameDev\\SEOtoTG\\app\\api\\admin\\personas",
-      "c:\\GameDev\\SEOtoTG\\app\\(site)\\author"
+      "c:\\GameDev\\SEOtoTG\\app\\(site)\\author",
+      "c:\\GameDev\\SEOtoTG\\app\\api\\admin\\editorial\\sessions"
     ]
   }
 }

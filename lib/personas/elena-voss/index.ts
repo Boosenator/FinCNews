@@ -361,7 +361,54 @@ async function buildContext(
     });
   }
 
+  // Victor Kane editorial feedback — last pending directive
+  const victorFeedback = await buildVictorKaneContext(supabase);
+  if (victorFeedback) parts.push(victorFeedback);
+
   return parts.join('\n');
+}
+
+async function buildVictorKaneContext(supabase: ReturnType<typeof supabaseAdmin>): Promise<string | null> {
+  const [{ data: feedback }, { data: pendingDirective }] = await Promise.all([
+    supabase
+      .from('persona_memory')
+      .select('content, metadata, created_at')
+      .eq('persona_id', PERSONA_ID)
+      .eq('memory_type', 'editor_feedback')
+      .order('created_at', { ascending: false })
+      .limit(1),
+    supabase
+      .from('editorial_directives')
+      .select('directive, issued_date, status')
+      .eq('persona_id', PERSONA_ID)
+      .eq('status', 'pending')
+      .order('issued_date', { ascending: false })
+      .limit(1),
+  ]);
+
+  if (!feedback?.length) return null;
+
+  const f = feedback[0].metadata as {
+    date?: string; score?: number; priority_fix?: string;
+    directive?: string; pattern_warning?: string | null;
+  };
+
+  const directive = pendingDirective?.[0];
+  if (!directive && !f.priority_fix) return null;
+
+  const lines = ['=== Victor Kane — last directive ==='];
+  if (f.score !== undefined) lines.push(`Score: ${f.score}/100 (${f.date ?? ''})`);
+  if (f.priority_fix) lines.push(`Priority fix: "${f.priority_fix}"`);
+  if (directive) {
+    lines.push(`Directive: "${directive.directive}"`);
+    lines.push(`Status: PENDING — this directive has not been addressed yet`);
+  } else {
+    lines.push(`Status: resolved — no active directive`);
+  }
+  if (f.pattern_warning) lines.push(`Pattern: [WARNING] ${f.pattern_warning}`);
+  else lines.push(`Pattern: [none]`);
+
+  return lines.join('\n');
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

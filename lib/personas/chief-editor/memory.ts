@@ -4,6 +4,79 @@ import type { AnalystContext } from './data-collector';
 
 const VICTOR_ID = 'victor-kane';
 
+// ── New tables: save session + feedback + directives ─────────────────────────
+
+export async function saveToEditorialTables(
+  session: EditorialSession,
+  analysts: AnalystContext[]
+): Promise<void> {
+  const db = supabaseAdmin();
+
+  // 1. Upsert editorial_sessions (one per date)
+  const { data: sessionRow } = await db
+    .from('editorial_sessions')
+    .upsert(
+      {
+        session_date: session.date,
+        ran_at:       new Date().toISOString(),
+        desk_note:    session.desk_note,
+        raw_output:   session as unknown as Record<string, unknown>,
+      },
+      { onConflict: 'session_date' }
+    )
+    .select('id')
+    .single();
+
+  if (!sessionRow?.id) return;
+  const sessionId = sessionRow.id as string;
+
+  // 2. For each analyst that published
+  for (const ctx of analysts) {
+    if (!ctx.todayArticle) continue;
+    const feedback = session.editorial_session[ctx.personaId] as PersonaFeedback | null;
+    if (!feedback?.published_today) continue;
+
+    // 2a. Insert editorial_feedback
+    const { data: feedbackRow } = await db
+      .from('editorial_feedback')
+      .insert({
+        session_id:   sessionId,
+        persona_id:   ctx.personaId,
+        article_slug: ctx.todayArticle.slug,
+        score:        feedback.score ?? 0,
+        strengths:    feedback.strengths ?? [],
+        priority_fix: feedback.priority_fix ?? '',
+        directive:    feedback.directive ?? '',
+        pattern_warn: feedback.pattern_warning ?? null,
+      })
+      .select('id')
+      .single();
+
+    if (!feedbackRow?.id) continue;
+    const feedbackId = feedbackRow.id as string;
+
+    // 2b. Mark previous pending directives as resolved
+    await db
+      .from('editorial_directives')
+      .update({ status: 'resolved', resolved_at: new Date().toISOString() })
+      .eq('persona_id', ctx.personaId)
+      .eq('status', 'pending');
+
+    // 2c. Save new directive
+    if (feedback.directive) {
+      await db.from('editorial_directives').insert({
+        feedback_id:  feedbackId,
+        persona_id:   ctx.personaId,
+        directive:    feedback.directive,
+        issued_date:  session.date,
+        status:       'pending',
+      });
+    }
+  }
+}
+
+// ── persona_memory: legacy path (still needed for buildContext LLM injection) ─
+
 // Save feedback INTO each analyst's persona_memory (type='editor_feedback')
 export async function saveFeedbackToAnalysts(session: EditorialSession, analysts: AnalystContext[]): Promise<void> {
   const db = supabaseAdmin();

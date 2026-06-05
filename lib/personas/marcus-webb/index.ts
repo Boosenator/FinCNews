@@ -157,7 +157,28 @@ async function buildContext(supabase: ReturnType<typeof supabaseAdmin>, topic?: 
   if (semantic.length)    { parts.push('=== Similar past articles ==='); semantic.forEach((m) => { const meta = m.metadata as { title?: string }; parts.push(`- ${meta.title ?? ''} [${(m.similarity * 100).toFixed(0)}%]`); }); }
   if (recent?.length)     { parts.push('=== Recent articles ==='); recent.forEach((m) => { const meta = m.metadata as { title?: string; topic?: string }; parts.push(`- ${meta.title ?? '(no title)'} [${meta.topic ?? 'unknown'}]`); }); }
 
+  const victorCtx = await buildVictorKaneContext(supabase, PERSONA_ID);
+  if (victorCtx) parts.push(victorCtx);
+
   return parts.join('\n');
+}
+
+async function buildVictorKaneContext(supabase: ReturnType<typeof supabaseAdmin>, personaId: string): Promise<string | null> {
+  const [{ data: feedback }, { data: pending }] = await Promise.all([
+    supabase.from('persona_memory').select('metadata').eq('persona_id', personaId).eq('memory_type', 'editor_feedback').order('created_at', { ascending: false }).limit(1),
+    supabase.from('editorial_directives').select('directive, issued_date').eq('persona_id', personaId).eq('status', 'pending').order('issued_date', { ascending: false }).limit(1),
+  ]);
+  if (!feedback?.length) return null;
+  const f = feedback[0].metadata as { date?: string; score?: number; priority_fix?: string; directive?: string; pattern_warning?: string | null };
+  const d = pending?.[0];
+  if (!f.priority_fix && !d) return null;
+  const lines = ['=== Victor Kane — last directive ==='];
+  if (f.score !== undefined) lines.push(`Score: ${f.score}/100 (${f.date ?? ''})`);
+  if (f.priority_fix) lines.push(`Priority fix: "${f.priority_fix}"`);
+  if (d) { lines.push(`Directive: "${d.directive}"`); lines.push(`Status: PENDING — this directive has not been addressed yet`); }
+  else { lines.push(`Status: resolved — no active directive`); }
+  lines.push(f.pattern_warning ? `Pattern: [WARNING] ${f.pattern_warning}` : `Pattern: [none]`);
+  return lines.join('\n');
 }
 
 // ── Public context inspector ──────────────────────────────────────────────────

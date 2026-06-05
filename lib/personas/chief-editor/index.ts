@@ -2,7 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { collectData } from './data-collector';
 import { detectPatterns } from './patterns';
 import { evaluate } from './evaluate';
-import { saveFeedbackToAnalysts, saveEditorSession, updateEditorialStandards, verifyPreviousDirectives } from './memory';
+import { saveFeedbackToAnalysts, saveEditorSession, updateEditorialStandards, verifyPreviousDirectives, saveToEditorialTables } from './memory';
 
 const PERSONA_ID = 'victor-kane';
 
@@ -67,7 +67,10 @@ export async function runChiefEditor(): Promise<ChiefEditorResult> {
     return { ran: false, reason: `Evaluation failed: ${error}`, error };
   }
 
-  // 6. Save feedback to each analyst's memory
+  // 6a. Save to dedicated editorial tables (for admin UI queries)
+  await saveToEditorialTables(session, collected.analysts);
+
+  // 6b. Save feedback to each analyst's persona_memory (for LLM buildContext injection)
   await saveFeedbackToAnalysts(session, collected.analysts);
 
   // 7. Save Victor's own session + update standards
