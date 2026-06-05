@@ -185,16 +185,7 @@ export default async function ArticlePage({ params }: Props) {
                   </div>
                 )}
                 <div className="text-sm">
-                  {article.persona ? (
-                    <Link
-                      href={`/author/${article.persona}`}
-                      className="font-semibold text-zinc-200 hover:text-cyan-400 transition"
-                    >
-                      {article.authorName ?? 'FinCNews Editorial'}
-                    </Link>
-                  ) : (
-                    <p className="font-semibold text-zinc-200">{article.authorName ?? 'FinCNews Editorial'}</p>
-                  )}
+                  <p className="font-semibold text-zinc-200">{article.authorName ?? 'FinCNews Editorial'}</p>
                   {article.sourceUrl && (
                     <a
                       href={article.sourceUrl}
