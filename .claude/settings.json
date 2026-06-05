@@ -24,7 +24,8 @@
       "Bash(mkdir -p \"c:/GameDev/SEOtoTG/app/api/admin/personas/[id]\")",
       "Bash(mkdir -p \"c:/GameDev/SEOtoTG/app/\\(site\\)/author/[slug]\")",
       "Bash(node scripts/rewrite-article-body.mjs *)",
-      "Bash(node scripts/rewrite-elena-bootstrap.mjs *)"
+      "Bash(node scripts/rewrite-elena-bootstrap.mjs *)",
+      "Bash(start c:\\\\tmp\\\\admin-mockup.html)"
     ],
     "additionalDirectories": [
       "c:\\Users\\boosy\\.claude\\projects\\c--GameDev-SEOtoTG\\memory",
