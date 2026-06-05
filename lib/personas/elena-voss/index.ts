@@ -123,7 +123,7 @@ export async function runElenaVoss(): Promise<RunResult> {
     data_snapshot: data,
   });
 
-  const selfWorkTask = await decideSelfWork(data);
+  const selfWorkTask = await decideSelfWork();
 
   if (!selfWorkTask) {
     return { wrote: false, score: evalResult.score, reasoning: evalResult.reasoning };

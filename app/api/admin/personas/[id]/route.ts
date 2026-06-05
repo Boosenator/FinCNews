@@ -62,7 +62,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       case 'self-work': {
         const data = await pullElenaData();
         const recentSummary = await getRecentSummary();
-        const task = await decideSelfWork(data);
+        const task = await decideSelfWork();
         if (!task) {
           return NextResponse.json({ ok: true, skipped: true, reason: 'No self-work needed today' });
         }

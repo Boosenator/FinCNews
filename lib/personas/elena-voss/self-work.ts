@@ -49,7 +49,7 @@ export interface SelfWorkResult {
 
 // ─── Decision logic ─────────────────────────────────────────────────────────
 
-export async function decideSelfWork(_data?: ElenaDataPull): Promise<SelfWorkTask | null> {
+export async function decideSelfWork(): Promise<SelfWorkTask | null> {
   const db = supabaseAdmin();
 
   const { count: totalArticles } = await db
