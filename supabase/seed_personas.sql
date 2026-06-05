@@ -114,7 +114,7 @@ values (
   null,
   '',
   '',
-  '{"writes_articles": false, "cron_utc": "0 21 * * *", "min_articles_to_run": 1}'::jsonb,
+  '{"writes_articles": false, "cron_utc": "0 21 * * *", "min_articles_to_run": 1, "model": "claude-sonnet-4-5"}'::jsonb,
   true
 )
 on conflict (id) do update set
