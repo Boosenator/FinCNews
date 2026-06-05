@@ -56,6 +56,12 @@ const STEPS: { key: PipelineStep; label: string; desc: string; color: string }[]
   },
 ];
 
+interface ContextLayer {
+  label: string;
+  content: string;
+  empty: boolean;
+}
+
 export default function PersonasTab() {
   const [steps, setSteps] = useState<Record<PipelineStep, StepState>>({
     "data-pull":   { status: "idle", result: null },
@@ -68,6 +74,9 @@ export default function PersonasTab() {
   const [isActive, setIsActive] = useState<boolean | null>(null);
   const [recentRuns, setRecentRuns] = useState<PersonaRun[]>([]);
   const [runsLoaded, setRunsLoaded] = useState(false);
+  const [contextLayers, setContextLayers] = useState<ContextLayer[] | null>(null);
+  const [contextLoading, setContextLoading] = useState(false);
+  const [contextTopic, setContextTopic] = useState("");
 
   const setStep = useCallback((key: PipelineStep, patch: Partial<StepState>) => {
     setSteps(prev => ({ ...prev, [key]: { ...prev[key], ...patch } }));
@@ -119,6 +128,19 @@ export default function PersonasTab() {
     const data = await res.json() as { runs: PersonaRun[] };
     setRecentRuns(data.runs ?? []);
     setRunsLoaded(true);
+  }
+
+  async function loadContext() {
+    setContextLoading(true);
+    setContextLayers(null);
+    const res = await fetch("/api/admin/personas/elena-voss", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "show-context", topic: contextTopic || undefined }),
+    });
+    const data = await res.json() as { layers: ContextLayer[] };
+    setContextLayers(data.layers ?? []);
+    setContextLoading(false);
   }
 
   const anyLoading = activeStep !== null;
@@ -269,6 +291,56 @@ export default function PersonasTab() {
                   )}
                 </div>
               </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Memory & Context Inspector */}
+      <div className="rounded-xl border border-white/[0.06] bg-zinc-900/40 p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold text-white">Memory & Context</p>
+            <p className="mt-0.5 text-xs text-zinc-600">What Elena sees before generating an article</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={contextTopic}
+              onChange={e => setContextTopic(e.target.value)}
+              placeholder="topic for semantic search (optional)"
+              className="w-56 rounded-lg border border-white/[0.08] bg-zinc-950 px-3 py-1.5 text-xs text-zinc-300 placeholder-zinc-700 focus:border-cyan-400/40 focus:outline-none"
+            />
+            <button
+              onClick={loadContext}
+              disabled={contextLoading}
+              className="rounded-lg border border-white/[0.1] px-3 py-1.5 text-xs font-bold text-zinc-400 transition hover:border-white/20 hover:text-zinc-200 disabled:cursor-wait disabled:opacity-40"
+            >
+              {contextLoading ? (
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  Loading…
+                </span>
+              ) : contextLayers ? "↻ Refresh" : "Show Memory"}
+            </button>
+          </div>
+        </div>
+
+        {contextLayers && (
+          <div className="mt-5 space-y-3">
+            {contextLayers.map((layer, i) => (
+              <details key={i} open={!layer.empty} className="group">
+                <summary className={`flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition hover:bg-white/[0.03] ${
+                  layer.empty ? "text-zinc-700" : "text-zinc-300"
+                }`}>
+                  <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${layer.empty ? "bg-zinc-700" : "bg-cyan-400"}`} />
+                  {layer.label}
+                  {layer.empty && <span className="ml-1 text-zinc-700">(empty)</span>}
+                </summary>
+                <pre className="mt-1 max-h-72 overflow-y-auto rounded-lg bg-zinc-950 px-4 py-3 text-[11px] leading-[1.7] text-zinc-400 whitespace-pre-wrap">
+                  {layer.content}
+                </pre>
+              </details>
             ))}
           </div>
         )}

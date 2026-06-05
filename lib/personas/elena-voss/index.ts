@@ -178,6 +178,116 @@ export async function runElenaVoss(): Promise<RunResult> {
   };
 }
 
+// ─── Public context inspector (for admin UI) ─────────────────────────────────
+
+export interface ContextLayer {
+  label: string;
+  content: string;
+  empty: boolean;
+}
+
+export async function getElenaContext(topic?: string): Promise<ContextLayer[]> {
+  const supabase = supabaseAdmin();
+  const [
+    { data: permanent },
+    { data: recent },
+    { data: allArticles },
+    { data: forecastRows },
+    position,
+    semanticMatches,
+  ] = await Promise.all([
+    supabase.from('persona_memory').select('content, created_at').eq('persona_id', PERSONA_ID).eq('memory_type', 'context'),
+    supabase.from('persona_memory').select('content, metadata, created_at').eq('persona_id', PERSONA_ID).eq('memory_type', 'article').order('created_at', { ascending: false }).limit(5),
+    supabase.from('persona_memory').select('id, memory_type, created_at').eq('persona_id', PERSONA_ID),
+    supabase.from('persona_memory').select('content, metadata, created_at').eq('persona_id', PERSONA_ID).eq('memory_type', 'forecast').order('created_at', { ascending: false }).limit(10),
+    getCurrentPosition(),
+    topic ? searchSimilarMemories(PERSONA_ID, topic, 4) : Promise.resolve([]),
+  ]);
+
+  const stats = {
+    total:     allArticles?.length ?? 0,
+    articles:  allArticles?.filter(r => r.memory_type === 'article').length ?? 0,
+    context:   allArticles?.filter(r => r.memory_type === 'context').length ?? 0,
+    forecasts: allArticles?.filter(r => r.memory_type === 'forecast').length ?? 0,
+    positions: allArticles?.filter(r => r.memory_type === 'position').length ?? 0,
+  };
+
+  const layers: ContextLayer[] = [];
+
+  // Layer 0: stats
+  layers.push({
+    label: 'Memory stats',
+    content: [
+      `Total records: ${stats.total}`,
+      `  articles: ${stats.articles}  |  context: ${stats.context}  |  forecasts: ${stats.forecasts}  |  positions: ${stats.positions}`,
+    ].join('\n'),
+    empty: stats.total === 0,
+  });
+
+  // Layer 1: bootstrap / permanent context
+  layers.push({
+    label: '1. Analytical foundation (context memories)',
+    content: permanent?.length
+      ? permanent.map(m => m.content as string).join('\n\n---\n\n')
+      : '(empty — bootstrap article not yet written)',
+    empty: !permanent?.length,
+  });
+
+  // Layer 2: current position
+  layers.push({
+    label: '2. Current position',
+    content: position
+      ? `Stance: ${position.stance} on ${position.on}\nRegime: ${position.regime}\nConviction: ${position.conviction}\nUpdated: ${position.updated_at}`
+      : '(empty — position not yet extracted)',
+    empty: !position,
+  });
+
+  // Layer 3: forecasts
+  const openForecasts  = forecastRows?.filter(f => (f.metadata as Record<string, unknown>).status === 'open') ?? [];
+  const closedForecasts = forecastRows?.filter(f => (f.metadata as Record<string, unknown>).status !== 'open') ?? [];
+  layers.push({
+    label: `3. Forecasts (${openForecasts.length} open, ${closedForecasts.length} resolved)`,
+    content: forecastRows?.length
+      ? forecastRows.map(f => {
+          const m = f.metadata as Record<string, unknown>;
+          const age = Math.round((Date.now() - new Date(f.created_at as string).getTime()) / 3_600_000);
+          return `[${String(m.status).toUpperCase()}] ${String(m.metric)} ${String(m.direction)} ${String(m.magnitude ?? '')} — "${String(m.statement ?? '')}" (${age}h ago)`;
+        }).join('\n')
+      : '(empty — no forecasts extracted yet)',
+    empty: !forecastRows?.length,
+  });
+
+  // Layer 4: semantic matches
+  layers.push({
+    label: `4. Semantic search${topic ? ` for "${topic}"` : ' (no topic provided)'}`,
+    content: semanticMatches.length
+      ? semanticMatches.map(m => {
+          const meta = m.metadata as { title?: string; slug?: string };
+          return `[${(m.similarity * 100).toFixed(0)}%] ${meta.title ?? '(no title)'} → /economy/${meta.slug ?? ''}`;
+        }).join('\n')
+      : topic
+        ? '(no similar articles found — embeddings may not be populated yet)'
+        : '(provide a topic to see semantic results)',
+    empty: semanticMatches.length === 0,
+  });
+
+  // Layer 5: recent articles
+  layers.push({
+    label: `5. Recent articles (last ${recent?.length ?? 0} of ${stats.articles})`,
+    content: recent?.length
+      ? recent.map((m, i) => {
+          const meta = m.metadata as { title?: string; topic?: string; slug?: string; self_work?: boolean };
+          const age  = Math.round((Date.now() - new Date(m.created_at as string).getTime()) / 3_600_000);
+          const sw   = meta.self_work ? ' [self-work]' : '';
+          return `${i + 1}. ${meta.title ?? '(no title)'}${sw}\n   topic: ${meta.topic ?? 'unknown'}  |  ${age}h ago  |  /economy/${meta.slug ?? ''}`;
+        }).join('\n\n')
+      : '(empty — no articles published yet)',
+    empty: !recent?.length,
+  });
+
+  return layers;
+}
+
 // ─── Context builder ─────────────────────────────────────────────────────────
 // 1. Permanent context (bootstrap manifesto) — always loaded
 // 2. Recent 5 articles (chronological)

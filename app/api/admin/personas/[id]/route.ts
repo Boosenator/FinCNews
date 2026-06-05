@@ -4,12 +4,12 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { pullElenaData } from '@/lib/personas/elena-voss/data-pull';
 import { shouldWrite } from '@/lib/personas/elena-voss/should-write';
 import { generateElenaArticle } from '@/lib/personas/elena-voss/generate';
-import { runElenaVoss } from '@/lib/personas/elena-voss';
+import { runElenaVoss, getElenaContext } from '@/lib/personas/elena-voss';
 import { decideSelfWork, executeSelfWork } from '@/lib/personas/elena-voss/self-work';
 
 export const maxDuration = 60;
 
-type Action = 'data-pull' | 'should-write' | 'generate' | 'run' | 'self-work' | 'toggle-active' | 'recent-runs';
+type Action = 'data-pull' | 'should-write' | 'generate' | 'run' | 'self-work' | 'show-context' | 'toggle-active' | 'recent-runs';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   if (!isAuthed(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -18,7 +18,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: 'Unknown persona' }, { status: 404 });
   }
 
-  const body = (await req.json().catch(() => ({}))) as { action?: Action };
+  const body = (await req.json().catch(() => ({}))) as { action?: Action; topic?: string };
   const action = body.action;
 
   try {
@@ -68,6 +68,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         }
         const result = await executeSelfWork(task, data, recentSummary);
         return NextResponse.json({ ok: true, task, ...result });
+      }
+
+      case 'show-context': {
+        const layers = await getElenaContext(body.topic);
+        return NextResponse.json({ ok: true, layers });
       }
 
       case 'toggle-active': {
