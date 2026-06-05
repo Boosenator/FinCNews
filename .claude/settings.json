@@ -25,7 +25,9 @@
       "Bash(mkdir -p \"c:/GameDev/SEOtoTG/app/\\(site\\)/author/[slug]\")",
       "Bash(node scripts/rewrite-article-body.mjs *)",
       "Bash(node scripts/rewrite-elena-bootstrap.mjs *)",
-      "Bash(start c:\\\\tmp\\\\admin-mockup.html)"
+      "Bash(start c:\\\\tmp\\\\admin-mockup.html)",
+      "Bash(Get-ChildItem -Path \"c:\\\\GameDev\\\\SEOtoTG\\\\app\\\\\\(admin\\)\\\\flows\\\\\" -Recurse | Select-Object FullName)",
+      "Bash(route.js\")"
     ],
     "additionalDirectories": [
       "c:\\Users\\boosy\\.claude\\projects\\c--GameDev-SEOtoTG\\memory",
