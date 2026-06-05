@@ -99,7 +99,7 @@ export default function DashboardShell({
             totalProcessed={totalProcessed}
           />
         )}
-        {tab === "analytics" && <AnalyticsTab sources={sources} logs={logs} />}
+        {tab === "analytics" && <AnalyticsTab />}
       </div>
     </div>
   );
