@@ -1,4 +1,5 @@
 import { createClient } from '@sanity/client';
+import type { PortableTextBlock } from '@/lib/sanity';
 
 export const PERSONA_AVATAR: Record<string, string> = {
   'elena-voss':  '/authors/elena-voss.png',
@@ -32,6 +33,69 @@ export function slugify(title: string): string {
     .slice(0, 80) + '-' + Date.now().toString(36);
 }
 
+// Converts markdown string to Sanity PortableText blocks.
+// Handles: ## h2, ### h3, **bold**, *italic*, plain paragraphs.
+export function markdownToPortableText(markdown: string): PortableTextBlock[] {
+  return markdown
+    .split(/\n{2,}/)
+    .map(p => p.trim())
+    .filter(Boolean)
+    .map((paragraph, i) => {
+      const h2 = paragraph.match(/^##\s+(.+)$/);
+      const h3 = paragraph.match(/^###\s+(.+)$/);
+
+      if (h2 ?? h3) {
+        return {
+          _type: 'block' as const,
+          _key: `b-${i}`,
+          style: h2 ? 'h2' : 'h3',
+          markDefs: [],
+          children: [{
+            _type: 'span' as const,
+            _key: `s-${i}-0`,
+            text: (h2?.[1] ?? h3?.[1])!,
+            marks: [],
+          }],
+        };
+      }
+
+      return {
+        _type: 'block' as const,
+        _key: `b-${i}`,
+        style: 'normal',
+        markDefs: [],
+        children: parseInlineMarkdown(paragraph, i),
+      };
+    });
+}
+
+type PTSpan = { _type: 'span'; _key: string; text: string; marks: string[] };
+
+function parseInlineMarkdown(text: string, blockIdx: number): PTSpan[] {
+  const spans: PTSpan[] = [];
+  let idx = 0;
+  let lastEnd = 0;
+
+  // Match **bold** before *italic* to avoid ambiguity
+  const re = /\*\*([^*\n]+)\*\*|\*([^*\n]+)\*/g;
+  let m: RegExpExecArray | null;
+
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > lastEnd) {
+      spans.push({ _type: 'span', _key: `s-${blockIdx}-${idx++}`, text: text.slice(lastEnd, m.index), marks: [] });
+    }
+    const isBold = m[0].startsWith('**');
+    spans.push({ _type: 'span', _key: `s-${blockIdx}-${idx++}`, text: (isBold ? m[1] : m[2])!, marks: [isBold ? 'strong' : 'em'] });
+    lastEnd = m.index + m[0].length;
+  }
+
+  if (lastEnd < text.length) {
+    spans.push({ _type: 'span', _key: `s-${blockIdx}-${idx}`, text: text.slice(lastEnd), marks: [] });
+  }
+
+  return spans.length > 0 ? spans : [{ _type: 'span', _key: `s-${blockIdx}-0`, text, marks: [] }];
+}
+
 export async function publishArticleToSanity(
   article: PublishableArticle,
   personaId: string
@@ -59,7 +123,7 @@ export async function publishArticleToSanity(
       en: {
         title:           article.title,
         excerpt:         article.excerpt,
-        body:            article.body,
+        body:            markdownToPortableText(article.body),
         metaTitle:       article.metaTitle,
         metaDescription: article.metaDescription,
         telegramText:    article.telegramText,
