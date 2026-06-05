@@ -31,13 +31,18 @@ export interface ElenaDataPull {
 
 const FRED_BASE = 'https://api.stlouisfed.org/fred/series/observations';
 
-async function fetchFredSeries(seriesId: string, apiKey: string): Promise<number> {
+async function fetchFredSeries(
+  seriesId: string,
+  apiKey: string,
+  units: 'lin' | 'pc1' = 'lin'  // lin=level, pc1=percent change from year ago
+): Promise<number> {
   const url = new URL(FRED_BASE);
   url.searchParams.set('series_id', seriesId);
   url.searchParams.set('api_key', apiKey);
   url.searchParams.set('file_type', 'json');
   url.searchParams.set('sort_order', 'desc');
   url.searchParams.set('limit', '1');
+  url.searchParams.set('units', units);
   url.searchParams.set('observation_start', '2020-01-01');
 
   const res = await fetch(url.toString());
@@ -121,12 +126,13 @@ export async function pullElenaData(): Promise<ElenaDataPull> {
     secFilings,
     btcChange24h,
   ] = await Promise.allSettled([
-    fetchFredSeries('FEDFUNDS', apiKey),
-    fetchFredSeries('CPIAUCSL', apiKey),
-    fetchFredSeries('PCEPILFE', apiKey),
-    fetchFredSeries('DGS10', apiKey),
-    fetchFredSeries('DGS2', apiKey),
-    fetchFredSeries('DTWEXBGS', apiKey),
+    fetchFredSeries('FEDFUNDS',  apiKey, 'lin'),  // effective fed funds rate (%)
+    fetchFredSeries('CPIAUCSL',  apiKey, 'pc1'),  // CPI percent change from year ago
+    fetchFredSeries('PCEPILFE',  apiKey, 'pc1'),  // Core PCE percent change from year ago
+    fetchFredSeries('DGS10',     apiKey, 'lin'),  // 10Y Treasury yield (%)
+    fetchFredSeries('DGS2',      apiKey, 'lin'),  // 2Y Treasury yield (%)
+    fetchFredSeries('DTWEXBGS',  apiKey, 'lin'),  // Broad dollar index (level, not %)
+
     fetchSecFilings(),
     fetchBtcChange(),
   ]).then(results => results.map(r => (r.status === 'fulfilled' ? r.value : null)));

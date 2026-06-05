@@ -120,7 +120,7 @@ MACRO DATA (just pulled from FRED):
 - 10Y Treasury: ${data.tenYearYield}%
 - 2Y Treasury: ${data.twoYearYield}%
 - Yield Curve Spread (10Y-2Y): ${data.yieldCurveSpread.toFixed(2)}%
-- DXY Index: ${data.dxyIndex}
+- USD Broad Index (DTWEXBGS): ${data.dxyIndex}
 - BTC 24h change: ${data.btcChange24h.toFixed(2)}%
 - Data pulled at: ${data.pulledAt}
 

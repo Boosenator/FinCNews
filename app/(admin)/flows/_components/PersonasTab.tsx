@@ -305,7 +305,7 @@ function StepResult({ stepKey, result }: { stepKey: PipelineStep; result: unknow
           ["10Y Yield", d.tenYearYield, "%"],
           ["2Y Yield", d.twoYearYield, "%"],
           ["Yield Curve", d.yieldCurveSpread, "%"],
-          ["DXY", d.dxyIndex, ""],
+          ["USD Index", d.dxyIndex, ""],
           ["BTC 24h", d.btcChange24h, "%"],
         ] as [string, unknown, string][]).map(([label, val, unit]) => (
           <div key={label} className="flex justify-between gap-2 py-0.5">
