@@ -3,7 +3,7 @@ import { Resend } from "resend";
 import { supabaseAdmin } from "@/lib/supabase";
 import { isAuthed } from "@/lib/auth";
 import { breakingEmail, digestEmail, listUnsubscribeHeaders, type DigestArticle } from "@/lib/emails";
-import { BASE_URL, EMAIL_FROM_NEWS } from "@/lib/config";
+import { BASE_URL, EMAIL_FROM_NEWS, EMAIL_REPLY_TO } from "@/lib/config";
 
 // Send a campaign to all confirmed subscribers
 export async function POST(
@@ -61,6 +61,7 @@ export async function POST(
       const from = campaign.type === "breaking" ? EMAIL_FROM_NEWS : EMAIL_FROM_NEWS;
       const { error } = await resend.emails.send({
         from,
+        replyTo: EMAIL_REPLY_TO,
         to: sub.email,
         subject,
         html,

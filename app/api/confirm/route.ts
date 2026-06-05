@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { supabaseAdmin } from "@/lib/supabase";
 import { welcomeEmail, listUnsubscribeHeaders } from "@/lib/emails";
-import { BASE_URL, EMAIL_FROM_TECH } from "@/lib/config";
+import { BASE_URL, EMAIL_FROM_TECH, EMAIL_REPLY_TO } from "@/lib/config";
 
 export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get("token");
@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
   const resend = new Resend(process.env.RESEND_API_KEY);
   const { data: sent, error: mailError } = await resend.emails.send({
     from: EMAIL_FROM_TECH,
+    replyTo: EMAIL_REPLY_TO,
     to: data.email,
     subject: SUBJECT,
     html,

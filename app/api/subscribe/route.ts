@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { supabaseAdmin } from "@/lib/supabase";
 import { confirmationEmail } from "@/lib/emails";
-import { BASE_URL, EMAIL_FROM_TECH } from "@/lib/config";
+import { BASE_URL, EMAIL_FROM_TECH, EMAIL_REPLY_TO } from "@/lib/config";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -61,8 +61,9 @@ export async function POST(req: NextRequest) {
   const { html, text } = confirmationEmail(confirmUrl);
   const resend = new Resend(process.env.RESEND_API_KEY);
   const { data: sent, error: mailError } = await resend.emails.send({
-    from: EMAIL_FROM_TECH,
-    to: email,
+    from:    EMAIL_FROM_TECH,
+    replyTo: EMAIL_REPLY_TO,
+    to:      email,
     subject: SUBJECT,
     html,
     text,

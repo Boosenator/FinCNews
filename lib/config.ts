@@ -7,3 +7,4 @@ export const TELEGRAM_CHANNEL_LABEL = process.env.TELEGRAM_CHANNEL_LABEL ?? "@Fi
 
 export const EMAIL_FROM_TECH = "FinCNews <tech@e.finc.news>";
 export const EMAIL_FROM_NEWS = "FinCNews Digest <news@e.finc.news>";
+export const EMAIL_REPLY_TO = "editorial@finc.news";
