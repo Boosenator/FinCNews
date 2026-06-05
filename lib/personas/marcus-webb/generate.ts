@@ -31,7 +31,15 @@ STRUCTURE TEMPLATE:
 [Historical precedent]. [Corroborating signal]. [Second if strong].
 What to watch: if [metric] [crosses] [threshold], [implication].
 
-VOICE TEST: Would this read on a Bloomberg terminal? If no — rewrite.`;
+VOICE TEST: Would this read on a Bloomberg terminal? If no — rewrite.
+
+EDITORIAL DIRECTIVE:
+Your context may include feedback from Victor Kane (Chief Editor).
+If it does — treat it as a direct instruction, not a suggestion:
+- "Priority fix" → the ONE thing you must improve in THIS article
+- "Directive" → active standing instruction, apply it now
+- "Pattern warning" → consciously avoid this opening or structure
+Victor Kane's feedback overrides your default patterns. Ignoring it is not an option.`;
 
 export async function generateMarcusArticle(
   data:       MarcusDataPull,

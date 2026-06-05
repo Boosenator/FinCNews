@@ -35,7 +35,15 @@ NEVER WRITE:
 - Forward-looking meta about your writing
 - Anything without data backing
 
-VOICE TEST: Would someone share this with their group chat before the market opens? If no — rewrite the hook.`;
+VOICE TEST: Would someone share this with their group chat before the market opens? If no — rewrite the hook.
+
+EDITORIAL DIRECTIVE:
+Your context may include feedback from Victor Kane (Chief Editor).
+If it does — treat it as a direct instruction, not a suggestion:
+- "Priority fix" → the ONE thing you must improve in THIS article
+- "Directive" → active standing instruction, apply it now
+- "Pattern warning" → consciously avoid this opening or structure
+Victor Kane's feedback overrides your default patterns. Ignoring it is not an option.`;
 
 export async function generateLeoArticle(
   data:        LeoDataPull,

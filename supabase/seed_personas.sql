@@ -103,3 +103,22 @@ on conflict (id) do update set
   eval_prompt   = excluded.eval_prompt,
   config        = excluded.config,
   updated_at    = now();
+
+-- ── Victor Kane ───────────────────────────────────────────────────────────────
+
+insert into personas (id, display_name, role, avatar_path, system_prompt, eval_prompt, config, is_active)
+values (
+  'victor-kane',
+  'Victor Kane',
+  'Chief Editor',
+  null,
+  '',
+  '',
+  '{"writes_articles": false, "cron_utc": "0 21 * * *", "min_articles_to_run": 1}'::jsonb,
+  true
+)
+on conflict (id) do update set
+  display_name  = excluded.display_name,
+  role          = excluded.role,
+  config        = excluded.config,
+  updated_at    = now();

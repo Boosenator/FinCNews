@@ -304,6 +304,119 @@ export default function PersonasTab() {
         sources="CoinGecko / Fear&Greed / Reddit / DexScreener"
         cronTime="10:00 UTC daily"
       />
+
+      <ChiefEditorCard />
+    </div>
+  );
+}
+
+// ── Chief Editor Card ─────────────────────────────────────────────────────────
+
+interface VictorRun {
+  id: string; run_date: string; should_write: boolean;
+  reasoning: string; topic: string | null; created_at: string;
+  data_snapshot: Record<string, unknown>;
+}
+
+function ChiefEditorCard() {
+  const [running, setRunning]     = useState(false);
+  const [result, setResult]       = useState<Record<string, unknown> | null>(null);
+  const [runs, setRuns]           = useState<VictorRun[]>([]);
+  const [runsLoaded, setRunsLoaded] = useState(false);
+
+  async function runFeedback() {
+    setRunning(true); setResult(null);
+    const res = await fetch('/api/admin/personas/victor-kane', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'run' }), signal: AbortSignal.timeout(65000),
+    });
+    setResult(await res.json() as Record<string, unknown>);
+    setRunning(false);
+  }
+
+  async function loadRuns() {
+    const res = await fetch('/api/admin/personas/victor-kane', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'recent-runs' }),
+    });
+    const data = await res.json() as { runs: VictorRun[] };
+    setRuns(data.runs ?? []);
+    setRunsLoaded(true);
+  }
+
+  const r = result as Record<string, unknown> | null;
+
+  return (
+    <div className="rounded-xl border border-amber-500/15 bg-amber-500/[0.03] p-6 space-y-5">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full border border-amber-500/20 bg-amber-500/10 text-2xl">
+            ✍
+          </div>
+          <div>
+            <p className="text-base font-black text-white">Victor Kane</p>
+            <p className="text-xs text-zinc-500">Chief Editor · reads all analysts · 21:00 UTC</p>
+            <p className="mt-1 text-[11px] text-zinc-600">Does not publish · writes feedback to analyst memory</p>
+          </div>
+        </div>
+        <button onClick={runFeedback} disabled={running}
+          className="flex items-center gap-2 rounded-lg border border-amber-400/30 px-4 py-2 text-sm font-bold text-amber-300 transition hover:border-amber-400/60 disabled:cursor-wait disabled:opacity-40">
+          {running && <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />}
+          {running ? 'Running…' : '▶ Run Feedback'}
+        </button>
+      </div>
+
+      {/* Result */}
+      {r && (
+        <div className={`rounded-lg border p-4 ${Boolean(r.ran) ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-zinc-800 bg-zinc-900/40'}`}>
+          {Boolean(r.ran) ? (
+            <div className="space-y-2">
+              <p className="text-sm font-bold text-emerald-400">✓ Session complete — {String(r.date ?? '')}</p>
+              <p className="text-xs text-zinc-400">{String(r.deskNote ?? '')}</p>
+              {Boolean(r.scores) && (
+                <div className="flex gap-4 text-[11px]">
+                  {Object.entries(r.scores as Record<string, number | null>).map(([id, score]) => (
+                    <span key={id} className="text-zinc-500">
+                      {id.split('-')[0]}: <span className={`font-bold ${typeof score === 'number' && score >= 80 ? 'text-emerald-400' : typeof score === 'number' && score >= 65 ? 'text-amber-400' : 'text-zinc-400'}`}>{score ?? '—'}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs text-zinc-500">{String(r.reason ?? r.error ?? 'No result')}</p>
+          )}
+        </div>
+      )}
+
+      {/* Recent sessions */}
+      <div className="border-t border-white/[0.04] pt-4">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-bold text-zinc-400">Recent Sessions</p>
+          <button onClick={loadRuns} className="text-xs text-zinc-500 hover:text-zinc-300">{runsLoaded ? '↻ Refresh' : 'Load'}</button>
+        </div>
+        {runsLoaded && runs.length === 0 && <p className="text-xs text-zinc-600">No sessions yet.</p>}
+        {runs.map((run) => {
+          const scores = (run.data_snapshot?.scores ?? {}) as Record<string, number | null>;
+          return (
+            <div key={run.id} className="flex items-start justify-between gap-4 border-t border-white/[0.04] py-2.5">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-zinc-300">{run.should_write ? '✓ Session' : '— Quiet desk'}</p>
+                <p className="mt-0.5 truncate text-[11px] text-zinc-600">{run.reasoning}</p>
+                {Object.keys(scores).length > 0 && (
+                  <div className="flex gap-3 mt-1 text-[10px]">
+                    {Object.entries(scores).map(([id, s]) => (
+                      <span key={id} className="text-zinc-600">{id.split('-')[0]}: <span className="text-zinc-400">{s ?? '—'}</span></span>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <p className="text-[11px] text-zinc-600 flex-shrink-0">{run.run_date}</p>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -18,6 +18,9 @@ import { generateLeoArticle } from '@/lib/personas/leo-cruz/generate';
 import { runLeoCruz, getLeoContext } from '@/lib/personas/leo-cruz';
 import { decideSelfWork as leoDecideSelf, executeSelfWork as leoExecSelf } from '@/lib/personas/leo-cruz/self-work';
 
+// Victor Kane
+import { runChiefEditor } from '@/lib/personas/chief-editor';
+
 // Marcus Webb
 import { pullMarcusData } from '@/lib/personas/marcus-webb/data-pull';
 import { loadBaseline } from '@/lib/personas/marcus-webb/baseline';
@@ -29,9 +32,9 @@ import { decideSelfWork as marcusDecideSelf, executeSelfWork as marcusExecSelf }
 
 export const maxDuration = 60;
 
-type Action = 'data-pull' | 'should-write' | 'generate' | 'run' | 'self-work' | 'show-context' | 'toggle-active' | 'recent-runs';
+type Action = 'data-pull' | 'should-write' | 'generate' | 'run' | 'self-work' | 'show-context' | 'toggle-active' | 'recent-runs' | 'run-feedback' | string;
 
-const KNOWN_PERSONAS = ['elena-voss', 'leo-cruz', 'marcus-webb'];
+const KNOWN_PERSONAS = ['elena-voss', 'leo-cruz', 'marcus-webb', 'victor-kane'];
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   if (!isAuthed(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -179,6 +182,19 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       if (action === 'show-context') {
         const layers = await getMarcusContext(topic);
         return NextResponse.json({ ok: true, layers });
+      }
+    }
+
+    // ── Victor Kane ─────────────────────────────────────────────────────────
+    if (params.id === 'victor-kane') {
+      if (action === 'run') {
+        const result = await runChiefEditor();
+        return NextResponse.json({ ok: true, ...result });
+      }
+      if (action === 'recent-runs') {
+        const db = supabaseAdmin();
+        const { data } = await db.from('persona_runs').select('*').eq('persona_id', 'victor-kane').order('created_at', { ascending: false }).limit(10);
+        return NextResponse.json({ ok: true, runs: data ?? [] });
       }
     }
 

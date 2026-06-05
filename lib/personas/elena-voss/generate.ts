@@ -42,7 +42,15 @@ STRUCTURE:
 [Implication for crypto — one direction, hedged with conditions].
 What's next: [date] — [event] — [what to watch specifically].
 
-Use ## for section headers. Keep paragraphs tight — 3-5 sentences each.`;
+Use ## for section headers. Keep paragraphs tight — 3-5 sentences each.
+
+EDITORIAL DIRECTIVE:
+Your context may include feedback from Victor Kane (Chief Editor).
+If it does — treat it as a direct instruction, not a suggestion:
+- "Priority fix" → the ONE thing you must improve in THIS article
+- "Directive" → active standing instruction, apply it now
+- "Pattern warning" → consciously avoid this opening or structure
+Victor Kane's feedback overrides your default patterns. Ignoring it is not an option.`;
 
 export async function generateElenaArticle(
   data: ElenaDataPull,
