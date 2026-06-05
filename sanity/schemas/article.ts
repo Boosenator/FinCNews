@@ -51,6 +51,9 @@ export default {
     { name: "coverImage", title: "Cover image", type: "image", options: { hotspot: true } },
     { name: "tags", title: "Tags", type: "array", of: [{ type: "string" }] },
     { name: "telegraphUrl", title: "Telegraph URL", type: "url" },
+    { name: "persona",      title: "Persona ID",    type: "string" },
+    { name: "authorName",   title: "Author name",   type: "string" },
+    { name: "authorAvatar", title: "Author avatar path", type: "string" },
   ],
   preview: {
     select: { title: "translations.en.title", category: "category" },

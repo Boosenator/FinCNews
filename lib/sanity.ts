@@ -33,6 +33,9 @@ export type Article = {
   coverImage?: { url?: string; alt?: string };
   tags?: string[];
   telegraphUrl?: string;
+  persona?: string;
+  authorName?: string;
+  authorAvatar?: string;
   en: ArticleTranslation;
 };
 
@@ -79,6 +82,9 @@ const projection = `
   sourceUrl,
   tags,
   telegraphUrl,
+  persona,
+  authorName,
+  authorAvatar,
   "coverImage": { "url": coverImage.asset->url, "alt": coverImage.alt },
   "en": translations.en
 `;

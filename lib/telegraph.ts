@@ -1,4 +1,4 @@
-import { BASE_URL } from "@/lib/config";
+import { BASE_URL, TELEGRAM_CHANNEL_LABEL, TELEGRAM_CHANNEL_URL } from "@/lib/config";
 
 export type TelegraphNode =
   | string
@@ -45,6 +45,18 @@ function buildContent(
           tag: "a",
           attrs: { href: siteUrl },
           children: [`FinCNews — ${title}`],
+        },
+      ],
+    },
+
+    {
+      tag: "p",
+      children: [
+        "For real-time finance and crypto alerts, follow us on Telegram: ",
+        {
+          tag: "a",
+          attrs: { href: TELEGRAM_CHANNEL_URL },
+          children: [TELEGRAM_CHANNEL_LABEL],
         },
       ],
     },

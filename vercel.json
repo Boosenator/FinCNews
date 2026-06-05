@@ -6,6 +6,7 @@
     { "path": "/api/cron/generate", "schedule": "0 * * * *"   },
     { "path": "/api/cron/editorial/discovery", "schedule": "30 2 * * *" },
     { "path": "/api/cron/editorial/morning", "schedule": "0 3 * * *" },
-    { "path": "/api/cron/editorial/evening", "schedule": "0 14 * * *" }
+    { "path": "/api/cron/editorial/evening", "schedule": "0 14 * * *" },
+    { "path": "/api/cron/elena",             "schedule": "0 8 * * *"  }
   ]
 }

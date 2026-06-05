@@ -8,7 +8,24 @@
       "Bash(curl -sI \"https://finc.news/robots.txt\")",
       "Bash(curl -s \"https://finc.news/robots.txt\")",
       "Bash(curl -sI \"https://fin-c-news.vercel.app/robots.txt\")",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(node)",
+      "Bash(curl -s \"https://finc.news/about\")",
+      "Bash(curl -s \"https://finc.news/sitemap.xml\")",
+      "Bash(grep -v \"finc.news/crypto$\\\\|finc.news/markets$\\\\|finc.news/economy$\\\\|finc.news/fintech$\\\\|finc.news/policy$\\\\|finc.news/companies$\\\\|finc.news/$\")",
+      "Bash(curl -s --max-time 15 \"https://finc.news/crypto/mstr-2-billion-bitcoin-843738-btc\")",
+      "Bash(curl -s --max-time 15 \"https://finc.news/sitemap.xml\")",
+      "Bash(awk -F'/' '{print $2}')",
+      "Bash(curl -s --max-time 20 \"https://finc.news/crypto/mstr-2-billion-bitcoin-843738-btc\")",
+      "Bash(curl -s --max-time 20 \"https://finc.news/crypto/iran-bitcoin-insurance-strait-hormuz\")",
+      "Bash(xargs grep -l \"email\\\\|mail\\\\|send\")",
+      "Bash(xargs grep -l \"RESEND\\\\|Resend\")",
+      "Bash(node -e \"require\\('resend'\\)\")",
+      "Bash(mkdir -p \"c:/GameDev/SEOtoTG/app/api/admin/personas/[id]\")"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\boosy\\.claude\\projects\\c--GameDev-SEOtoTG\\memory",
+      "c:\\GameDev\\SEOtoTG\\app\\api\\admin\\personas"
     ]
   }
 }

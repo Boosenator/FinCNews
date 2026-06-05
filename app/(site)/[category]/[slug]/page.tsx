@@ -171,11 +171,21 @@ export default async function ArticlePage({ params }: Props) {
             {/* Byline + share */}
             <div className="mt-5 flex flex-wrap items-center justify-between gap-4 border-y border-white/[0.06] py-4">
               <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-400/10 text-xs font-black text-cyan-400">
-                  FC
-                </div>
+                {article.authorAvatar ? (
+                  <Image
+                    src={article.authorAvatar}
+                    alt={article.authorName ?? 'Author'}
+                    width={32}
+                    height={32}
+                    className="rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-400/10 text-xs font-black text-cyan-400">
+                    FC
+                  </div>
+                )}
                 <div className="text-sm">
-                  <p className="font-semibold text-zinc-200">FinCNews Editorial</p>
+                  <p className="font-semibold text-zinc-200">{article.authorName ?? 'FinCNews Editorial'}</p>
                   {article.sourceUrl && (
                     <a
                       href={article.sourceUrl}
