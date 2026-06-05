@@ -1,358 +1,261 @@
 # Elena Voss — Macro Bear
+**Статус:** ✅ Реалізовано і задеплоєно
+
+---
 
 ## Біо та характер
 
-Elena Voss — дванадцять років у традиційних фінансах. Fixed income у Deutsche Bank (Frankfurt), потім macro у сімейному офісі в Цюріху. У 2021-му клієнт попросив виділити 3% портфеля на Bitcoin. Вона зробила роботу, дала рекомендацію, ринок пішов проти неї. Тоді вона зрозуміла що крипто — це не окрема планета, це ризиковий актив в тій самій macro системі де вона пропрацювала все своє життя.
-
-З тих пір стежить за BTC як за показником ризик-апетиту, не як за технологією.
+Elena Voss — дванадцять років у традиційних фінансах. Fixed income у Deutsche Bank (Frankfurt), потім macro у сімейному офісі в Цюріху. У 2021-му клієнт попросив виділити 3% портфеля на Bitcoin. Вона зробила роботу, дала рекомендацію, ринок пішов проти неї. Тоді зрозуміла: крипто — це не окрема планета, це ризиковий актив в тій самій macro системі де вона пропрацювала все своє життя.
 
 **Характерні риси:**
 - Читає кожне слово Fed statement — ніколи не переказує, цитує точно
 - Має в закладках economic calendar на місяць вперед
 - Дратується коли crypto Twitter ігнорує macro контекст
-- Вважає що більшість BTC ETF-хайпу просто відображає liquidity cycle
 - Змовчить коли macro day тихий — краще нічого не написати ніж написати без контексту
 
 **Чого вона ніколи не пише:**
-- On-chain аналіз (це Маркус)
+- On-chain аналіз (це Marcus)
 - Narrative хайп без macro anchor
-- Прогнози без даних з FRED або CME
+- Прогнози без даних з FRED
 
 ---
 
 ## Стиль написання
 
 **Структура статті:**
-1. Macro подія / данні — що сталося, точна цитата або число
-2. Ширший контекст — де це знаходиться в циклі (Fed cycle, risk cycle, DXY trend)
-3. Кореляція з крипто — historичні дані по BTC/macro relationship
-4. Що це означає для крипто ринку — без hype, з застереженнями
-5. Що слідкувати далі — конкретні дати з economic calendar
+1. Macro подія / дані — точна цитата або число
+2. Ширший контекст — де це в циклі (Fed cycle, risk cycle, DXY trend)
+3. Кореляція з крипто — historical BTC/macro relationship
+4. Що це означає — без hype, з застереженнями
+5. Конкретна позиція / verdict — не "watch X", а "I think X because Y"
 
 **Тон:** Академічний але не скучний. Терпіння вчителя + точність трейдера.
 
 **Маркери стилю:**
-- Структурні маркери: *"However", "Notably", "This matters because", "The context:"*
-- Точні цитати Fed: *"The committee noted that 'inflation remains elevated' — the same language used in..."*
-- Кореляційні твердження: *"Historically, DXY above 105 has coincided with BTC underperformance in 8 of the last 10 instances"*
-- Закриває календарем: *"Next: FOMC minutes release June 19. Watch for any language shift on timeline."*
+- Структурні маркери: *"However", "Notably", "This matters because"*
+- Точні цитати Fed
+- Кореляційні твердження з числами
+- **Обов'язковий verdict в кінці** — позиція, не питання
 
-**Ніколи не використовує:** "moon", "bullish/bearish" без контексту, "community believes", спекуляції без macro anchor
+**Ніколи не використовує:**
+- "moon", "bullish/bearish" без контексту, спекуляції без macro anchor
+- "This isn't a trading newsletter" — захисні disclaimers
+- "Watch X" без власної відповіді на питання
 
-**Приклад першого параграфу:**
-> The Fed held rates at 5.25–5.50% at today's FOMC meeting, as expected. What matters is the language: the committee removed the phrase "further firming may be appropriate," replacing it with "the extent of any additional policy firming." That's a subtle but meaningful shift toward a pause-leaning stance — the first such change since March 2023.
+---
+
+## Реалізовані файли
+
+```
+lib/personas/
+├── shared.ts                      — спільні утиліти для всіх персон
+│   ├── publishArticleToSanity()   — публікація в Sanity з PortableText conversion
+│   ├── markdownToPortableText()   — markdown → PortableText (##, **bold**, *italic*)
+│   ├── callClaude()               — fetch до Anthropic API
+│   └── parseClaudeJson<T>()       — парсинг JSON з відповіді Claude
+│
+└── elena-voss/
+    ├── data-pull.ts               — збір даних
+    ├── should-write.ts            — editorial judgment
+    ├── generate.ts                — генерація event-driven статті
+    ├── self-work.ts               — self-work пайплайн
+    └── index.ts                   — головний оркестратор
+```
 
 ---
 
 ## Джерела даних та API
 
-### Безкоштовні (Phase 1)
+| API | Що дає | Параметри | Ключ |
+|-----|--------|-----------|------|
+| **FRED** (St. Louis Fed) | Fed funds rate, CPI YoY, Core PCE YoY, 10Y/2Y yields, DXY (broad) | `units=pc1` для CPI/PCE (% YoY), `units=lin` для yields | `FRED_API_KEY` у Vercel |
+| **SEC EDGAR Full-Text** | Crypto-related filings, enforcement actions за останні 48h | Free, no key | — |
+| **CoinGecko** | BTC 24h price change для macro context | Free public API | — |
 
-| API | Що дає | Ендпоінт | Ключ |
-|-----|--------|----------|------|
-| **FRED API** (St. Louis Fed) | Fed funds rate, CPI, GDP, unemployment, DXY (DTWEXBGS), 10Y yield (DGS10) | `api.stlouisfed.org/fred/series/observations` | Безкоштовний ключ, реєстрація на fred.stlouisfed.org |
-| **SEC EDGAR Full-Text Search** | Enforcement actions, filings, rule proposals | `efts.sec.gov/LATEST/search-index?q=` | Немає, публічний |
-| **SEC EDGAR RSS** | Нові filing-и в реальному часі | `sec.gov/cgi-bin/browse-edgar?action=getcompany&type=...` | Немає |
-| **CME FedWatch** | Rate cut probabilities | Indirect через FRED (Fed Funds Futures data) | FRED key |
-| **CoinGecko** | BTC/S&P correlation, crypto market data для macro overlay | `api.coingecko.com/api/v3` | Немає (публічний) |
-| **Treasury.gov** | Actual Treasury yields | `home.treasury.gov/resource-center/data-chart-center/interest-rates` | Немає |
-
-### Що саме витягуємо (Phase 1)
-
+**FRED Series:**
 ```typescript
-// elena-data-pull.ts
-interface ElenaDataPull {
-  // FRED series
-  fedFundsRate: number;          // FEDFUNDS — поточна ставка
-  cpiYoY: number;                // CPIAUCSL — CPI year-over-year
-  tenYearYield: number;          // DGS10 — 10-year Treasury yield
-  twoYearYield: number;          // DGS2 — 2-year yield (yield curve)
-  dxyIndex: number;              // DTWEXBGS — USD index
-  
-  // Derived
-  yieldCurveSpread: number;      // DGS10 - DGS2 (inverted = рецесійний сигнал)
-  
-  // SEC EDGAR
-  recentSecFilings: SecFiling[]; // Enforcement actions, crypto-related filings (last 48h)
-  
-  // Economic calendar
-  upcomingEvents: EconEvent[];   // FOMC, CPI release, NFP — наступні 7 днів
-  
-  // Market
-  btcVsSpx30dCorrelation: number;// CoinGecko derived
-  btcPriceChange: number;        // 24h % change for context
-}
-```
-
-### Пріоритетні FRED series для Phase 1
-
-```typescript
-const ELENA_FRED_SERIES = {
-  fedFundsRate: 'FEDFUNDS',
-  cpi: 'CPIAUCSL',
-  corePce: 'PCEPILFE',       // Fed's preferred inflation gauge
-  tenYear: 'DGS10',
-  twoYear: 'DGS2',
-  dxy: 'DTWEXBGS',
-  unemploymentRate: 'UNRATE',
-  gdpGrowth: 'A191RL1Q225SBEA',
-};
+FEDFUNDS   // effective Fed funds rate (lin)
+CPIAUCSL   // CPI percent change from year ago (pc1)
+PCEPILFE   // Core PCE percent change from year ago (pc1)
+DGS10      // 10Y Treasury yield (lin)
+DGS2       // 2Y Treasury yield (lin)
+DTWEXBGS   // Broad dollar index — НЕ класичний DXY (lin)
 ```
 
 ---
 
-## Як зробити Олену "живою"
+## Пайплайн (реалізовано)
 
-### 1. Economic calendar як тригер
-
-Олена працює від економічного календаря, не від RSS. Ключові дати вище за всі інші сигнали:
-
-```typescript
-const HIGH_PRIORITY_EVENTS = [
-  'FOMC Rate Decision',
-  'FOMC Minutes',
-  'CPI Release',
-  'PCE Release',
-  'NFP (Non-Farm Payrolls)',
-  'GDP Advance Estimate',
-  'Fed Chair Speech',
-  'SEC Open Meeting',
-];
-
-async function checkEconomicCalendar(): Promise<EconEvent | null> {
-  // Якщо сьогодні або вчора відбулась HIGH_PRIORITY подія → Elena MUST evaluate
-  // Якщо наступні 7 днів немає нічого → lower baseline score
-}
 ```
-
-### 2. Fed language delta (ключова фіча)
-
-Олена відстежує зміни мови Fed між statement-ами. Це вимагає зберігати попередні тексти:
-
-```typescript
-// persona_memory: зберігаємо кожен Fed statement
-async function detectFedLanguageDelta(
-  current: string,
-  previous: string
-): Promise<LanguageDelta[]> {
-  // LLM comparison: що додали, що прибрали, що змінили
-  // Повертає конкретні зміни формулювань як сигнал
-}
-```
-
-### 3. Macro-crypto correlation tracker
-
-Замість просто "BTC упав" — Олена знає **чому** він упав з macro perspective:
-
-```typescript
-// Зберігаємо в persona_memory 30-денну rolling correlation
-// При генерації — LLM бачить "BTC/DXY correlation last 30d: -0.73"
-// Це дає конкретний контекст для статті
-```
-
-### 4. Regulatory calendar
-
-SEC filings через EDGAR RSS моніторяться автоматично. Якщо є enforcement action або crypto-related rule proposal — Олена оцінює чи варто писати (навіть якщо macro day тихий):
-
-```typescript
-const SEC_SEARCH_TERMS = [
-  'cryptocurrency', 'bitcoin', 'digital asset', 
-  'stablecoin', 'crypto exchange', 'DeFi'
-];
+08:00 UTC — cron /api/cron/elena
+│
+├─ is_active check (personas table) — якщо false: exit
+│
+├─ pullElenaData()
+│   ├─ FRED: 6 series паралельно
+│   ├─ SEC EDGAR RSS: crypto filings (48h)
+│   └─ CoinGecko: BTC 24h change
+│
+├─ buildContext()               ← NEW: включає 'context' memories + recent articles
+│   ├─ persona_memory WHERE type='context'  — bootstrap/manifesto (завжди)
+│   └─ persona_memory WHERE type='article' — останні 5 статей
+│
+├─ shouldWrite(data, context)
+│   ├─ LLM call: claude-haiku-4-5 (швидко, дешево)
+│   ├─ Calendar override: FOMC/CPI/PCE/NFP дні → score мінімум 70
+│   └─ Returns: { should_write, score, reasoning, topic, primary_signal }
+│
+├─ [score ≥ 60] → generateElenaArticle()
+│   ├─ LLM call: claude-sonnet-4-5 (якісно)
+│   ├─ publishArticleToSanity() — markdown → PortableText → Sanity
+│   ├─ saveToMemory(type='article')
+│   └─ updatePersonaRun(article_slug, article_id)
+│
+└─ [score < 60] → decideSelfWork() → executeSelfWork()
+    ├─ bootstrap    — якщо 0 статей в пам'яті
+    ├─ event_preview — якщо завтра HIGH_PRIORITY подія
+    ├─ weekly_preview — понеділок, 0 статей цього тижня
+    ├─ weekly_summary — п'ятниця, 0 статей цього тижня
+    └─ null          — genuinely quiet, log and exit
 ```
 
 ---
 
-## Розклад роботи
+## Self-Work система
 
-| Час (UTC) | Дія |
-|-----------|-----|
-| **06:30** | Перевірка economic calendar: чи відбулась подія вчора/сьогодні рано |
-| **08:00** | Основний запуск: FRED data pull → should_write → генерація |
-| **14:00** | Після американського відкриття: SEC EDGAR check, якщо є filings |
-| **18:30** | Спеціальний тригер: після Fed Chair speeches або FOMC decisions (event-based, не cron) |
+### Типи self-work
 
-**Event-based tригери (поза розкладом):**
-- FOMC рішення → запуск протягом 30 хвилин після оголошення
-- Неочікуване Fed member speaking → оцінка
-- SEC enforcement action проти великого гравця → оцінка
+| Тип | Коли | Модель | Зберігається як |
+|-----|------|--------|-----------------|
+| `bootstrap` | 0 статей в пам'яті | sonnet-4-5 | `context` — завжди в контексті |
+| `event_preview` | завтра FOMC/CPI/PCE/NFP | haiku | `article` |
+| `weekly_preview` | понеділок, wrote=0 | haiku | `article` |
+| `weekly_summary` | п'ятниця, wrote=0 | haiku | `article` |
 
-**Self-work (якщо score < 60):**
-- Понеділок: weekly macro preview (upcoming events)
-- П'ятниця: weekly Fed watch summary
-- Оновлення "macro context" блоку для відповідних hub pages
+### Bootstrap article — особливий режим
+- Пишеться **незалежно від score** (threshold = 0)
+- Argumentative frame — починається з позиції, не з autobio
+- Приклад: *"The Yield Curve Just Un-Inverted. The Market Is Reading It Wrong."*
+- Зберігається як `memory_type: 'context'` → завжди підтягується в контекст
+- Це і є "жива пам'ять" Олени — її аналітична база для всіх наступних статей
 
 ---
 
-## Пайплайн робочого дня
+## Пам'ять (persona_memory)
 
+```sql
+memory_type = 'context'   -- bootstrap manifesto, завжди в контексті
+memory_type = 'article'   -- звичайні статті, останні 5
+memory_type = 'forecast'  -- (зарезервовано, не реалізовано)
+memory_type = 'position'  -- (зарезервовано, не реалізовано)
 ```
-08:00 UTC — ELENA DAILY RUN
-│
-├─ check_economic_calendar()
-│   ├─ yesterday/today events → set event_priority flag
-│   └─ upcoming 7 days → add to context
-│
-├─ data_pull('elena-voss')
-│   ├─ FRED API: Fed funds, CPI, yields, DXY (latest observations)
-│   ├─ FRED API: yield curve spread (10Y - 2Y)
-│   ├─ SEC EDGAR RSS: last 48h crypto-related filings
-│   └─ CoinGecko: BTC 30d correlation vs DXY, SPX
-│
-├─ detect_macro_signals(data)
-│   ├─ yield curve: moved > 10bps? crossed zero?
-│   ├─ DXY: > 105 or < 100 (historical significance thresholds)?
-│   ├─ CPI/PCE: new data vs expectations?
-│   ├─ Fed language delta (if new statement)
-│   └─ SEC filing: enforcement action or major rule proposal?
-│
-├─ should_write(persona, signals, calendar)
-│   ├─ FOMC/CPI/NFP day → score: 80+ (Elena always writes on data days)
-│   ├─ Significant FRED change → score: 65-80
-│   ├─ SEC filing → score: 60-75
-│   ├─ No events, no significant moves → score: 15-35
-│   └─ Topic covered last 48h → score cap: 45
-│
-├─ [if score >= 60]
-│   ├─ build_context('elena-voss', topic)
-│   │   ├─ last 10 Elena articles
-│   │   ├─ previous Fed statements (for language delta)
-│   │   ├─ active regulatory positions/forecasts
-│   │   └─ BTC/macro correlation history
-│   │
-│   ├─ generate_article(elena_system_prompt, data, context)
-│   ├─ generate_outputs(article)
-│   └─ publish + update_memory
-│
-└─ [if score < 60]
-    ├─ log_silent_day(reasoning)
-    ├─ [if Monday] → generate_weekly_macro_preview()
-    └─ [if Friday] → generate_fed_watch_summary()
+
+**buildContext() повертає:**
+```
+=== Elena's established framework (always in context) ===
+[bootstrap article excerpt — її аналітична позиція]
+
+=== Recent articles ===
+- [title] [topic: fed_language]
+- [title] [topic: cpi_data]
+...
 ```
 
 ---
 
-## Системний промт
-
-### Основний (генерація статті)
+## Розклад (Vercel Cron)
 
 ```
-You are Elena Voss, macro analyst at finc.news.
-
-BACKGROUND:
-12 years in traditional finance: fixed income at Deutsche Bank, macro at a European family office.
-Came to crypto in 2021 through a client allocation. You remain skeptical — not of crypto's
-existence, but of the timeline and the narrative that macro doesn't matter. It does.
-
-CORE BELIEF:
-BTC is a risk asset. Until the Fed pivots and stays pivoted, crypto operates in the same
-liquidity environment as every other risk asset. The macro context is not separate from
-the crypto trade — it IS the trade.
-
-WRITING RULES:
-1. Open with the macro event or data point — precise number or exact Fed quote
-2. Paragraph 2: where this sits in the current cycle (rate cycle, credit cycle, DXY trend)
-3. Paragraph 3: historical BTC/crypto behavior in this macro configuration
-4. Paragraph 4: what it means for crypto positioning — no speculation, data-backed only
-5. Close with specific upcoming dates from economic calendar
-6. Maximum 500 words
-7. Always quote Fed language exactly — never paraphrase or interpret language as "hawkish/dovish" without the quote
-8. Use: "However", "Notably", "This matters because", "Historically"
-9. Never use: "moon", "rekt", "ape in", "community believes", "crypto is different this time"
-10. When uncertain: say "the data doesn't resolve this yet" — never fake confidence
-
-STRUCTURE TEMPLATE:
-[Macro event/data]: [precise value or quote].
-[Cycle context — where we are historically].
-[BTC correlation or precedent — specific data].
-[Implication for crypto — one direction, hedged with conditions].
-What's next: [date] — [event] — [what to watch specifically].
-
-VOICE TEST: Would a TradFi portfolio manager find this credible? If they'd roll their eyes — rewrite.
-
-WHAT YOU RECEIVED TODAY:
-- FRED data: {fred_data_json}
-- Economic calendar: {calendar_json}
-- SEC filings (48h): {sec_filings}
-- BTC/macro correlations: {correlation_data}
-- Your recent articles: {recent_articles_summary}
-- Previous Fed statement (for language comparison): {previous_fed_statement}
+vercel.json: { "path": "/api/cron/elena", "schedule": "0 8 * * *" }
 ```
 
-### Промт для should_write evaluation
+**Типовий тиждень:**
 
-```
-You are Elena Voss's editorial judgment function.
-
-Elena Voss writes about: Fed/FOMC decisions and language, DXY trends, Treasury yields,
-CPI/PCE releases, SEC regulatory actions, and crypto/macro correlations.
-
-She does NOT write on quiet macro days. She does NOT write about on-chain data.
-She DOES write on every major data release day (CPI, NFP, FOMC, GDP).
-
-DATA RECEIVED:
-{macro_data_json}
-
-ECONOMIC CALENDAR (recent + upcoming):
-{calendar_json}
-
-SEC FILINGS (last 48h):
-{sec_filings_summary}
-
-RECENT ELENA ARTICLES (last 48h):
-{recent_articles}
-
-Respond ONLY with this JSON:
-{
-  "should_write": boolean,
-  "score": number (0-100),
-  "reasoning": "one sentence explanation",
-  "topic": "the macro signal to write about, or null",
-  "primary_signal": "fed_language|cpi_data|yield_curve|dxy|sec_action|correlation",
-  "calendar_event": "name of triggering event or null"
-}
-
-Score guide:
-- FOMC decision day: 85-95
-- CPI/PCE release day: 75-90
-- Fed Chair speech with new language: 70-85
-- Significant FRED move (yield curve, DXY): 60-75
-- SEC crypto enforcement: 60-75
-- Quiet macro day: 10-40
-```
+| День | Macro quiet | Macro event |
+|------|-------------|-------------|
+| Понеділок | weekly_preview | event article |
+| Вівторок–Четвер | silent (log) | event article |
+| П'ятниця | weekly_summary | event article |
+| День перед FOMC/CPI | event_preview | event article |
+| FOMC/CPI день | score 80-95 → пише | — |
 
 ---
 
-## Приклади виводу
+## DB Tables (Supabase)
 
-### Telegram signal (після FOMC)
-
-```
-🏦 Fed watch
-
-FOMC held at 5.25-5.50%. Key language shift:
-Removed: "further firming may be appropriate"
-Added: "extent of any additional policy firming"
-
-First pause-leaning language change since March 2023.
-
-BTC historically: +8-15% in 60 days after first Fed pause signal
-DXY reaction: -0.6% so far. 10Y yield -4bps.
-
-Watch: PCE data June 28 — if below 2.7% YoY, this holds.
-
-→ finc.news/fed-policy/fomc-june-2025-language-shift
+```sql
+personas          -- конфіг: system_prompt, eval_prompt, config JSON, is_active
+persona_memory    -- пам'ять: content, metadata, embedding vector(1536) nullable
+persona_runs      -- лог запусків: score, reasoning, topic, article_slug
 ```
 
-### Тихий день (log)
+Seed: `supabase/seed_personas.sql` — INSERT для elena-voss з `is_active=false`.
+Для активації: `UPDATE personas SET is_active=true WHERE id='elena-voss'`.
 
-```json
-{
-  "persona": "elena-voss",
-  "date": "2025-06-05",
-  "should_write": false,
-  "score": 18,
-  "reasoning": "No FRED series showed significant moves. Economic calendar quiet — next event is PCE release June 28. No SEC crypto filings in last 48h. Macro day classified as routine.",
-  "self_work": "updated_fed_policy_hub"
-}
+---
+
+## Sanity Schema
+
+Додано до `article` document type:
+```typescript
+{ name: 'persona',      type: 'string' }  // 'elena-voss'
+{ name: 'authorName',   type: 'string' }  // 'Elena Voss'
+{ name: 'authorAvatar', type: 'string' }  // '/authors/elena-voss.png'
 ```
+
+Показується в byline на сторінці статті.
+
+---
+
+## Admin Panel
+
+**Вкладка "✎ Personas"** у `/admin/flows`:
+
+| Кнопка | Що робить |
+|--------|-----------|
+| Pull Data | Витягує FRED + SEC + CoinGecko, показує всі числа |
+| Evaluate | Запускає should_write, показує score + reasoning |
+| Dry Generate | Генерує статтю без публікації, preview body + telegram |
+| Self-Work | Визначає і виконує self-work task (bootstrap/preview/summary) |
+| ▶ Full Run | Повний пайплайн з публікацією |
+| Toggle Active | Вмикає/вимикає автоматичний cron запуск |
+| Load (Recent Runs) | Показує останні 10 запусків з persona_runs |
+
+---
+
+## Публічні сторінки
+
+- `/author` — каталог авторів (Elena активна, Marcus/Leo "Soon")
+- Byline на статтях показує ім'я та аватар персони
+
+---
+
+## Промти
+
+### should_write (eval)
+- Модель: `claude-haiku-4-5-20251001`
+- Input: FRED data + SEC filings + calendar event + recent summaries
+- Output JSON: `{ should_write, score, reasoning, topic, primary_signal, calendar_event }`
+- Calendar override: HIGH_PRIORITY_DATES в `should-write.ts` та `self-work.ts`
+
+### generate (event-driven article)
+- Модель: `claude-sonnet-4-5`
+- System prompt: повний в `generate.ts` — background, writing rules, structure template
+- Input: macro data + eval result + context (bootstrap + recent articles)
+- Output JSON: `{ title, excerpt, body, metaTitle, metaDescription, tags, category, telegramText }`
+
+### bootstrap (self-work)
+- Argumentative frame — не autobio, не framework lecture
+- Структура: cold open з позицією → argument → counterargument → verdict
+- Заборонено: "This isn't a trading newsletter", "Watch X" без відповіді, forward-looking meta
+- Зберігається як `context` memory
+
+---
+
+## Відомі особливості
+
+**DTWEXBGS vs DXY:** FRED's `DTWEXBGS` — це Broad Dollar Index (~118), не класичний DXY (~99-105). Для Олени підходить (ширша міра dollar strength), але в статтях Claude позначає як "USD Broad Index", не "DXY".
+
+**pgvector:** Колонка `embedding vector(1536)` в `persona_memory` nullable — додана під майбутній semantic search. IVFFlat індекс закоментований в migration_010.sql, розкоментувати після першого батчу embeddings.
+
+**Перша стаття:** bootstrap article зберігається як `memory_type='context'`. Це фундамент — при кожному наступному запуску Олена "знає" свою аналітичну базу. Видаляти не варто.
