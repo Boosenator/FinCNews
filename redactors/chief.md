@@ -74,8 +74,9 @@ alter table persona_memory
   add constraint persona_memory_memory_type_check
   check (memory_type in (
     'article', 'forecast', 'position', 'context',
-    'narrative', 'baseline',       -- існуючі
-    'editor_feedback', 'session'   -- нові для Victor Kane
+    'narrative', 'baseline',                                -- існуючі
+    'editor_feedback',                                      -- Victor → аналітики
+    'session', 'directive_history', 'editorial_standard'   -- Victor → собі
   ));
 ```
 
@@ -114,9 +115,14 @@ on conflict (id) do update set
 │   └─ Якщо 0 статей сьогодні → log 'quiet desk', exit
 │
 ├─ collectContext() — паралельно для кожної персони що публікувала:
-│   ├─ last7dArticles:  Sanity query — 7 останніх статей по persona
-│   ├─ openForecasts:   persona_memory WHERE type='forecast' AND status='open'
-│   └─ recentFeedback:  persona_memory WHERE type='editor_feedback' ORDER BY created_at DESC LIMIT 3
+│   ├─ last7dArticles:  Sanity: persona=X AND publishedAt >= 7d ago LIMIT 5
+│   │                   (5 = достатньо для патерн-детекції без перевантаження промту)
+│   ├─ openForecasts:   persona_memory: type='forecast' AND status='open' (всі)
+│   ├─ recentFeedback:  persona_memory: type='editor_feedback' LIMIT 3
+│   │                   (Victor's last 3 FEEDBACK RECORDS to THIS analyst — не статті)
+│   └─ directiveHistory: persona_memory (victor-kane): type='directive_history'
+│                         WHERE persona_ref=X ORDER BY given_at DESC LIMIT 3
+│                         (які директиви вже давав → не повторювати)
 │
 ├─ detectPatterns()
 │   ├─ last 14d article titles + opening sentences (з Sanity)
@@ -244,8 +250,10 @@ const { data: editorFeedback } = await supabase
 
 ## Memory структура
 
+### В persona_memory кожного аналітика (Victor пише сюди)
+
 ```typescript
-// Записується в persona_memory кожного аналітика (type='editor_feedback')
+// type='editor_feedback' — зберігається в persona_memory АНАЛІТИКА
 interface EditorFeedbackRecord {
   memory_type:     'editor_feedback';
   date:            string;
@@ -256,20 +264,51 @@ interface EditorFeedbackRecord {
   directive:       string;
   pattern_warning: string | null;
 }
+```
 
-// Записується в persona_memory Victor Kane (type='session')
+### В persona_memory Victor Kane (його власна пам'ять)
+
+```typescript
+// type='session' — щоденний лог сесії
 interface EditorSessionRecord {
-  memory_type: 'session';
-  date:        string;
-  desk_note:   string;
+  memory_type:       'session';
+  date:              string;
+  desk_note:         string;      // загальний коментар по редакції
+  articles_reviewed: number;
   scores: {
     'marcus-webb': number | null;
     'elena-voss':  number | null;
     'leo-cruz':    number | null;
   };
-  articles_reviewed: number;
+}
+
+// type='directive_history' — директиви що Victor вже давав (щоб не повторюватись)
+// 1 запис на директиву, upsert по (persona_ref + directive_key)
+interface DirectiveHistoryRecord {
+  memory_type:    'directive_history';
+  persona_ref:    string;          // 'elena-voss'
+  directive:      string;          // сама директива
+  given_at:       string;          // коли давав
+  followed:       boolean | null;  // null = невідомо, true/false = перевірено
+  followed_at:    string | null;
+}
+
+// type='editorial_standard' — поточна планка по кожній персоні, еволюціонує
+// 1 запис на персону, upsert
+interface EditorialStandardRecord {
+  memory_type:       'editorial_standard';
+  persona_ref:       string;        // 'marcus-webb'
+  current_standard:  string;        // "Score 75+ = baseline. Expecting 2+ corroborated anomalies."
+  trend:             'improving' | 'stable' | 'declining';
+  avg_score_30d:     number;
+  updated_at:        string;
 }
 ```
+
+**Скільки записів Victor накопичує:**
+- `session`: 1 на день → 30 записів за місяць (не потрібен limit, невеликий)
+- `directive_history`: 1 на директиву → ~15-20 active, старі expire через 30 днів
+- `editorial_standard`: 3 записи (по одному на кожного аналітика), upsert
 
 ---
 
