@@ -55,8 +55,8 @@ export default function AdminNav() {
         </div>
 
         <div className="flex items-center gap-4 text-xs text-zinc-600">
-          <Link href="/api/admin/logout" className="hover:text-zinc-400">Sign out</Link>
-          <Link href="/" className="hover:text-zinc-400">← Site</Link>
+          <a href="/api/admin/logout" className="hover:text-zinc-400">Sign out</a>
+          <a href="/" className="hover:text-zinc-400">← Site</a>
         </div>
       </div>
     </div>
