@@ -6,7 +6,7 @@ import { loadBaseline, updateBaseline } from './baseline';
 import { detectAnomalies } from './anomalies';
 import { shouldWrite } from './should-write';
 import { generateMarcusArticle } from './generate';
-import { extractAndSaveForecast, verifyOpenForecasts, getForecastContext } from './forecasts';
+import { extractAndSaveForecast, getForecastContext } from './forecasts';
 import { decideSelfWork, executeSelfWork, type SelfWorkResult } from './self-work';
 import { extractAndSavePosition } from '../elena-voss/position'; // reuse same pattern
 
