@@ -77,7 +77,6 @@ export default async function DashboardPage() {
     <div className="min-h-screen bg-zinc-950">
       <AdminNav />
       <DashboardShell
-        sources={sources}
         logs={logs}
         totalProcessed={totalProcessed}
         queuePending={queuePending}

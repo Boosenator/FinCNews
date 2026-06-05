@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { RunLog, RssSource } from "@/lib/supabase";
+import type { RunLog } from "@/lib/supabase";
 import DashboardOverview from "./DashboardOverview";
 import LogsTab from "./LogsTab";
 import QueueTab from "./QueueTab";
@@ -26,7 +26,6 @@ interface ElenaRun {
 }
 
 type Props = {
-  sources:        RssSource[];
   logs:           RunLog[];
   totalProcessed: number;
   queuePending:   number;
@@ -50,7 +49,7 @@ const TABS = [
 type Tab = (typeof TABS)[number]["key"];
 
 export default function DashboardShell({
-  sources, logs, totalProcessed, queuePending, queueTotal,
+  logs, totalProcessed, queuePending, queueTotal,
   recentQueue, elenaLastRun, stats,
 }: Props) {
   const [tab, setTab] = useState<Tab>("overview");
