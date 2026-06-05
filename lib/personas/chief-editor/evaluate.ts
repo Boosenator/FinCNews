@@ -275,6 +275,11 @@ Focus on: overall quality trend, cross-persona dynamics, what the desk needs as 
 NOT about individual articles (those are in scorecards above).
 Be direct and specific — not generic editorial praise.
 
+ACCURACY RULE: The desk note must be factually consistent with the scores above.
+If you reference a score range or group, verify it against the actual numbers.
+"All three sub-60" is only valid if all three scores are actually below 60.
+You are the Chief Editor of a financial publication — numerical precision is non-negotiable.
+
 Return ONLY valid JSON: { "desk_note": "1-2 sentences" }`;
 
   let deskNote = 'Session complete.';
