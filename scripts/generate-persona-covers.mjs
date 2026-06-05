@@ -10,6 +10,7 @@
 
 import { createClient } from '@sanity/client';
 import { createClient as createSupabase } from '@supabase/supabase-js';
+import { Resvg } from '@resvg/resvg-js';
 
 const personaFilter = process.argv[2]?.startsWith('--') ? null : process.argv[2] ?? null;
 const dryRun = process.argv.includes('--dry-run');
@@ -59,6 +60,11 @@ async function getDataSnapshot(personaId, articleSlug) {
 
 const W = 1200, H = 630;
 
+// Escape XML special chars for SVG text content
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 function bg()   { return `<rect width="${W}" height="${H}" fill="#09090b"/>`; }
 function grid() {
   const l = [];
@@ -78,26 +84,26 @@ function footer(name, role, color) {
 function marcusSvg(snap, title) {
   const d = snap ?? {};
   const metrics = [
-    ['Exchange Netflow', (d.btcExchangeNetflow ?? 0).toFixed(0) + ' BTC', '#2dd4bf'],
-    ['BTC Price', '$' + (d.btcPrice ?? 0).toLocaleString(), '#d4d4d8'],
-    ['Hashrate', ((d.btcHashrate ?? 0) / 1e6).toFixed(2) + ' EH/s', '#d4d4d8'],
-    ['Mempool Tx', (d.mempoolTxCount ?? 0).toLocaleString(), '#d4d4d8'],
-    ['Fear & Greed', (d.fearGreedIndex ?? 50) + '/100', '#d4d4d8'],
-    ['Volume Ratio', (d.btcVolumeRatio ?? 1).toFixed(2) + 'x avg', '#d4d4d8'],
+    ['Exchange Netflow', esc((d.btcExchangeNetflow ?? 0).toFixed(0)) + ' BTC', '#2dd4bf'],
+    ['BTC Price', '$' + esc((d.btcPrice ?? 0).toLocaleString()), '#d4d4d8'],
+    ['Hashrate', esc(((d.btcHashrate ?? 0) / 1e6).toFixed(2)) + ' EH/s', '#d4d4d8'],
+    ['Mempool Tx', esc((d.mempoolTxCount ?? 0).toLocaleString()), '#d4d4d8'],
+    ['Fear & Greed', esc(d.fearGreedIndex ?? 50) + '/100', '#d4d4d8'],
+    ['Volume Ratio', esc((d.btcVolumeRatio ?? 1).toFixed(2)) + 'x avg', '#d4d4d8'],
   ];
   const cells = metrics.map(([label, value, color], i) => {
     const cx = 60 + (i % 3) * 380;
     const cy = 140 + Math.floor(i / 3) * 115;
     return `
       <rect x="${cx}" y="${cy}" width="360" height="100" rx="8" fill="#0d0d10" stroke="#1f1f23"/>
-      <text x="${cx + 16}" y="${cy + 28}" font-family="system-ui,sans-serif" font-size="11" fill="#52525b" letter-spacing="1">${label.toUpperCase()}</text>
+      <text x="${cx + 16}" y="${cy + 28}" font-family="system-ui,sans-serif" font-size="11" fill="#52525b" letter-spacing="1">${esc(label.toUpperCase())}</text>
       <text x="${cx + 16}" y="${cy + 68}" font-family="system-ui,sans-serif" font-size="30" font-weight="900" fill="${color}">${value}</text>`;
   }).join('');
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
     ${bg()}${grid()}
     <text x="60" y="80" font-family="system-ui,sans-serif" font-size="12" font-weight="700" letter-spacing="3" fill="#2dd4bf">ON-CHAIN SNAPSHOT</text>
-    <text x="60" y="118" font-family="system-ui,sans-serif" font-size="30" font-weight="900" fill="white">${(title ?? '').slice(0, 55)}</text>
+    <text x="60" y="118" font-family="system-ui,sans-serif" font-size="30" font-weight="900" fill="white">${esc((title ?? '').slice(0, 55))}</text>
     ${cells}
     ${footer('Marcus Webb', 'On-Chain Analyst', '#2dd4bf')}
   </svg>`;
@@ -112,14 +118,14 @@ function elenaSvg(snap, title) {
   function cell(label, value, color, cx, cy) {
     return `
       <rect x="${cx}" y="${cy}" width="340" height="100" rx="8" fill="#0d0d10" stroke="#1f1f23"/>
-      <text x="${cx + 18}" y="${cy + 30}" font-family="system-ui,sans-serif" font-size="11" fill="#52525b" letter-spacing="1">${label.toUpperCase()}</text>
+      <text x="${cx + 18}" y="${cy + 30}" font-family="system-ui,sans-serif" font-size="11" fill="#52525b" letter-spacing="1">${esc(label.toUpperCase())}</text>
       <text x="${cx + 18}" y="${cy + 68}" font-family="system-ui,sans-serif" font-size="34" font-weight="900" fill="${color}">${value}</text>`;
   }
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
     ${bg()}${grid()}
     <text x="60" y="80" font-family="system-ui,sans-serif" font-size="12" font-weight="700" letter-spacing="3" fill="#a78bfa">MACRO SIGNAL</text>
-    <text x="60" y="118" font-family="system-ui,sans-serif" font-size="30" font-weight="900" fill="white">${(title ?? '').slice(0, 55)}</text>
+    <text x="60" y="118" font-family="system-ui,sans-serif" font-size="30" font-weight="900" fill="white">${esc((title ?? '').slice(0, 55))}</text>
     ${cell('Fed Funds Rate', (d.fedFundsRate ?? 0).toFixed(2) + '%',  '#a78bfa', 60,  148)}
     ${cell('CPI YoY',        (d.cpiYoY ?? 0).toFixed(2) + '%',       '#d4d4d8', 420, 148)}
     ${cell('Core PCE',       (d.corePce ?? 0).toFixed(2) + '%',      '#d4d4d8', 780, 148)}
@@ -154,7 +160,7 @@ function leoSvg(snap, title) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
     ${bg()}${grid()}
     <text x="60" y="80" font-family="system-ui,sans-serif" font-size="12" font-weight="700" letter-spacing="3" fill="#fb923c">NARRATIVE ALERT</text>
-    <text x="60" y="175" font-family="system-ui,sans-serif" font-size="64" font-weight="900" fill="white">${(title ?? '').slice(0, 24)}</text>
+    <text x="60" y="175" font-family="system-ui,sans-serif" font-size="64" font-weight="900" fill="white">${esc((title ?? '').slice(0, 24))}</text>
     <!-- Cycle stages -->
     ${['Emerging','Growing','Peak','Fading'].map((s, i) => {
       const active = i === 2; // default to peak for archived
@@ -186,8 +192,11 @@ function buildSvg(personaId, snap, title) {
 // ── 4. Upload SVG to Sanity ───────────────────────────────────────────────────
 
 async function uploadSvg(svg, filename) {
-  const buf   = Buffer.from(svg, 'utf-8');
-  const asset = await SANITY.assets.upload('image', buf, { filename, contentType: 'image/svg+xml' });
+  // Convert SVG → PNG (Sanity requires raster images)
+  const resvg  = new Resvg(svg, { fitTo: { mode: 'width', value: 1200 } });
+  const pngBuf = resvg.render().asPng();
+  const pngName = filename.replace('.svg', '.png');
+  const asset  = await SANITY.assets.upload('image', pngBuf, { filename: pngName, contentType: 'image/png' });
   return { _type: 'image', asset: { _type: 'reference', _ref: asset._id } };
 }
 
@@ -203,13 +212,10 @@ for (const personaId of targets) {
   for (const article of articles) {
     total++;
     const snap = await getDataSnapshot(personaId, article.slug);
-    if (!snap) {
-      console.log(`  ⟳ ${article.slug} — no data_snapshot, skipping`);
-      skipped++;
-      continue;
-    }
+    if (!snap) console.log(`  ↳ ${article.slug} — no data_snapshot, using title-only cover`);
 
-    const svg = buildSvg(personaId, snap, article.title ?? article.slug);
+    // Use stored data or fall back to title-only cover (empty snap → persona branding + title)
+    const svg = buildSvg(personaId, snap ?? {}, article.title ?? article.slug);
     if (!svg) { skipped++; continue; }
 
     if (dryRun) {
