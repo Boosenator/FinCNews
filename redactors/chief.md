@@ -92,9 +92,20 @@ migration_015.sql  — додає: editor_feedback, session, directive_history, 
 │   ├─ topic overlap (same keyword group 3+ times in 7 days)
 │   └─ weak/question conclusion (no numeric threshold in closing paragraph)
 │
-├─ evaluate() — claude-sonnet-4-5
-│   input:  all articles + history + patterns alerts + directive history
-│   output: EditorialSession JSON (score + strengths + priority_fix + directive per analyst)
+├─ detectOverlap() — embeddings, без LLM
+│   ├─ cosine similarity між статтями аналітиків (threshold 0.6)
+│   └─ OverlapReport → іде в кожен individual eval як контекст
+│
+├─ ПАРАЛЕЛЬНО: evaluateAnalyst() × N published — claude-sonnet-4-5
+│   ├─ кожен аналітик отримує dedicated call (більше tokens, глибша оцінка)
+│   ├─ бачить: свою статтю + history + patterns + relevant overlap
+│   └─ isBaseline = ctx.recentFeedback.length === 0
+│       → true: baseline mode (перша стаття, no compliance language)
+│       → false: directive mode (чи виконав попередню директиву?)
+│
+├─ synthesizeDeskNote() — claude-haiku (синтез з 3 scorecards)
+│   input:  structured scorecards + overlap summary
+│   output: desk_note (1-2 sentences, must match actual scores)
 │
 ├─ saveFeedbackToAnalysts()
 │   └─ пише type='editor_feedback' в persona_memory КОЖНОГО аналітика
@@ -235,17 +246,6 @@ Victor Kane показується окремою карткою з **amber те
 
 ---
 
-## Залишилось
-
-**⚠️ `buildContext()` у кожного аналітика** — додати шар `editor_feedback`. Без нього аналітики мають інструкцію в system prompt але не бачать реальний feedback Victor Kane в контексті. Це найважливіший залишковий крок для повноцінної роботи системи.
-
-Файли для оновлення:
-- `lib/personas/elena-voss/index.ts` → `buildContext()`
-- `lib/personas/leo-cruz/index.ts` → `buildContext()`
-- `lib/personas/marcus-webb/index.ts` → `buildContext()`
-
----
-
 ## Відомі особливості
 
 **Quiet desk є нормою** — Victor мовчить більшість днів (аналітики не завжди пишуть щодня). Це нормально, не баг.
@@ -253,3 +253,19 @@ Victor Kane показується окремою карткою з **amber те
 **Pattern detection — евристичний** — перевіряє перші 3 слова і список keyword груп. Для більш точного аналізу потрібен LLM-based comparison (Phase 2).
 
 **directive_history.followed** — верифікація часткова: перевіряється тільки кілька простих патернів (кінцівка з питанням і т.д.). Повна верифікація "чи аналітик застосував директиву" потребує LLM (Phase 2).
+
+**isBaseline визначається по recentFeedback, не по directives** — `ctx.recentFeedback.length === 0` є єдиним надійним індикатором. Orphaned directive records з попередніх broken sessions не блокують baseline mode.
+
+**Slug bug** — у ранніх сесіях `article_slug` приходив як `null` через помилку в GROQ projection (`r.slug.current` замість `r.slug`). Виправлено в `data-collector.ts`. Якщо в directive tracker є записи без slug — це сліди до-фіксу.
+
+**WHO YOU MANAGE + BANNED DIRECTIVES** — ці секції є і в DB `system_prompt` і в code промті `evaluate.ts`. DB `system_prompt` для Victor не передається в Claude API call (немає `system:` параметра), тому все критичне повинно бути в `evaluate.ts` prompt безпосередньо.
+
+**buildContext() editor_feedback шар** — реалізовано в усіх трьох персонах (`elena-voss`, `leo-cruz`, `marcus-webb` `index.ts`). Формат:
+```
+=== Victor Kane — last directive ===
+Score: 74/100 (2026-06-10)
+Priority fix: "..."
+Directive: "..." (PENDING або resolved)
+Pattern: [none]
+```
+Якщо `status=resolved` → директива не показується в контексті (не захаращує промт).
