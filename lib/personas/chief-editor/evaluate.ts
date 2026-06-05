@@ -140,8 +140,10 @@ export async function evaluateAnalyst(
     ? patterns.map((p) => `  ⚠ ${p.warning}`).join('\n')
     : 'None detected';
 
-  // Baseline mode: no prior feedback AND no active directives → first article ever
-  const isBaseline = ctx.recentFeedback.length === 0 && ctx.directives.length === 0;
+  // Baseline mode: Victor has never saved a proper feedback record for this analyst.
+  // Directives from broken/test sessions (no corresponding feedback) don't count.
+  // editor_feedback is the only reliable indicator of a completed feedback cycle.
+  const isBaseline = ctx.recentFeedback.length === 0;
   console.log('[Victor Kane]', ctx.personaId, '| isBaseline:', isBaseline, '| feedback:', ctx.recentFeedback.length, '| directives:', ctx.directives.length);
 
   const baselineSection = isBaseline
