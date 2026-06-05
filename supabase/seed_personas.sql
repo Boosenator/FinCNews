@@ -150,5 +150,6 @@ CHARACTER:
 on conflict (id) do update set
   display_name  = excluded.display_name,
   role          = excluded.role,
+  system_prompt = excluded.system_prompt,
   config        = excluded.config,
   updated_at    = now();
