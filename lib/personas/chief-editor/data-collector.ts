@@ -44,10 +44,10 @@ function getSanity() {
 async function fetchArticles(personaId: string, since: string, limit: number): Promise<ArticleSummary[]> {
   const sanity = getSanity();
   const results = await sanity.fetch<Array<{
-    slug:        { current: string };
+    slug:         string;   // already projected as slug.current in GROQ
     translations: { en: { title: string; excerpt: string; body?: Array<{ children?: Array<{ text: string }> }> } };
-    category:    string;
-    publishedAt: string;
+    category:     string;
+    publishedAt:  string;
   }>>(
     `*[_type == "article" && persona == $persona && publishedAt >= $since]
      | order(publishedAt desc)[0...$limit] {
@@ -66,7 +66,7 @@ async function fetchArticles(personaId: string, since: string, limit: number): P
       .join(' ')
       .slice(0, 600);
     return {
-      slug:        r.slug.current,
+      slug:        r.slug,
       title:       en.title ?? '',
       excerpt:     en.excerpt ?? '',
       body,

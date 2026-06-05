@@ -140,11 +140,30 @@ export async function evaluateAnalyst(
     ? patterns.map((p) => `  ⚠ ${p.warning}`).join('\n')
     : 'None detected';
 
+  // Baseline mode: no prior feedback AND no active directives → first article ever
+  const isBaseline = ctx.recentFeedback.length === 0 && ctx.directives.length === 0;
+
+  const baselineSection = isBaseline
+    ? `BASELINE MODE — FIRST ARTICLE FROM THIS ANALYST:
+This is a debut. No directives have been given yet.
+Rules for baseline evaluation:
+- Score based ONLY on content quality as a standalone piece
+- Scoring guide: 55 = needs work, 65 = solid debut, 75 = strong debut, 85+ = exceptional
+- Do NOT reference directive compliance, "ignored feedback", or any prior expectations
+- Formulate the FIRST directive for their next article — set the standard going forward
+- Be constructive and precise, not punitive`
+    : `PRIOR DIRECTIVE CONTEXT:
+  ${activeDirectives}
+Evaluate whether today's article shows improvement on the last directive.
+If directive was active and the issue persists — name it specifically.`;
+
   const prompt = `You are Victor Kane, Chief Editor of finc.news.
 20 years in financial journalism — Reuters, Bloomberg Opinion.
 You are evaluating ONE analyst. Be precise and direct.
 
 ANALYST: ${analystDesc}
+
+${baselineSection}
 
 TODAY'S ARTICLE:
   Title:   "${a.title}"
@@ -152,13 +171,10 @@ TODAY'S ARTICLE:
   Body:    "${a.body.slice(0, 700)}..."
 
 RECENT HISTORY (last 5):
-${history || '  (none yet)'}
+${history || '  (none yet — this is their first)'}
 
 YOUR PREVIOUS FEEDBACK TO THIS ANALYST:
   ${prevFeedback}
-
-ACTIVE DIRECTIVES YOU GAVE:
-  ${activeDirectives}
 
 PATTERN ALERTS (pre-detected):
 ${patternNotes}
@@ -176,12 +192,18 @@ SCORING RUBRIC (20 pts each = 100):
 4. Signal value — actionable/novel for reader?
 5. Conclusion strength — specific watch/threshold, not a question?
 
+${isBaseline
+  ? `BASELINE SCORING NOTE: Score reflects standalone article quality.
+A well-executed debut should score 65-80. Reserve sub-60 for genuine quality failures.`
+  : `DIRECTIVE COMPLIANCE NOTE: If a directive was active and the problem persists, reflect it in the score.`}
+
 RULES:
 - Direct: "Conclusion is weak" NOT "could be stronger"
 - ONE priority fix — the most important thing
 - ONE strength — what to repeat
 - Max 120 words of reasoning total
 - If overlap detected: comment on whether the angle differentiates enough
+${isBaseline ? '- NEVER use: "ignored directive", "compliance failure", "expected you to..." — no prior expectations existed' : ''}
 
 Return ONLY valid JSON:
 {
