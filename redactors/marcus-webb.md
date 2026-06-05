@@ -1,4 +1,7 @@
 # Marcus Webb — On-Chain Analyst
+**Статус:** 📋 Заплановано — ще не реалізовано
+
+---
 
 ## Біо та характер
 
@@ -17,16 +20,17 @@ Marcus Webb — колишній кількісний аналітик. Вісі
 - Цінові прогнози без on-chain підтвердження
 - Щось про "настрої ринку" без метрик
 - Новини які є "новинами" але не аномаліями
+- "Watch X" без конкретного порогу
 
 ---
 
 ## Стиль написання
 
 **Структура статті завжди однакова:**
-1. Аномалія — метрика + значення + відхилення від норми
+1. Аномалія — метрика + значення + відхилення від норми (z-score)
 2. Історичний контекст — коли таке було востаннє, що сталося потім
 3. Корелюючі сигнали — один-два підтверджуючих індикатори
-4. What to watch — конкретний поріг і метрика для моніторингу
+4. What to watch — конкретний поріг, метрика, таймфрейм
 
 **Тон:** Bloomberg terminal. Якби Bloomberg terminal писав реченнями.
 
@@ -40,177 +44,292 @@ Marcus Webb — колишній кількісний аналітик. Вісі
 
 **Завжди використовує:** "data shows", "on-chain metrics indicate", "the reading is", "historically"
 
-**Приклад першого параграфу:**
-> Exchange inflows reached 42,300 BTC over the past 24 hours — 2.3 standard deviations above the 30-day mean of 18,400 BTC. The last comparable reading was March 12, 2024, three days before a 12% price decline.
+---
+
+## Файлова структура (план)
+
+```
+lib/personas/
+├── shared.ts              — publishArticleToSanity, callClaude (вже є)
+├── embeddings.ts          — OpenAI embeddings (вже є)
+│
+└── marcus-webb/
+    ├── data-pull.ts       — CoinGecko + mempool.space + blockchain.info + CoinGlass + Alternative.me
+    ├── baseline.ts        — 30-day rolling baseline storage/update in persona_memory
+    ├── anomalies.ts       — detectAnomalies() з z-score calculation
+    ├── should-write.ts    — anomaly-based editorial judgment (haiku)
+    ├── generate.ts        — on-chain article (claude-sonnet-4-5)
+    ├── forecasts.ts       — extract "What to watch" → forecast + verify 72h later
+    ├── self-work.ts       — weekly_summary + update_baseline_only
+    └── index.ts           — оркестратор + getMarcusContext()
+```
+
+**Shared (вже існує):**
+```
+lib/personas/shared.ts      — publishArticleToSanity, markdownToPortableText, callClaude
+lib/personas/embeddings.ts  — OpenAI embeddings
+```
 
 ---
 
 ## Джерела даних та API
 
-### Безкоштовні (Phase 1 — запускаємо одразу)
+### Phase 1 — безкоштовні або мінімальний ключ
 
-| API | Що дає | Ендпоінт | Ліміт |
-|-----|--------|----------|-------|
-| **CoinGecko Public** | Price, volume, market cap, exchange data | `api.coingecko.com/api/v3` | 30 req/min, no key |
-| **mempool.space** | BTC mempool, fees, hashrate, block data | `mempool.space/api` | Unlimited, no key |
-| **Blockchain.com** | BTC hashrate, difficulty, UTXO | `blockchain.info/stats` | Generous, no key |
-| **CoinGlass** | Exchange netflows, OI, liquidations | `open-api.coinglass.com` | Free tier з ключем |
-| **Alternative.me** | Fear & Greed Index | `api.alternative.me/fng` | Free, no key |
+| API | Що дає | Ключ |
+|-----|--------|------|
+| **CoinGecko Public** | BTC/ETH price, volume, market cap, BTC dominance | Немає |
+| **mempool.space** | Mempool tx count, avg fee, hashrate | Немає |
+| **blockchain.info/stats** | BTC hashrate, difficulty, UTXO stats | Немає |
+| **CoinGlass** | Exchange netflows, OI, liquidations, miner outflows | `COINGLASS_API_KEY` — free tier, реєстрація |
+| **Alternative.me** | Fear & Greed Index | Немає |
 
-### Платні (Phase 2 — після монетизації)
+**CoinGlass** є ключовим джерелом для exchange flows — центральна метрика Маркуса. Без неї він може покладатись тільки на CoinGecko volume + mempool (менш точно).
+
+### Phase 2 — платні
 
 | API | Що дає | Ціна |
 |-----|--------|------|
-| **Glassnode** | Повний on-chain: NUPL, SOPR, MVRV | $29/міс (Hobbyist) |
+| **Glassnode** | NUPL, SOPR, MVRV, STH/LTH supply | $29/міс |
 | **CryptoQuant** | Exchange flows, miner behavior | $29/міс |
 | **Nansen** | Whale wallets, smart money | $149/міс |
 
-### Що саме витягуємо (Phase 1)
+### Що витягуємо (Phase 1)
 
 ```typescript
-// marcus-data-pull.ts
 interface MarcusDataPull {
-  btcExchangeNetflow: number;        // CoinGlass: нетто приток/відтік з бірж
-  btcMempoolTxCount: number;         // mempool.space: кількість транзакцій в черзі
-  btcHashrate30dChange: number;      // blockchain.info: зміна хешрейту за 30 днів
-  btcVolumeVsAverage: number;        // CoinGecko: обʼєм vs 30d середнє (ratio)
-  fearGreedIndex: number;            // alternative.me: 0-100
-  btcDominance: number;              // CoinGecko: BTC dominance %
-  topExchangeInflows: ExchangeFlow[];// CoinGlass: топ-5 бірж по нетфлоу
+  // CoinGecko
+  btcPrice:          number;
+  btcVolume24h:      number;
+  btcVolume30dAvg:   number;
+  btcVolumeRatio:    number;   // current / 30d avg
+  btcDominance:      number;
+
+  // CoinGlass (requires COINGLASS_API_KEY)
+  btcExchangeNetflow:  number; // positive = inflow, negative = outflow
+  minerOutflows:       number; // BTC leaving miner wallets
+  topExchangeFlows:    { exchange: string; netflow: number }[];
+
+  // mempool.space
+  mempoolTxCount: number;
+  mempoolAvgFee:  number; // sat/vB
+
+  // blockchain.info
+  btcHashrate:       number;
+  btcHashrate30dAvg: number;
+  btcHashrateChange: number; // % change vs 30d avg
+
+  // Alternative.me
+  fearGreedIndex: number;
+
+  pulledAt: string;
 }
 ```
 
 ---
 
-## Як зробити Маркуса "живим"
+## Ключова унікальна риса: Anomaly Detector + Baseline Tracker
 
-### 1. Аномалія-детектор (серце персони)
+На відміну від Elena (economic calendar) і Leo (social signals), Marcus пише **тільки коли метрики показують статистичну аномалію**. Серце системи — z-score розрахунок відносно 30-денного базису.
 
-Маркус пише тільки коли щось ненормальне. Тому потрібен модуль порівняння поточних метрик з 30-денним базисом:
+### Структура аномалії
 
 ```typescript
-function detectAnomalies(current: MarcusDataPull, baseline: MarcusBaseline): Anomaly[] {
-  const anomalies: Anomaly[] = [];
-
-  const zScore = (val: number, mean: number, std: number) => (val - mean) / std;
-
-  if (Math.abs(zScore(current.btcExchangeNetflow, baseline.netflowMean, baseline.netflowStd)) > 1.8) {
-    anomalies.push({
-      metric: 'exchange_netflow',
-      value: current.btcExchangeNetflow,
-      deviation: zScore(...),
-      direction: current.btcExchangeNetflow > baseline.netflowMean ? 'above' : 'below',
-    });
-  }
-  // ... те саме для кожної метрики
-  return anomalies;
+interface Anomaly {
+  metric:    string;            // 'exchange_netflow', 'hashrate', etc.
+  value:     number;            // поточне значення
+  zScore:    number;            // (current - mean) / std
+  direction: 'above' | 'below';
+  source:    string;            // 'CoinGlass', 'mempool.space', etc.
 }
 ```
 
-**Поріг should_write:** мінімум одна аномалія з |z-score| > 1.8, бажано дві для впевненості.
+**Поріг:** |z-score| > 1.8 = аномалія. Двi+ корельовані аномалії = пише.
 
-### 2. Пам'ять для уникнення повторів
+### Baseline Tracker (унікально для Marcus)
 
-Маркус не пише про одну аномалію двічі за 72 години:
+Базис зберігається в `persona_memory` з `memory_type='baseline'` — потрібна **migration_014.sql**:
 
-```typescript
-// Перевірка в build_context()
-const recentTopics = await getPersonaArticles('marcus-webb', { hours: 72 });
-const alreadyCovered = recentTopics.some(a => 
-  a.primaryMetric === currentAnomaly.metric
-);
-if (alreadyCovered) return { should_write: false, reason: 'covered recently' };
+```sql
+-- migration_014.sql
+alter table persona_memory drop constraint persona_memory_memory_type_check;
+alter table persona_memory add constraint persona_memory_memory_type_check
+  check (memory_type in ('article','forecast','position','context','narrative','baseline'));
 ```
 
-### 3. Прогнози з верифікацією
-
-Маркус завжди закриває статтю "What to watch" — це по суті прогноз. Через 72 години система повертається і перевіряє чи збулось:
-
+**Структура baseline record:**
 ```typescript
-// При генерації статті
-await saveForecast({
-  persona_id: 'marcus-webb',
-  article_id: article.id,
-  metric: 'btc_price',
-  condition: 'decline > 5%',
-  timeframe_hours: 72,
-  trigger_value: currentPrice,
-  status: 'open'
-});
-
-// Cron через 72 год
-await verifyForecasts('marcus-webb');
-// Результат додається до persona_memory — Маркус "знає" чи його прогнози збуваються
+interface MarcusBaseline {
+  metrics: {
+    [metricName: string]: {
+      mean:    number;
+      std:     number;
+      samples: number;  // 30 останніх значень
+      history: number[]; // для rolling update
+    };
+  };
+  lastUpdated: string;
+}
+// Зберігається як ОДИН запис memory_type='baseline', upsert щодня
 ```
+
+**Щоденне оновлення без LLM** (аналог Leo's `update_tracker_only`):
+- Маркус оновлює baseline rolling averages кожен день навіть якщо мовчить
+- Нові значення додаються в history, найстаріші видаляються (window = 30)
+- Std перераховується з нового вікна
 
 ---
 
-## Розклад роботи
-
-| Час (UTC) | Дія |
-|-----------|-----|
-| **07:00** | Основний запуск: data pull → should_write → генерація якщо score ≥ 60 |
-| **13:00** | Другий шанс: якщо вранці мовчав, перевіряє чи зʼявились нові аномалії |
-| **00:00** | Нічний cron: верифікація відкритих прогнозів (закриває або підтверджує) |
-
-**Чому 07:00 UTC:** Азіатська сесія закрита, американська ще не відкрилась — найкращий момент для snapshot on-chain данних без інтрадей шуму.
-
-**Self-work (якщо score < 60):**
-- П'ятниця 07:00 → weekly on-chain summary для тематичного хабу
-- Перевірка і закриття відкритих прогнозів
-- Оновлення baseline метрик (ковзне середнє)
-
----
-
-## Пайплайн робочого дня
+## Пайплайн
 
 ```
 07:00 UTC — MARCUS DAILY RUN
 │
-├─ data_pull('marcus-webb')
-│   ├─ CoinGecko: BTC/ETH price, volume, dominance
-│   ├─ mempool.space: mempool size, avg fee, hashrate
-│   ├─ CoinGlass: exchange netflows (24h)
-│   └─ alternative.me: fear & greed
+├─ is_active check (personas table) — false: exit
 │
-├─ detectAnomalies(data, baseline_30d)
-│   └─ returns: List<Anomaly> with z-scores
+├─ pullMarcusData()
+│   ├─ CoinGecko: price, volume, dominance
+│   ├─ CoinGlass: exchange netflows, miner outflows (якщо є COINGLASS_API_KEY)
+│   ├─ mempool.space: mempool tx count, avg fee
+│   ├─ blockchain.info: hashrate
+│   └─ Alternative.me: fear & greed
 │
-├─ should_write(persona, anomalies)
-│   ├─ if no anomalies with |z| > 1.8 → score: 20, silent
-│   ├─ if 1 anomaly → score: 60-70
-│   ├─ if 2+ anomalies (correlated) → score: 80-95
-│   └─ if topic covered in last 72h → score: max 40
+├─ loadBaseline()   ← persona_memory WHERE type='baseline' (1 запис)
+│   └─ якщо пустий → bootstrap baseline з перших 7 днів даних
 │
-├─ [if score >= 60]
-│   ├─ build_context('marcus-webb', topic)
-│   │   ├─ last 10 marcus articles
-│   │   ├─ semantic similar articles (pgvector)
-│   │   ├─ open forecasts
-│   │   └─ baseline comparison data
-│   │
-│   ├─ generate_article(marcus_system_prompt, data, context)
-│   ├─ generate_outputs(article)
-│   │   ├─ site_article (Sanity)
-│   │   ├─ telegram_signal (5-7 рядків)
-│   │   ├─ x_post (до 280 символів)
-│   │   └─ hub_update (якщо стаття відноситься до хабу)
-│   │
-│   ├─ publish(outputs)
-│   ├─ save_forecast(article) — якщо є "What to watch"
-│   └─ update_memory('marcus-webb', article)
+├─ detectAnomalies(data, baseline)
+│   ├─ z-score для кожної метрики
+│   └─ returns: Anomaly[] відсортовані за |zScore|
 │
-└─ [if score < 60]
-    ├─ log_silent_day(reasoning)
-    ├─ [if Friday] → generate_weekly_summary()
-    └─ verify_open_forecasts()
+├─ shouldWrite(anomalies, recentArticles)
+│   ├─ 0 anomalies with |z| > 1.8 → score 20, silent
+│   ├─ 1 anomaly → score 60-70
+│   ├─ 2+ correlated anomalies → score 80-95
+│   └─ topic covered in last 72h → cap score at 40
+│
+├─ [score ≥ 60]
+│   ├─ buildContext(topic)        ← 5 шарів (div нижче)
+│   ├─ generateMarcusArticle()    — claude-sonnet-4-5
+│   ├─ publishArticleToSanity()
+│   ├─ saveToMemory(type='article')
+│   └─ [fire-and-forget]
+│       ├─ saveEmbedding()
+│       ├─ extractAndSaveForecast()  ← "What to watch" → forecast record
+│       ├─ extractAndSavePosition()  ← Marcus's current on-chain stance
+│       └─ updateBaseline(data)      ← rolling averages update
+│
+├─ [score < 60] → decideSelfWork()
+│   ├─ bootstrap       — 0 статей в пам'яті
+│   ├─ weekly_summary  — п'ятниця
+│   └─ update_baseline_only — ЗАВЖДИ (без LLM)
+│       ├─ verifyOpenForecasts()   ← перевірка BTC price vs forecasts
+│       └─ updateBaseline(data)   ← rolling 30d update
+│
+└─ 13:00 UTC — SECOND CHANCE RUN (якщо вранці був silent)
+    └─ той самий пайплайн (дає шанс якщо аномалія зʼявилась між 07:00 і 13:00)
 ```
 
 ---
 
-## Системний промт
+## buildContext() — 5 шарів
 
-### Основний (генерація статті)
+```
+=== Marcus's analytical foundation ===
+[bootstrap manifesto — type='context']
+
+=== Current position ===
+Stance: cautious on BTC
+On-chain: exchange inflows elevated, miner behavior neutral
+Last updated: 2026-06-05
+
+=== Active forecasts ===
+[OPEN] btc_price decline >5% within 72h — "Watch: Coinbase premium + continued inflows"
+Forecast track record: 3/5 correct
+
+=== Semantically similar past articles ===   ← pgvector
+  - [title] [similarity: 79%]
+
+=== Recent articles (last 72h) ===
+  - [title] [metric: exchange_netflow]
+  - [title] [metric: hashrate]
+```
+
+---
+
+## Пам'ять (persona_memory)
+
+| memory_type | Що зберігається | Кількість |
+|-------------|-----------------|-----------|
+| `context` | Bootstrap manifesto | 1 |
+| `article` | Опубліковані статті (title + excerpt) | Всі, контекст — останні 5 |
+| `forecast` | "What to watch" → відкриті/закриті прогнози | По одному на статтю |
+| `position` | Поточна on-chain позиція Marcus | 1 (upsert) |
+| `baseline` | 30-денний rolling baseline по метриках | 1 (upsert) ← **нова, migration_014** |
+
+---
+
+## Self-Work система
+
+| Тип | Тригер | LLM? | Що робить |
+|-----|--------|------|-----------|
+| `bootstrap` | 0 статей в пам'яті | sonnet-4-5 ✓ | Manifesto про on-chain аналіз, зберігається як `context` |
+| `weekly_summary` | П'ятниця, wrote=0 цього тижня | haiku ✓ | "Weekly on-chain snapshot" — стан метрик за тиждень |
+| `update_baseline_only` | Будь-який тихий день | ✗ Без LLM | Оновлює rolling baseline + верифікує forecasts |
+
+**`update_baseline_only`** — аналог Leo's `update_tracker_only`:
+- Додає сьогоднішні значення до rolling history
+- Перераховує mean/std для кожної метрики
+- Перевіряє open forecasts проти поточного BTC price
+- Жодного LLM call — чисто обчислення
+
+---
+
+## Scoring
+
+| Умова | Score |
+|-------|-------|
+| 0 аномалій з \|z\| > 1.8 | 15-25 |
+| 1 аномалія | 60-70 |
+| 2+ корельовані аномалії | 80-95 |
+| Та сама метрика покрита за 72h | cap 40 |
+
+**Correlated anomalies** — найсильніший сигнал. Приклад: exchange inflows HIGH + miner outflows HIGH = два незалежних сигнали одного напрямку.
+
+---
+
+## Розклад
+
+```
+vercel.json:
+  { "path": "/api/cron/marcus", "schedule": "0 7 * * *"  }  ← основний
+  { "path": "/api/cron/marcus", "schedule": "0 13 * * *" }  ← second chance
+```
+
+| Час (UTC) | Дія |
+|-----------|-----|
+| **07:00** | Основний запуск |
+| **13:00** | Second chance (якщо 07:00 був silent) |
+
+Два cron jobs на один endpoint — другий використовується тільки якщо persona_runs на сьогодні порожній або last run `should_write=false`.
+
+---
+
+## DB — зміни відносно Elena/Leo
+
+```sql
+-- migration_014.sql
+-- Додати 'baseline' до дозволених memory_type для Marcus
+```
+
+Решта таблиць ті самі: `personas`, `persona_memory`, `persona_runs`.
+
+**seed_personas.sql** — додати Marcus INSERT (is_active=false).
+
+**Активація:** `UPDATE personas SET is_active=true WHERE id='marcus-webb';`
+
+---
+
+## Системний промт (основний)
 
 ```
 You are Marcus Webb, on-chain data analyst at finc.news.
@@ -230,14 +349,14 @@ WRITING RULES (non-negotiable):
 2. Paragraph 2: last time this happened (date, price context, what followed)
 3. Paragraph 3: one or two corroborating signals — never unrelated data padding
 4. Paragraph 4: "What to watch" — one specific metric, one specific threshold, one timeframe
-5. Maximum 400 words for a full article
+5. Maximum 400 words
 6. Never use: suggests, could mean, might, bullish, bearish, interesting, exciting
 7. Always cite the data source inline: "Exchange inflows (CoinGlass)..."
 8. No emoji, no exclamation marks, no rhetorical questions
 
 STRUCTURE TEMPLATE:
 [Metric] reached [value] — [deviation context]. The last comparable reading was [date].
-[Historical precedent — 1-2 sentences]. [Corroborating signal]. [Second corroborating signal if strong].
+[Historical precedent — 1-2 sentences]. [Corroborating signal]. [Second if strong].
 What to watch: if [specific metric] [crosses/reaches] [threshold], [specific implication].
 
 VOICE TEST: Would this read comfortably on a Bloomberg terminal? If no — rewrite.
@@ -245,91 +364,68 @@ VOICE TEST: Would this read comfortably on a Bloomberg terminal? If no — rewri
 WHAT YOU RECEIVED TODAY:
 - Anomalies detected: {anomalies_json}
 - Supporting metrics: {full_data_json}
+- 30-day baseline: {baseline_json}
 - Your recent articles: {recent_articles_summary}
 - Open forecasts: {open_forecasts}
-
-ARTICLE REQUIREMENTS:
-- Must link to relevant finc.news hub page where applicable
-- Must include a "What to watch" closing
-- Must reference at least 2 specific numerical data points with sources
-- Telegram post: 5-7 lines, numbers first, link to article at end
-```
-
-### Промт для should_write evaluation
-
-```
-You are Marcus Webb's editorial judgment function.
-
-You have received today's on-chain data. Your job: decide if there is something worth publishing.
-
-Marcus Webb ONLY publishes when:
-1. At least one metric shows ≥1.8 standard deviation from its 30-day mean
-2. The topic hasn't been covered in the last 72 hours
-3. The signal has at least one corroborating data point
-
-DATA RECEIVED:
-{data_json}
-
-BASELINE (30-day averages and std deviations):
-{baseline_json}
-
-RECENT ARTICLES (last 72h):
-{recent_articles}
-
-Respond ONLY with this JSON:
-{
-  "should_write": boolean,
-  "score": number (0-100),
-  "reasoning": "one sentence explanation",
-  "topic": "the specific anomaly to write about, or null",
-  "primary_metric": "the metric driving this, or null",
-  "anomalies": [{"metric": string, "z_score": number, "direction": string}]
-}
-
-Score guide: 0-40 = routine day, 50-59 = borderline, 60-74 = clear signal, 75-89 = strong anomaly, 90+ = significant event
 ```
 
 ---
 
-## Приклади виводу
+## ENV Variables
 
-### Telegram signal (стандартний)
+| Змінна | Використання | Статус |
+|--------|-------------|--------|
+| `COINGLASS_API_KEY` | Exchange netflows, miner outflows | Потрібно отримати (free tier) |
+| `ANTHROPIC_API_KEY` | should-write, generate, self-work | ✅ є |
+| `OPENAI_API_KEY` | embeddings (shared) | ✅ є |
 
-```
-📊 On-chain alert
+**Що НЕ потрібно:**
+- CoinGecko key — public API
+- mempool.space key — public API
+- blockchain.info key — public API
+- Alternative.me key — public API
 
-Exchange inflows: 42,300 BTC (24h)
-2.3σ above 30-day mean of 18,400 BTC
+---
 
-Last comparable: March 12, 2024 — 3 days before -12%
+## Відмінності від Elena і Leo
 
-Miner outflows also elevated (+18% vs weekly avg)
-Fear & Greed: 71 (Greed)
+| Аспект | Elena Voss | Leo Cruz | Marcus Webb |
+|--------|-----------|---------|-------------|
+| Тригер | Economic calendar + FRED | Social signals | **z-score > 1.8** |
+| Унікальна пам'ять | `forecast` + `position` | `narrative` tracker | `baseline` (rolling 30d) |
+| Second run | — | — | **13:00 second chance** |
+| Quiet day action | Log and exit | Update tracker | **Update baseline** + verify forecasts |
+| Bootstrap frame | Macro framework | Narrative hunting | On-chain analysis philosophy |
+| Нові ENV keys | `FRED_API_KEY` | `CRYPTOPANIC_API_KEY` (opt.) | `COINGLASS_API_KEY` |
+| DB migration | 009-012 | + 013 | + 014 ('baseline' type) |
+| Category | economy/policy | crypto | bitcoin/markets |
 
-What to watch: Coinbase premium + continued inflows → short-term holder exit signal
+---
 
-→ finc.news/bitcoin/on-chain-exchange-inflow-spike-june-2025
-```
+## Що треба зробити для реалізації
 
-### X post
+1. **Отримати API key:** CoinGlass free tier → додати `COINGLASS_API_KEY` в Vercel
+2. **migration_014.sql** — додати `'baseline'` до `persona_memory.memory_type` constraint
+3. **`lib/personas/marcus-webb/data-pull.ts`** — CoinGecko + mempool.space + blockchain.info + CoinGlass + Alternative.me
+4. **`lib/personas/marcus-webb/baseline.ts`** — load/save/update rolling 30-day baseline
+5. **`lib/personas/marcus-webb/anomalies.ts`** — `detectAnomalies()` з z-score, threshold = 1.8
+6. **`lib/personas/marcus-webb/should-write.ts`** — anomaly-based scoring
+7. **`lib/personas/marcus-webb/generate.ts`** — claude-sonnet-4-5 з Marcus system prompt
+8. **`lib/personas/marcus-webb/forecasts.ts`** — аналог Elena's forecasts.ts (PERSONA_ID='marcus-webb')
+9. **`lib/personas/marcus-webb/self-work.ts`** — weekly_summary + update_baseline_only
+10. **`lib/personas/marcus-webb/index.ts`** — оркестратор + second-chance logic + getMarcusContext()
+11. **`app/api/cron/marcus/route.ts`** — cron endpoint (обробляє і 07:00 і 13:00)
+12. **`vercel.json`** — два cron schedules для Marcus
+13. **`supabase/seed_personas.sql`** — додати Marcus INSERT
+14. **`app/api/admin/personas/[id]/route.ts`** — додати 'marcus-webb' support
+15. **`app/(admin)/flows/_components/PersonasTab.tsx`** — PersonaCard для Marcus (вже є компонент)
 
-```
-BTC exchange inflows: 42,300 BTC in 24h — highest since March 2024.
-Last time this happened: -12% followed within 72 hours.
-Miner outflows elevated. Fear & Greed at 71.
-Watch the Coinbase premium.
-finc.news/...
-```
+---
 
-### Тихий день (log)
+## Відомі особливості
 
-```json
-{
-  "persona": "marcus-webb",
-  "date": "2025-06-05",
-  "should_write": false,
-  "score": 22,
-  "reasoning": "All metrics within 1.1σ of 30-day baseline. No anomalies detected across exchange flows, mempool, or hashrate. Routine session.",
-  "self_work": "verified_forecasts"
-}
-```
+**Second chance run (13:00):** Cron викликає той самий endpoint. `index.ts` перевіряє чи вже писав сьогодні (persona_runs за сьогодні) — якщо так, виходить. Це дозволяє Marcus реагувати на аномалії що зʼявились між 07:00 і 13:00.
+
+**Baseline bootstrap:** Перші 7 днів baseline недостатньо репрезентативний. Marcus не публікує статті в перший тиждень — тільки збирає дані для baseline. Поріг bootstrap: `samples < 7` → score max 30.
+
+**CoinGlass без ключа:** Якщо `COINGLASS_API_KEY` відсутній → exchange netflows = 0 → аномалій по netflow не буде. Marcus ще може писати на основі mempool + hashrate + volume, але якість сигналів значно нижча.
