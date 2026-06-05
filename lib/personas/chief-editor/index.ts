@@ -1,8 +1,20 @@
 import { supabaseAdmin } from '@/lib/supabase';
 import { collectData } from './data-collector';
 import { detectPatterns } from './patterns';
-import { evaluate } from './evaluate';
-import { saveFeedbackToAnalysts, saveEditorSession, updateEditorialStandards, verifyPreviousDirectives, saveToEditorialTables } from './memory';
+import {
+  detectOverlap,
+  evaluateAnalyst,
+  synthesizeDeskNote,
+  type PersonaFeedback,
+} from './evaluate';
+import {
+  saveFeedbackToAnalysts,
+  saveEditorSession,
+  updateEditorialStandards,
+  verifyPreviousDirectives,
+  saveToEditorialTables,
+  loadEditorMemory,
+} from './memory';
 
 const PERSONA_ID = 'victor-kane';
 
@@ -13,19 +25,20 @@ export interface ChiefEditorResult {
   analystsReviewed?: string[];
   scores?:           Record<string, number | null>;
   deskNote?:         string;
+  overlapDetected?:  boolean;
   error?:            string;
 }
 
 export async function runChiefEditor(): Promise<ChiefEditorResult> {
   const db = supabaseAdmin();
 
-  // is_active check
+  // 0. is_active check
   const { data: persona } = await db.from('personas').select('is_active').eq('id', PERSONA_ID).single();
   if (!(persona as { is_active: boolean } | null)?.is_active) {
     return { ran: false, reason: 'Victor Kane is inactive' };
   }
 
-  // 1. Collect all data
+  // 1. Collect data (no LLM)
   let collected;
   try {
     collected = await collectData();
@@ -34,7 +47,7 @@ export async function runChiefEditor(): Promise<ChiefEditorResult> {
     return { ran: false, reason: `Data collection failed: ${error}`, error };
   }
 
-  // 2. Quiet desk — nobody published today
+  // 2. Quiet desk
   if (!collected.anyPublished) {
     await db.from('persona_runs').insert({
       persona_id:   PERSONA_ID,
@@ -46,63 +59,84 @@ export async function runChiefEditor(): Promise<ChiefEditorResult> {
     return { ran: false, reason: 'Quiet desk — no articles to review' };
   }
 
-  // 3. Verify previous directives (before evaluate so Victor has updated info)
+  const publishedAnalysts = collected.analysts.filter((a) => a.todayArticle !== null);
+
+  // 3. Verify previous directives (no LLM)
   await Promise.all(
-    collected.analysts.map((ctx) =>
-      verifyPreviousDirectives(ctx.personaId, ctx.todayArticle)
-    )
+    publishedAnalysts.map((ctx) => verifyPreviousDirectives(ctx.personaId, ctx.todayArticle))
   );
 
-  // 4. Detect patterns
-  const allAlerts = collected.analysts
-    .filter((ctx) => ctx.todayArticle)
-    .flatMap((ctx) => detectPatterns(ctx.personaId, ctx.todayArticle!, ctx.last5Articles));
+  // 4. Detect semantic overlap between articles (embeddings, no LLM)
+  const overlap = await detectOverlap(publishedAnalysts);
 
-  // 5. Evaluate
+  // 5. Load Victor's own memory (for each analyst prompt)
+  const editorMemory = await loadEditorMemory();
+
+  // 6. Evaluate each published analyst in PARALLEL (sonnet × N)
+  const scorecards: Record<string, PersonaFeedback | null> = {};
+
+  // Pre-detect patterns for all analysts (no LLM)
+  const allPatterns = publishedAnalysts.map((ctx) => ({
+    personaId: ctx.personaId,
+    alerts:    detectPatterns(ctx.personaId, ctx.todayArticle!, ctx.last5Articles),
+  }));
+
+  // Parallel evaluation
+  await Promise.all(
+    collected.analysts.map(async (ctx) => {
+      if (!ctx.todayArticle) {
+        scorecards[ctx.personaId] = null;
+        return;
+      }
+      const patterns = allPatterns.find((p) => p.personaId === ctx.personaId)?.alerts ?? [];
+      scorecards[ctx.personaId] = await evaluateAnalyst(ctx, overlap, editorMemory, patterns);
+    })
+  );
+
+  // 7. Synthesize desk note (haiku — single call, structured input)
   let session;
   try {
-    session = await evaluate(collected, allAlerts);
+    session = await synthesizeDeskNote(scorecards, overlap, collected.date);
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
-    return { ran: false, reason: `Evaluation failed: ${error}`, error };
+    return { ran: false, reason: `Synthesis failed: ${error}`, error };
   }
 
-  // 6a. Save to dedicated editorial tables (for admin UI queries)
+  // 8. Save to editorial tables + persona_memory (both paths)
   await saveToEditorialTables(session, collected.analysts);
-
-  // 6b. Save feedback to each analyst's persona_memory (for LLM buildContext injection)
   await saveFeedbackToAnalysts(session, collected.analysts);
 
-  // 7. Save Victor's own session + update standards
+  // 9. Save Victor's own session + update standards
   await Promise.all([
     saveEditorSession(session),
     updateEditorialStandards(session),
   ]);
 
-  // 8. Log run
-  const scores: Record<string, number | null> = {};
+  // 10. Log run
   const reviewed: string[] = [];
+  const scores: Record<string, number | null> = {};
   for (const [id, f] of Object.entries(session.editorial_session)) {
-    const score = (f as { score?: number | null } | null)?.score ?? null;
-    scores[id] = score;
-    if ((f as { published_today?: boolean } | null)?.published_today) reviewed.push(id);
+    const fb = f as PersonaFeedback | null;
+    scores[id] = fb?.score ?? null;
+    if (fb?.published_today) reviewed.push(id);
   }
 
   await db.from('persona_runs').insert({
-    persona_id:   PERSONA_ID,
-    should_write: true,
-    score:        100, // Victor always "succeeds" if he ran
-    reasoning:    `Reviewed ${reviewed.length} article(s). ${session.desk_note}`,
-    topic:        reviewed.join(', '),
-    data_snapshot: { date: collected.date, scores },
+    persona_id:    PERSONA_ID,
+    should_write:  true,
+    score:         100,
+    reasoning:     `Reviewed ${reviewed.length} article(s) (${reviewed.join(', ')}). ${session.desk_note}`,
+    topic:         reviewed.join(', '),
+    data_snapshot: { date: collected.date, scores, overlap: overlap.pairs.length > 0 },
   });
 
   return {
-    ran:               true,
-    reason:            `Reviewed ${reviewed.length} article(s)`,
-    date:              collected.date,
-    analystsReviewed:  reviewed,
+    ran:              true,
+    reason:           `Reviewed ${reviewed.length} article(s)`,
+    date:             collected.date,
+    analystsReviewed: reviewed,
     scores,
-    deskNote:          session.desk_note,
+    deskNote:         session.desk_note,
+    overlapDetected:  overlap.pairs.length > 0,
   };
 }
