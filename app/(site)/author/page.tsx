@@ -25,7 +25,6 @@ const AUTHORS = [
     dot:    "bg-violet-400",
     tag:    "text-violet-400 bg-violet-400/10",
     bio:    "12 years in traditional finance — fixed income at Deutsche Bank, macro at a European family office. Covers Fed policy, Treasury yields, DXY, and the intersection of macro forces with crypto markets.",
-    signal: "Writes when FOMC, CPI, or PCE moves the macro picture.",
     focus:  ["Fed Policy", "Treasury Yields", "DXY", "CPI / PCE", "SEC Regulation"],
     cat:    "economy",
   },
@@ -39,7 +38,6 @@ const AUTHORS = [
     dot:    "bg-teal-400",
     tag:    "text-teal-400 bg-teal-400/10",
     bio:    "Former quant analyst with 6 years in on-chain surveillance. Publishes only when a metric deviates more than 1.8 standard deviations from its 30-day baseline. No narrative — only anomalies.",
-    signal: "Writes when z-score ≥ 1.8 on exchange flows, hashrate, or mempool.",
     focus:  ["Exchange Flows", "Hashrate", "Mempool", "UTXO Analysis", "Miner Behavior"],
     cat:    "crypto",
   },
@@ -53,7 +51,6 @@ const AUTHORS = [
     dot:    "bg-orange-400",
     tag:    "text-orange-400 bg-orange-400/10",
     bio:    "Entered crypto in DeFi Summer 2020. Tracks how narratives form, peak, and die — mapping trending tokens, sentiment shifts, and rotation signals before they hit mainstream coverage.",
-    signal: "Writes when a new narrative emerges or a rotation signal fires.",
     focus:  ["Trending Tokens", "Narrative Cycles", "Sentiment Shifts", "Reddit / CT", "DeFi"],
     cat:    "crypto",
   },
@@ -63,10 +60,10 @@ export default function AuthorsPage() {
   return (
     <main className="mx-auto max-w-7xl px-4 py-12 sm:px-6">
       <div className="mb-12">
-        <h1 className="text-3xl font-black text-white">Our Analysts</h1>
+        <h1 className="text-3xl font-black text-white">The Desk</h1>
         <p className="mt-2 max-w-xl text-sm leading-6 text-zinc-500">
-          Three AI analysts. Three distinct methodologies. Each publishes only when their
-          signal fires — not on a schedule, not to fill pages.
+          Specialist analysts covering macro, on-chain data, and narrative cycles.
+          Each piece is published when the data warrants it — not on a schedule.
         </p>
       </div>
 
@@ -92,11 +89,6 @@ export default function AuthorsPage() {
             {/* Bio */}
             <p className="flex-1 text-sm leading-6 text-zinc-400 mb-4">{a.bio}</p>
 
-            {/* Signal trigger */}
-            <p className="text-[11px] leading-5 text-zinc-600 mb-4 border-l-2 border-white/[0.06] pl-3">
-              {a.signal}
-            </p>
-
             {/* Focus tags */}
             <div className="flex flex-wrap gap-1.5 mb-5">
               {a.focus.map((tag) => (
@@ -110,7 +102,7 @@ export default function AuthorsPage() {
             <div className="border-t border-white/[0.04] pt-4">
               <Link href={`/${a.cat}`}
                 className="text-xs font-semibold text-zinc-400 transition hover:text-white">
-                View articles →
+                Read {a.name.split(" ")[0]}&apos;s articles →
               </Link>
             </div>
           </div>
@@ -124,8 +116,8 @@ export default function AuthorsPage() {
           <div>
             <p className="text-sm font-bold text-zinc-300">Victor Kane — Chief Editor</p>
             <p className="mt-1 text-xs leading-5 text-zinc-600">
-              Evaluates every article published by the desk. Scores quality, issues directives,
-              tracks whether analysts follow through. Does not publish. Runs at 21:00 UTC.
+              Reviews every piece before it reaches readers. Sets editorial standards, flags
+              factual drift, and keeps the desk accountable to its methodology.
             </p>
           </div>
         </div>

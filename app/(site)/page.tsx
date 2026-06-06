@@ -166,7 +166,7 @@ function ResearchHubs({ hubs }: { hubs: Awaited<ReturnType<typeof getTopicHubs>>
       <div className="mb-4 flex items-center justify-between gap-4">
         <div>
           <SectionHeader label="Market Guides" />
-          <p className="-mt-2 text-sm text-zinc-600">Plain-English explainers for the forces moving crypto, markets and policy.</p>
+          <p className="-mt-2 text-sm text-zinc-600">Structural context on the forces moving markets — updated as conditions change.</p>
         </div>
         <Link href="/topics" className="shrink-0 text-xs font-semibold text-zinc-500 transition hover:text-cyan-400">
           All topics →
