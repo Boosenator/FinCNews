@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@sanity/client";
-import { isAuthed } from "@/lib/auth";
+import { isAuthedOrN8n } from "@/lib/auth";
 
 export const maxDuration = 120;
 
@@ -90,7 +90,7 @@ async function fetchPexelsImage(query: string, pexelsKey: string): Promise<Buffe
 }
 
 export async function POST(req: NextRequest) {
-  if (!isAuthed(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!isAuthedOrN8n(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const pexelsKey = process.env.PEXELS_API_KEY;
   if (!pexelsKey) return NextResponse.json({ error: "PEXELS_API_KEY not configured" }, { status: 500 });
