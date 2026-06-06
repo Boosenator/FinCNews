@@ -601,43 +601,64 @@ async function getRecentArticleHints(category: string): Promise<RecentArticleHin
   );
 }
 
-// Build specific Pexels search query from article context
-function buildImageQuery(category: string, tags?: string[], title?: string): string {
-  const STOP_WORDS = new Set([
-    "the","a","an","and","or","but","in","on","at","to","for","of","with","as",
-    "is","was","are","were","has","have","will","would","after","before","than",
-    "that","this","from","into","over","just","its","their","our","amid","amid",
-    "says","says","back","new","via","per","how","why","what","when","where",
-  ]);
+const VISUAL_FALLBACK: Record<string, string> = {
+  crypto:    "trading screens financial data analysts office",
+  markets:   "stock exchange trading floor multiple screens",
+  economy:   "central bank marble building exterior washington",
+  fintech:   "mobile payment smartphone hand technology",
+  policy:    "government hearing room officials testifying",
+  companies: "corporate boardroom meeting executives office",
+};
 
-  // Priority 1: article tags → most specific (e.g. "memecoin", "solana", "istanbul")
-  if (tags && tags.length > 0) {
-    const meaningful = tags
-      .map((t) => t.replace(/-/g, " ").toLowerCase())
-      .filter((t) => t.length > 3 && !STOP_WORDS.has(t))
-      .slice(0, 2);
-    if (meaningful.length > 0) return `${meaningful.join(" ")} finance`;
+// Uses Claude Haiku to generate a photojournalistic scene description for Pexels.
+// Falls back to category-based visual concepts — never passes crypto coin names directly.
+async function buildImageQuery(category: string, tags?: string[], title?: string): Promise<string> {
+  const context = [title, tags?.slice(0, 3).join(", "), category].filter(Boolean).join(" | ");
+
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": process.env.ANTHROPIC_API_KEY!,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 25,
+        messages: [{
+          role: "user",
+          content: `You are a photo editor choosing a Reuters/Bloomberg editorial stock photo for a financial news article.
+
+Article: ${context}
+
+Output ONLY 4-6 words describing a real photojournalistic scene. No Bitcoin coins, no crypto logos, no physical tokens, no brand logos. Focus on people, environments, and actions.
+
+Examples:
+"SEC sues crypto exchange" → "government lawyers courtroom hearing officials"
+"Bitcoin ETF approved" → "stock exchange trading floor analysts screens"
+"Fed raises interest rates" → "federal reserve building washington exterior"
+"DeFi protocol hacked" → "cybersecurity analyst dark server room"
+"Solana price surges" → "traders watching screens financial charts"
+"Stripe acquires fintech startup" → "tech office startup team meeting"
+"Oil prices crash" → "oil refinery industrial infrastructure aerial"
+
+Only the query, nothing else.`,
+        }],
+      }),
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const query = (data.content?.[0]?.text ?? "").trim().replace(/["']/g, "").slice(0, 80);
+      if (query.length > 5) return query;
+    }
+  } catch {
+    // fall through to static fallback
   }
 
-  // Priority 2: key nouns from title (entities, organizations, topics)
-  if (title) {
-    const words = title
-      .split(/\W+/)
-      .map((w) => w.toLowerCase())
-      .filter((w) => w.length > 4 && !STOP_WORDS.has(w));
-    if (words.length >= 2) return `${words.slice(0, 3).join(" ")}`;
-  }
-
-  // Priority 3: category fallback
-  const categoryMap: Record<string, string> = {
-    crypto:    "cryptocurrency digital assets trading",
-    markets:   "stock market trading finance chart",
-    economy:   "federal reserve central bank economy",
-    fintech:   "mobile payment technology fintech",
-    policy:    "law regulation government finance",
-    companies: "corporate office business earnings",
-  };
-  return categoryMap[category] ?? "finance business";
+  return VISUAL_FALLBACK[category] ?? "financial office trading screens analysts";
 }
 
 // Returns Pexels photo URL (medium size) for use in Telegram, or null on failure
@@ -651,7 +672,7 @@ async function attachPexelsImage(
   const pexelsKey = process.env.PEXELS_API_KEY;
   if (!pexelsKey) return null;
 
-  const query = buildImageQuery(category, tags, title);
+  const query = await buildImageQuery(category, tags, title);
 
   try {
     const search = await fetch(

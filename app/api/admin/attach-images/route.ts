@@ -4,13 +4,13 @@ import { isAuthed } from "@/lib/auth";
 
 export const maxDuration = 120;
 
-const CATEGORY_QUERIES: Record<string, string> = {
-  crypto:    "bitcoin cryptocurrency blockchain",
-  markets:   "stock market trading finance",
-  economy:   "federal reserve central bank economy",
-  fintech:   "mobile payment fintech technology",
-  policy:    "law regulation government finance",
-  companies: "corporate office business earnings",
+const VISUAL_FALLBACK: Record<string, string> = {
+  crypto:    "trading screens financial data analysts office",
+  markets:   "stock exchange trading floor multiple screens",
+  economy:   "central bank marble building exterior washington",
+  fintech:   "mobile payment smartphone hand technology",
+  policy:    "government hearing room officials testifying",
+  companies: "corporate boardroom meeting executives office",
 };
 
 type ArticleRow = {
@@ -20,21 +20,57 @@ type ArticleRow = {
   title: string | null;
 };
 
-const STOP_WORDS = new Set(["the","a","an","and","or","but","in","on","at","to","for","of","with","as","is","was","are","were","has","have","will","would","after","before","than","that","this","from","into","over","just","its","their","our","amid","says","back","new","via","per","how","why","what","when","where"]);
+async function buildQuery(category: string, title?: string): Promise<string> {
+  const context = [title, category].filter(Boolean).join(" | ");
 
-function buildQuery(category: string, title?: string): string {
-  if (title) {
-    const words = title.split(/\W+/).map(w => w.toLowerCase()).filter(w => w.length > 4 && !STOP_WORDS.has(w));
-    if (words.length >= 2) return words.slice(0, 3).join(" ");
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": process.env.ANTHROPIC_API_KEY!,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 25,
+        messages: [{
+          role: "user",
+          content: `You are a photo editor choosing a Reuters/Bloomberg editorial stock photo for a financial news article.
+
+Article: ${context}
+
+Output ONLY 4-6 words describing a real photojournalistic scene. No Bitcoin coins, no crypto logos, no physical tokens, no brand logos. Focus on people, environments, and actions.
+
+Examples:
+"SEC sues crypto exchange" → "government lawyers courtroom hearing officials"
+"Bitcoin ETF approved" → "stock exchange trading floor analysts screens"
+"Fed raises interest rates" → "federal reserve building washington exterior"
+"DeFi protocol hacked" → "cybersecurity analyst dark server room"
+"Solana price surges" → "traders watching screens financial charts"
+
+Only the query, nothing else.`,
+        }],
+      }),
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const query = (data.content?.[0]?.text ?? "").trim().replace(/["']/g, "").slice(0, 80);
+      if (query.length > 5) return query;
+    }
+  } catch {
+    // fall through to static fallback
   }
-  return CATEGORY_QUERIES[category] ?? "finance business";
+
+  return VISUAL_FALLBACK[category] ?? "financial office trading screens analysts";
 }
 
-async function fetchPexelsImage(category: string, pexelsKey: string, title?: string): Promise<Buffer | null> {
-  const query = buildQuery(category, title);
+async function fetchPexelsImage(query: string, pexelsKey: string): Promise<Buffer | null> {
   try {
     const res = await fetch(
-      `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=10&orientation=landscape`,
+      `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=15&orientation=landscape`,
       { headers: { Authorization: pexelsKey }, signal: AbortSignal.timeout(6000) },
     );
     if (!res.ok) return null;
@@ -59,6 +95,15 @@ export async function POST(req: NextRequest) {
   const pexelsKey = process.env.PEXELS_API_KEY;
   if (!pexelsKey) return NextResponse.json({ error: "PEXELS_API_KEY not configured" }, { status: 500 });
 
+  const { searchParams } = new URL(req.url);
+  // replace=true → process articles that already have a cover image
+  const replace = searchParams.get("replace") === "true";
+  // category=crypto → filter to one category
+  const categoryFilter = searchParams.get("category") ?? null;
+  // limit/offset for pagination (max 20 per call to stay within Vercel timeout)
+  const limit = Math.min(parseInt(searchParams.get("limit") ?? "20", 10), 20);
+  const offset = parseInt(searchParams.get("offset") ?? "0", 10);
+
   const sanity = createClient({
     projectId: process.env.SANITY_PROJECT_ID ?? process.env.NEXT_PUBLIC_SANITY_PROJECT_ID!,
     dataset: process.env.SANITY_DATASET ?? "production",
@@ -67,9 +112,10 @@ export async function POST(req: NextRequest) {
     useCdn: false,
   });
 
-  // Find articles without a cover image
+  const coverFilter = replace ? "" : "&& !defined(coverImage.asset)";
+  const catFilter = categoryFilter ? `&& category == "${categoryFilter}"` : "";
   const articles: ArticleRow[] = await sanity.fetch(
-    `*[_type == "article" && !defined(coverImage.asset)] | order(publishedAt desc)[0...30] {
+    `*[_type == "article" ${coverFilter} ${catFilter}] | order(publishedAt desc)[${offset}...${offset + limit}] {
       _id,
       "slug": slug.current,
       category,
@@ -78,14 +124,21 @@ export async function POST(req: NextRequest) {
   );
 
   if (!articles.length) {
-    return NextResponse.json({ found: 0, attached: 0, errors: 0, results: [] });
+    return NextResponse.json({ found: 0, attached: 0, errors: 0, results: [], offset, limit });
   }
 
-  const results: Array<{ id: string; title: string; status: "ok" | "error"; error?: string }> = [];
+  // Generate all AI visual queries in parallel to save time
+  const queries = await Promise.all(
+    articles.map((a) => buildQuery(a.category, a.title ?? undefined)),
+  );
 
-  for (const article of articles) {
+  const results: Array<{ id: string; title: string; query: string; status: "ok" | "error"; error?: string }> = [];
+
+  for (let i = 0; i < articles.length; i++) {
+    const article = articles[i];
+    const imageQuery = queries[i];
     try {
-      const buffer = await fetchPexelsImage(article.category, pexelsKey, article.title ?? undefined);
+      const buffer = await fetchPexelsImage(imageQuery, pexelsKey);
       if (!buffer) throw new Error("Pexels returned no image");
 
       const asset = await sanity.assets.upload("image", buffer, {
@@ -97,9 +150,9 @@ export async function POST(req: NextRequest) {
         coverImage: { _type: "image", asset: { _type: "reference", _ref: asset._id } },
       }).commit();
 
-      results.push({ id: article._id, title: article.title ?? article.slug, status: "ok" });
+      results.push({ id: article._id, title: article.title ?? article.slug, query: imageQuery, status: "ok" });
     } catch (e) {
-      results.push({ id: article._id, title: article.title ?? article.slug, status: "error", error: String(e) });
+      results.push({ id: article._id, title: article.title ?? article.slug, query: imageQuery, status: "error", error: String(e) });
     }
   }
 
@@ -107,6 +160,9 @@ export async function POST(req: NextRequest) {
     found: articles.length,
     attached: results.filter((r) => r.status === "ok").length,
     errors: results.filter((r) => r.status === "error").length,
+    offset,
+    limit,
+    nextOffset: offset + limit,
     results,
   });
 }
