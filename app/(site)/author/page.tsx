@@ -4,13 +4,19 @@ import Link from "next/link";
 import { BASE_URL } from "@/lib/config";
 
 export const metadata: Metadata = {
-  title: "The Team | FinCNews",
-  description: "Specialist analysts covering macro, on-chain data, and crypto narratives.",
+  title: "Our Analysts — Elena Voss, Marcus Webb, Leo Cruz | FinCNews",
+  description: "Meet the FinCNews analysts: Elena Voss (macro), Marcus Webb (on-chain), Leo Cruz (narratives). Specialist coverage of crypto, markets and Fed policy.",
   alternates: { canonical: "/author" },
   openGraph: {
-    title: "The Team | FinCNews",
-    description: "Specialist analysts covering macro, on-chain data, and crypto narratives.",
+    title: "Our Analysts | FinCNews",
+    description: "Meet the FinCNews analysts: Elena Voss (macro), Marcus Webb (on-chain), Leo Cruz (narratives).",
     url: `${BASE_URL}/author`,
+    images: [{ url: `${BASE_URL}/opengraph-image`, width: 1200, height: 630 }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Our Analysts | FinCNews",
+    description: "Elena Voss · Marcus Webb · Leo Cruz — specialist coverage of crypto, markets and macro.",
   },
 };
 
@@ -47,11 +53,32 @@ const AUTHORS = [
   },
 ];
 
+const teamSchema = {
+  "@context": "https://schema.org",
+  "@type": "ItemList",
+  name: "FinCNews Analysts",
+  url: `${BASE_URL}/author`,
+  itemListElement: AUTHORS.map((a, i) => ({
+    "@type": "ListItem",
+    position: i + 1,
+    item: {
+      "@type": "Person",
+      name: a.name,
+      jobTitle: a.role,
+      url: `${BASE_URL}/author/${a.id}`,
+      image: `${BASE_URL}${a.avatar}`,
+      worksFor: { "@type": "Organization", name: "FinCNews", url: BASE_URL },
+    },
+  })),
+};
+
 export default function AuthorsPage() {
   return (
+    <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(teamSchema) }} />
     <main className="mx-auto max-w-7xl px-4 py-12 sm:px-6">
       <div className="mb-12">
-        <h1 className="text-3xl font-black text-white">The Team</h1>
+        <h1 className="text-3xl font-black text-white">Our Analysts</h1>
         <p className="mt-2 max-w-xl text-sm leading-6 text-zinc-500">
           Specialist analysts covering macro, on-chain data, and narrative cycles.
           Each piece is published when the data warrants it — not on a schedule.
@@ -68,7 +95,7 @@ export default function AuthorsPage() {
                 <Image src={a.avatar} alt={a.name} fill className="object-cover" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-base font-black text-white">{a.name}</p>
+                <h2 className="text-base font-black text-white">{a.name}</h2>
                 <span className={`inline-flex mt-1 items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold ${a.tag}`}>
                   {a.role}
                 </span>
@@ -95,5 +122,6 @@ export default function AuthorsPage() {
         ))}
       </div>
     </main>
+    </>
   );
 }

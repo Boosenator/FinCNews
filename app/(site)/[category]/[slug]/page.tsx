@@ -76,11 +76,17 @@ export default async function ArticlePage({ params }: Props) {
     description: t.metaDescription ?? t.excerpt,
     datePublished: article.publishedAt,
     dateModified: article.publishedAt,
-    author: {
-      "@type": "Organization",
-      name: "FinCNews Editorial",
-      url: `${BASE_URL}/about`,
-    },
+    author: article.persona
+      ? {
+          "@type": "Person",
+          name: article.authorName ?? "FinCNews Editorial",
+          url: `${BASE_URL}/author/${article.persona}`,
+        }
+      : {
+          "@type": "Organization",
+          name: "FinCNews Editorial",
+          url: `${BASE_URL}/about`,
+        },
     publisher: {
       "@type": "Organization",
       name: "FinCNews",
@@ -172,7 +178,7 @@ export default async function ArticlePage({ params }: Props) {
             <div className="mt-5 flex flex-wrap items-center justify-between gap-4 border-y border-white/[0.06] py-4">
               <div className="flex items-center gap-3">
                 {article.persona ? (
-                  <Link href="/author" className="group flex-shrink-0">
+                  <Link href={`/author/${article.persona}`} className="group flex-shrink-0">
                     <div className="relative h-11 w-11 overflow-hidden rounded-full border border-white/[0.1] transition group-hover:border-white/30">
                       {article.authorAvatar ? (
                         <Image
@@ -195,7 +201,7 @@ export default async function ArticlePage({ params }: Props) {
                 )}
                 <div className="text-sm">
                   {article.persona ? (
-                    <Link href="/author" className="font-semibold text-zinc-200 transition hover:text-white">
+                    <Link href={`/author/${article.persona}`} className="font-semibold text-zinc-200 transition hover:text-white">
                       {article.authorName ?? 'FinCNews Editorial'}
                     </Link>
                   ) : (

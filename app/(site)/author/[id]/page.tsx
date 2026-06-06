@@ -51,12 +51,18 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return {
     title: `${a.name} — ${a.role} | FinCNews`,
     description: a.bio,
-    alternates: { canonical: `/author/${id}` },
+    alternates: { canonical: `${BASE_URL}/author/${id}` },
     openGraph: {
-      title: `${a.name} | FinCNews`,
+      title: `${a.name} — ${a.role} | FinCNews`,
       description: a.bio,
       url: `${BASE_URL}/author/${id}`,
       images: [{ url: `${BASE_URL}${a.avatar}`, width: 400, height: 400, alt: a.name }],
+    },
+    twitter: {
+      card: "summary",
+      title: `${a.name} — ${a.role} | FinCNews`,
+      description: a.bio,
+      images: [`${BASE_URL}${a.avatar}`],
     },
   };
 }
@@ -71,8 +77,43 @@ export default async function AuthorPage({ params }: { params: Promise<{ id: str
   if (!a) notFound();
 
   const articles = await getArticlesByPersona(id, 24);
+  const authorUrl = `${BASE_URL}/author/${id}`;
+
+  const personSchema = {
+    "@context": "https://schema.org",
+    "@type": "Person",
+    name: a.name,
+    jobTitle: a.role,
+    description: a.bio,
+    url: authorUrl,
+    image: `${BASE_URL}${a.avatar}`,
+    worksFor: { "@type": "Organization", name: "FinCNews", url: BASE_URL },
+    knowsAbout: a.focus,
+  };
+
+  const profilePageSchema = {
+    "@context": "https://schema.org",
+    "@type": "ProfilePage",
+    mainEntity: personSchema,
+    url: authorUrl,
+    name: `${a.name} | FinCNews`,
+    description: a.bio,
+  };
+
+  const breadcrumbSchema = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: BASE_URL },
+      { "@type": "ListItem", position: 2, name: "Our Analysts", item: `${BASE_URL}/author` },
+      { "@type": "ListItem", position: 3, name: a.name, item: authorUrl },
+    ],
+  };
 
   return (
+    <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(profilePageSchema) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }} />
     <main className="mx-auto max-w-7xl px-4 py-12 sm:px-6">
       {/* Author header */}
       <div className={`mb-10 flex items-start gap-6 rounded-xl border bg-zinc-900/40 p-6 ${a.accent}`}>
@@ -121,5 +162,6 @@ export default async function AuthorPage({ params }: { params: Promise<{ id: str
         </Link>
       </div>
     </main>
+    </>
   );
 }
