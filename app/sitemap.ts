@@ -54,8 +54,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }));
   });
 
+  const AUTHOR_IDS = ["elena-voss", "marcus-webb", "leo-cruz"];
+
   return [
     { url: BASE_URL, lastModified: dateStr(latestOverall) },
+    { url: `${BASE_URL}/author`, changeFrequency: "monthly" as const, priority: 0.6 },
+    ...AUTHOR_IDS.map((id) => ({
+      url: `${BASE_URL}/author/${id}`,
+      lastModified: dateStr(latestOverall),
+      changeFrequency: "weekly" as const,
+      priority: 0.7,
+    })),
     { url: `${BASE_URL}/topics`, lastModified: dateStr(topicHubs[0]?.updatedAt ?? latestOverall) },
 
     ...categories.map((cat) => ({
