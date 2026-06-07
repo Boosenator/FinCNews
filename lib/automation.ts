@@ -736,14 +736,6 @@ async function publishToSanity(article: Record<string, unknown>): Promise<string
   return data.id as string;
 }
 
-const CATEGORY_EMOJI: Record<string, string> = {
-  crypto:    "₿",
-  markets:   "📈",
-  economy:   "🏦",
-  fintech:   "⚡",
-  policy:    "⚖️",
-  companies: "🏢",
-};
 
 // Escape HTML for Telegram
 function esc(s: string): string {
