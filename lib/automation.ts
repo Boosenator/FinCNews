@@ -1481,10 +1481,21 @@ async function processQueueItem(
       metadata: {
         title:  deskArticle.title,
         slug,
+        topic:  deskArticle.tags[0] ?? null,
         source: 'rss',
         directive_followed: victorDecision.directive_followed,
         generated_at: new Date().toISOString(),
       },
+    });
+    void db.from("persona_runs").insert({
+      persona_id:     personaId,
+      should_write:   true,
+      score:          item.score,
+      reasoning:      `RSS desk: ${item.title ?? item.url}`,
+      topic:          deskArticle.tags[0] ?? null,
+      primary_signal: `rss:${item.urgency ?? 'standard'}`,
+      article_slug:   slug,
+      data_snapshot:  { source: 'rss', article_category: category, source_url: item.url, urgency: item.urgency, source_name: item.source_name },
     });
     articleSteps.push({ name: "memory_update", status: "ok", durationMs: Date.now() - t, note: "coverage_log + persona_memory" });
 

@@ -206,8 +206,8 @@ async function buildContext(supabase: ReturnType<typeof supabaseAdmin>, topic?: 
   if (recent?.length) {
     parts.push('=== Recent articles ===');
     recent.forEach((m) => {
-      const meta = m.metadata as { title?: string; topic?: string };
-      parts.push(`- ${meta.title ?? '(no title)'} [topic: ${meta.topic ?? 'unknown'}]`);
+      const meta = m.metadata as { title?: string; topic?: string; source?: string };
+      parts.push(`- ${meta.title ?? '(no title)'} [topic: ${meta.topic ?? meta.source ?? 'unknown'}]`);
     });
   }
 
@@ -277,7 +277,7 @@ export async function getLeoContext(topic?: string): Promise<Array<{ label: stri
     },
     {
       label:   `4. Recent articles (${recent?.length ?? 0})`,
-      content: recent?.length ? recent.map((m) => { const meta = m.metadata as { title?: string; topic?: string }; return `- ${meta.title ?? '(no title)'} [${meta.topic ?? 'unknown'}]`; }).join('\n') : '(empty)',
+      content: recent?.length ? recent.map((m) => { const meta = m.metadata as { title?: string; topic?: string; source?: string }; return `- ${meta.title ?? '(no title)'} [${meta.topic ?? meta.source ?? 'unknown'}]`; }).join('\n') : '(empty)',
       empty:   !recent?.length,
     },
   ];

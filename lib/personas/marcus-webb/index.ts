@@ -159,7 +159,7 @@ async function buildContext(supabase: ReturnType<typeof supabaseAdmin>, topic?: 
   if (permanent?.length) { parts.push("=== Marcus's on-chain framework ==="); permanent.forEach((m) => parts.push(m.content as string)); }
   if (forecasts)          { parts.push('=== Forecasts ==='); parts.push(forecasts); }
   if (semantic.length)    { parts.push('=== Similar past articles ==='); semantic.forEach((m) => { const meta = m.metadata as { title?: string }; parts.push(`- ${meta.title ?? ''} [${(m.similarity * 100).toFixed(0)}%]`); }); }
-  if (recent?.length)     { parts.push('=== Recent articles ==='); recent.forEach((m) => { const meta = m.metadata as { title?: string; topic?: string }; parts.push(`- ${meta.title ?? '(no title)'} [${meta.topic ?? 'unknown'}]`); }); }
+  if (recent?.length)     { parts.push('=== Recent articles ==='); recent.forEach((m) => { const meta = m.metadata as { title?: string; topic?: string; source?: string }; parts.push(`- ${meta.title ?? '(no title)'} [${meta.topic ?? meta.source ?? 'unknown'}]`); }); }
 
   const victorCtx = await buildVictorKaneContext(supabase, PERSONA_ID);
   if (victorCtx) parts.push(victorCtx);
@@ -206,7 +206,7 @@ export async function getMarcusContext(topic?: string): Promise<Array<{ label: s
     { label: '1. On-chain framework (bootstrap)', content: permanent?.length ? permanent.map((m) => m.content as string).join('\n\n') : '(empty)', empty: !permanent?.length },
     { label: '2. Forecasts', content: forecasts || '(empty)', empty: !forecasts },
     { label: `3. Semantic search${topic ? ` for "${topic}"` : ' (no topic)'}`, content: semantic.length ? semantic.map((m) => `[${(m.similarity * 100).toFixed(0)}%] ${(m.metadata as { title?: string }).title ?? ''}`).join('\n') : '(empty)', empty: semantic.length === 0 },
-    { label: `4. Recent articles (${recent?.length ?? 0})`, content: recent?.length ? recent.map((m) => { const meta = m.metadata as { title?: string; topic?: string }; return `- ${meta.title ?? '(no title)'} [${meta.topic ?? 'unknown'}]`; }).join('\n') : '(empty)', empty: !recent?.length },
+    { label: `4. Recent articles (${recent?.length ?? 0})`, content: recent?.length ? recent.map((m) => { const meta = m.metadata as { title?: string; topic?: string; source?: string }; return `- ${meta.title ?? '(no title)'} [${meta.topic ?? meta.source ?? 'unknown'}]`; }).join('\n') : '(empty)', empty: !recent?.length },
   ];
 }
 

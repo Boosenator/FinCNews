@@ -279,10 +279,10 @@ export async function getElenaContext(topic?: string): Promise<ContextLayer[]> {
     label: `5. Recent articles (last ${recent?.length ?? 0} of ${stats.articles})`,
     content: recent?.length
       ? recent.map((m, i) => {
-          const meta = m.metadata as { title?: string; topic?: string; slug?: string; self_work?: boolean };
+          const meta = m.metadata as { title?: string; topic?: string; slug?: string; self_work?: boolean; source?: string };
           const age  = Math.round((Date.now() - new Date(m.created_at as string).getTime()) / 3_600_000);
           const sw   = meta.self_work ? ' [self-work]' : '';
-          return `${i + 1}. ${meta.title ?? '(no title)'}${sw}\n   topic: ${meta.topic ?? 'unknown'}  |  ${age}h ago  |  /economy/${meta.slug ?? ''}`;
+          return `${i + 1}. ${meta.title ?? '(no title)'}${sw}\n   topic: ${meta.topic ?? meta.source ?? 'unknown'}  |  ${age}h ago  |  /economy/${meta.slug ?? ''}`;
         }).join('\n\n')
       : '(empty — no articles published yet)',
     empty: !recent?.length,
@@ -359,8 +359,8 @@ async function buildContext(
   if (recent?.length) {
     parts.push('=== Recent articles (chronological) ===');
     recent.forEach(m => {
-      const meta = m.metadata as { title?: string; topic?: string };
-      parts.push(`- ${meta.title ?? '(no title)'} [topic: ${meta.topic ?? 'unknown'}]`);
+      const meta = m.metadata as { title?: string; topic?: string; source?: string };
+      parts.push(`- ${meta.title ?? '(no title)'} [topic: ${meta.topic ?? meta.source ?? 'unknown'}]`);
     });
   }
 

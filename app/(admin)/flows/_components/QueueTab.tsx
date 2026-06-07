@@ -113,7 +113,7 @@ export default function QueueTab() {
     setPublishing(id);
     setLastResult(null);
     try {
-      const res = await fetchWithTimeout(`/api/admin/queue/${id}`, { method: "POST" });
+      const res = await fetchWithTimeout(`/api/admin/queue/${id}`, { method: "POST" }, 290000);
       const data = await res.json();
       if (data.error) {
         setLastResult(`Error: ${data.error}`);
