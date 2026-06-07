@@ -18,8 +18,9 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await db
     .from("article_queue")
-    .select("id, url, title, snippet, source_category, source_name, pub_date, queued_at, status, score, error_text")
+    .select("id, url, title, snippet, source_category, source_name, pub_date, queued_at, status, score, error_text, urgency, assigned_persona, expires_at, article_type, continuation_of")
     .eq("status", status)
+    .order("urgency", { ascending: true, nullsFirst: false })
     .order("score", { ascending: false })
     .order("queued_at", { ascending: true })
     .limit(100);

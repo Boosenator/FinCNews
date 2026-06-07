@@ -54,17 +54,27 @@ function subStepIcon(status: "ok" | "error" | "skip") {
 }
 
 const STEP_LABEL: Record<string, string> = {
-  rss_fetch:       "RSS Fetch",
-  keyword_filter:  "Keyword Filter",
-  ai_score:        "AI Scoring",
-  dedup:           "Dedup",
-  queue_insert:    "Queue Insert",
-  scrape:          "Scrape",
-  claude:          "Claude",
-  sanity:          "Sanity",
-  pexels:          "Pexels",
-  telegraph:       "Telegraph",
-  telegram:        "Telegram",
+  // collect steps
+  rss_fetch:        "RSS Fetch",
+  keyword_filter:   "Keyword Filter",
+  ai_score:         "AI Scoring",
+  dedup:            "Dedup",
+  triage:           "Triage (Sonnet)",
+  queue_insert:     "Queue Insert",
+  // generate sub-steps
+  staleness:        "Staleness Check",
+  scrape:           "Scrape",
+  dedup2:           "Pre-publish Dedup",
+  angle_discovery:  "Angle Discovery",
+  draft:            "Draft (Sonnet)",
+  critique:         "Critique",
+  victor_review:    "Victor Review",
+  victor_edit:      "Victor Edit",
+  sanity:           "Sanity",
+  pexels:           "Pexels",
+  telegraph:        "Telegraph",
+  telegram:         "Telegram",
+  memory_update:    "Memory Update",
 };
 
 function CollectStepDetail({ step }: { step: PipelineStep }) {
@@ -132,10 +142,41 @@ function CollectStepDetail({ step }: { step: PipelineStep }) {
   );
 }
 
+const PERSONA_COLOR: Record<string, string> = {
+  'elena-voss':  'bg-violet-500/15 text-violet-400',
+  'marcus-webb': 'bg-cyan-500/15 text-cyan-400',
+  'leo-cruz':    'bg-amber-500/15 text-amber-400',
+};
+const PERSONA_SHORT: Record<string, string> = {
+  'elena-voss':  'Elena',
+  'marcus-webb': 'Marcus',
+  'leo-cruz':    'Leo',
+};
+
 function ArticleStepDetail({ step }: { step: PipelineStep }) {
   if (!step.articleSteps?.length) return null;
+
+  // Extract persona and article type from the step note (e.g. "score=72 · persona=elena-voss · crypto")
+  const noteMatch  = step.note ?? '';
+  const personaM   = noteMatch.match(/persona=([\w-]+)/);
+  const personaId  = personaM?.[1] ?? null;
+  const isContinue = noteMatch.includes('continuation');
+
   return (
-    <div className="mt-2 rounded-lg bg-zinc-900/60 px-3 py-2">
+    <div className="mt-2 rounded-lg bg-zinc-900/60 px-3 py-2 space-y-2">
+      {/* persona + type badges */}
+      {(personaId || isContinue) && (
+        <div className="flex gap-2 pb-1.5 border-b border-white/[0.04]">
+          {personaId && (
+            <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${PERSONA_COLOR[personaId] ?? "bg-zinc-700 text-zinc-400"}`}>
+              {PERSONA_SHORT[personaId] ?? personaId}
+            </span>
+          )}
+          {isContinue && (
+            <span className="rounded bg-indigo-500/15 px-1.5 py-0.5 text-[9px] font-bold text-indigo-400">↩ continuation</span>
+          )}
+        </div>
+      )}
       <div className="flex flex-wrap gap-x-4 gap-y-1">
         {step.articleSteps.map((s, i) => (
           <div key={i} className="flex items-center gap-1.5 text-[11px]">
