@@ -212,7 +212,7 @@ export default async function ArticlePage({ params }: Props) {
                       href={article.sourceUrl}
                       target="_blank"
                       rel="noreferrer nofollow"
-                      className="text-xs text-zinc-600 underline underline-offset-2 transition hover:text-zinc-400"
+                      className="mt-0.5 block text-xs text-zinc-600 underline underline-offset-2 transition hover:text-zinc-400"
                     >
                       View source
                     </a>
