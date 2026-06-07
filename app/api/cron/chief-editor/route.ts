@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runChiefEditor } from '@/lib/personas/chief-editor';
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 function isAuthed(req: NextRequest) {
   const auth = req.headers.get('authorization');

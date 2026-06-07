@@ -16,27 +16,24 @@ function buildContent(
   bodyPreview: string,
   siteUrl: string,
   category: string,
+  authorName?: string,
+  authorId?: string,
 ): TelegraphNode[] {
-  // Extract first 2-3 meaningful sentences from body
   const sentences = bodyPreview
     .split(/(?<=[.!?])\s+/)
     .filter((s) => s.length > 40)
     .slice(0, 3)
     .join(" ");
 
+  const authorUrl = authorId ? `${BASE_URL}/author/${authorId}` : null;
+
   return [
-    // Brief intro — unique, not a copy of the article
     { tag: "p", children: [excerpt] },
 
-    // Key context from body
-    ...(sentences
-      ? [{ tag: "p", children: [sentences] }]
-      : []),
+    ...(sentences ? [{ tag: "p", children: [sentences] }] : []),
 
-    // Divider
     { tag: "p", children: ["—"] },
 
-    // CTA back to site (the backlink)
     {
       tag: "p",
       children: [
@@ -48,6 +45,21 @@ function buildContent(
         },
       ],
     },
+
+    // Author link
+    ...(authorName && authorUrl
+      ? [{
+          tag: "p",
+          children: [
+            "By ",
+            {
+              tag: "a",
+              attrs: { href: authorUrl },
+              children: [authorName],
+            },
+          ],
+        }]
+      : []),
 
     {
       tag: "p",
@@ -61,7 +73,6 @@ function buildContent(
       ],
     },
 
-    // Category tag
     {
       tag: "p",
       children: [
@@ -82,6 +93,8 @@ export async function createTelegraphPage(opts: {
   bodyPreview: string;
   siteUrl: string;
   category: string;
+  authorName?: string;
+  authorId?: string;
 }): Promise<TelegraphPage | null> {
   const token = process.env.TELEGRAPH_TOKEN;
   if (!token) return null;
@@ -92,6 +105,8 @@ export async function createTelegraphPage(opts: {
     opts.bodyPreview,
     opts.siteUrl,
     opts.category,
+    opts.authorName,
+    opts.authorId,
   );
 
   try {

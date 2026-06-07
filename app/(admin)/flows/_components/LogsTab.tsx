@@ -92,8 +92,7 @@ function CollectStepDetail({ step }: { step: PipelineStep }) {
         <div className="rounded-lg bg-zinc-900/60 px-3 py-2">
           <p className="mb-1.5 text-[9px] font-bold uppercase tracking-widest text-zinc-600">Score Distribution</p>
           <div className="flex gap-3 text-[11px]">
-            <span className="text-zinc-600">&lt;45: <span className="font-bold text-red-400/70">{step.scoreDistribution.below45}</span></span>
-            <span className="text-zinc-600">45–60: <span className="font-bold text-zinc-400">{step.scoreDistribution.s45_60}</span></span>
+            <span className="text-zinc-600">&lt;60: <span className="font-bold text-red-400/70">{step.scoreDistribution.below60}</span></span>
             <span className="text-zinc-600">60–80: <span className="font-bold text-cyan-400">{step.scoreDistribution.s60_80}</span></span>
             <span className="text-zinc-600">&gt;80: <span className="font-bold text-emerald-400">{step.scoreDistribution.above80}</span></span>
           </div>
