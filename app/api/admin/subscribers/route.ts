@@ -14,6 +14,8 @@ export async function GET(req: NextRequest) {
     { count: unsubscribed },
     { data: logs },
     { data: recent },
+    { data: inboundLogs },
+    { data: routes },
   ] = await Promise.all([
     db.from("subscribers").select("*", { count: "exact", head: true }),
     db.from("subscribers").select("*", { count: "exact", head: true }).eq("status", "confirmed"),
@@ -21,6 +23,8 @@ export async function GET(req: NextRequest) {
     db.from("subscribers").select("*", { count: "exact", head: true }).eq("status", "unsubscribed"),
     db.from("email_logs").select("*").order("sent_at", { ascending: false }).limit(50),
     db.from("subscribers").select("email, status, confirmed_at, unsubscribed_at, created_at").order("created_at", { ascending: false }).limit(200),
+    db.from("inbound_email_logs").select("*").order("received_at", { ascending: false }).limit(100),
+    db.from("email_routes").select("*").order("recipient", { ascending: true }),
   ]);
 
   return NextResponse.json({
@@ -32,6 +36,8 @@ export async function GET(req: NextRequest) {
     },
     logs: logs ?? [],
     subscribers: recent ?? [],
+    inboundLogs: inboundLogs ?? [],
+    routes: routes ?? [],
   });
 }
 
