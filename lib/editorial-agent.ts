@@ -1,6 +1,8 @@
 import { createClient } from "@sanity/client";
 import { sanityAdmin, type PortableTextBlock } from "@/lib/sanity";
 import { buildTopicArticleFilter } from "@/lib/topic-matching";
+import { supabaseAdmin } from "@/lib/supabase";
+import { callClaude, parseClaudeJson } from "@/lib/personas/shared";
 
 export type TopicPlan = {
   slug: string;
@@ -60,11 +62,51 @@ export const STATIC_TOPIC_HUB_PLANS: TopicPlan[] = [
 
 export const TOPIC_HUB_PLANS = STATIC_TOPIC_HUB_PLANS;
 
+// ── Persona assignment for topic hubs ─────────────────────────────────────────
+
+const TOPIC_PERSONA_MAP: Record<string, string> = {
+  'bitcoin':          'marcus-webb',
+  'ethereum':         'marcus-webb',
+  'crypto-etfs':      'elena-voss',
+  'sec-crypto':       'elena-voss',
+  'federal-reserve':  'elena-voss',
+  'stablecoins':      'elena-voss',
+  'xrp':              'leo-cruz',
+  'solana':           'leo-cruz',
+};
+
+function getPersonaForTopic(slug: string): string {
+  return TOPIC_PERSONA_MAP[slug] ?? 'marcus-webb';
+}
+
+const PERSONA_HUB_VOICE: Record<string, string> = {
+  'marcus-webb': `You are Marcus Webb, FinCNews on-chain analyst and senior markets editor.
+You write about Bitcoin, Ethereum, DeFi, and blockchain infrastructure with data-driven precision.
+Your voice: analytical, number-grounded, institutional. You explain what on-chain metrics mean for investors — not just what they are.
+When writing a topic hub, establish authority through technical depth and market structure analysis.
+Avoid hype. Find the signal. Explain why capital allocation decisions matter.`,
+
+  'elena-voss': `You are Elena Voss, FinCNews macro and policy correspondent.
+You cover the intersection of traditional finance and digital assets: Federal Reserve policy, SEC regulation, ETF flows, stablecoin legislation, and institutional infrastructure.
+Your voice: measured, policy-aware, and structurally analytical. A senior portfolio manager should find your hub credible.
+When writing a topic hub, focus on regulatory trajectory, institutional behavior, and macro context.
+No speculation. Only what the evidence supports.`,
+
+  'leo-cruz': `You are Leo Cruz, FinCNews markets and narrative editor.
+You track XRP, Solana, trending tokens, and the narrative cycles that drive trading activity and retail sentiment.
+Your voice: energetic but grounded — you call out hype when you see it, but you spot genuine momentum.
+When writing a topic hub, explain not just what the asset does, but why investors are paying attention now and what structural developments matter.
+Balance narrative energy with factual grounding.`,
+};
+
 export type EditorialAgentResult = {
   slug: string;
   title: string;
   relatedArticles: number;
   sanityId: string;
+  personaId?: string;
+  victorDecision?: 'approve' | 'edit' | 'block';
+  victorFeedback?: string;
 };
 
 type HotTopic = TopicPlan & {
@@ -100,8 +142,19 @@ export async function runEditorialAgent(slug?: string): Promise<EditorialAgentRe
     : await pickNextTopicHub();
   if (!plan) throw new Error(`Unknown topic hub: ${slug}`);
 
-  const related = await fetchRelatedArticleInputs(plan);
-  const generated = await generateHub(plan, related);
+  const personaId = getPersonaForTopic(plan.slug);
+  const [related, coverageContext] = await Promise.all([
+    fetchRelatedArticleInputs(plan),
+    fetchCoverageLogContext(plan),
+  ]);
+
+  const generated = await generateHub(plan, related, personaId, coverageContext);
+  const victorReview = await reviewHubWithVictor(plan, generated, personaId);
+
+  if (victorReview.decision === 'block') {
+    throw new Error(`Victor Kane blocked hub "${plan.title}": ${victorReview.feedback}`);
+  }
+
   const sanity = createClient({
     projectId: process.env.SANITY_PROJECT_ID ?? process.env.NEXT_PUBLIC_SANITY_PROJECT_ID!,
     dataset: process.env.SANITY_DATASET ?? "production",
@@ -122,11 +175,16 @@ export async function runEditorialAgent(slug?: string): Promise<EditorialAgentRe
     faqs: generated.faqs,
   });
 
+  await logHubContribution(plan, personaId, generated, victorReview);
+
   return {
     slug: plan.slug,
     title: generated.title,
     relatedArticles: related.length,
     sanityId: doc._id,
+    personaId,
+    victorDecision: victorReview.decision,
+    victorFeedback: victorReview.feedback,
   };
 }
 
@@ -165,6 +223,55 @@ export async function getTopicHubPlans(): Promise<TopicPlan[]> {
     }
   }
   return Array.from(bySlug.values());
+}
+
+export type CoverageRefreshItem = {
+  slug: string;
+  title: string;
+  personaId: string;
+  newArticleCount: number;
+  lastUpdated: string | null;
+};
+
+export async function checkCoverageRefreshNeeded(minArticles = 3): Promise<CoverageRefreshItem[]> {
+  try {
+    const plans = await getTopicHubPlans();
+    if (!sanityAdmin) return [];
+
+    const db = supabaseAdmin();
+    const hubs = await sanityAdmin.fetch<Array<{ slug: string; updatedAt?: string }>>(
+      `*[_type == "topicHub" && defined(slug.current)] { "slug": slug.current, updatedAt }`,
+      {},
+    );
+    const hubMap = new Map(hubs.map(h => [h.slug, h.updatedAt ?? null]));
+    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+    const results = await Promise.all(plans.map(async (plan) => {
+      const lastUpdated = hubMap.get(plan.slug) ?? null;
+      const cutoff = lastUpdated
+        ? new Date(Math.max(new Date(lastUpdated).getTime(), weekAgo)).toISOString()
+        : new Date(weekAgo).toISOString();
+
+      const orFilter = plan.keywords.slice(0, 4).map(k => `title.ilike.%${k}%`).join(',');
+      const { count } = await db
+        .from('coverage_log')
+        .select('id', { count: 'exact', head: true })
+        .or(orFilter)
+        .gte('created_at', cutoff);
+
+      return {
+        slug: plan.slug,
+        title: plan.title,
+        personaId: getPersonaForTopic(plan.slug),
+        newArticleCount: count ?? 0,
+        lastUpdated,
+      };
+    }));
+
+    return results.filter(r => r.newArticleCount >= minArticles);
+  } catch {
+    return [];
+  }
 }
 
 export async function runTopicDiscoveryAgent(): Promise<{ suggestions: TopicSuggestion[]; analyzedArticles: number }> {
@@ -565,9 +672,127 @@ function normalizeKeywords(keywords: string[] | undefined, title: string): strin
     .slice(0, 6);
 }
 
+async function fetchCoverageLogContext(plan: TopicPlan): Promise<string> {
+  try {
+    const db = supabaseAdmin();
+    const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const orFilter = plan.keywords
+      .slice(0, 4)
+      .map(k => `title.ilike.%${k}%`)
+      .join(',');
+
+    const { data } = await db
+      .from('coverage_log')
+      .select('title, persona_id, generation_type, created_at')
+      .or(orFilter)
+      .gte('created_at', cutoff)
+      .order('created_at', { ascending: false })
+      .limit(12);
+
+    if (!data?.length) return '';
+    const lines = data.map(row => {
+      const date = (row.created_at as string ?? '').slice(0, 10);
+      return `${date} [${row.persona_id ?? 'unknown'}] ${row.title}`;
+    });
+    return `\n\nFinCNews team coverage this week (${data.length} articles):\n${lines.join('\n')}`;
+  } catch {
+    return '';
+  }
+}
+
+type VictorHubReview = {
+  decision: 'approve' | 'edit' | 'block';
+  feedback: string;
+  priority_fix?: string;
+};
+
+async function reviewHubWithVictor(plan: TopicPlan, hub: GeneratedHub, personaId: string): Promise<VictorHubReview> {
+  const prompt = `You are Victor Kane, FinCNews Chief Editor. You are reviewing a topic hub written by ${personaId}.
+
+TOPIC: ${plan.title}
+TITLE: ${hub.title}
+DESCRIPTION: ${hub.description}
+
+BODY PREVIEW (first 1200 chars):
+${hub.body.slice(0, 1200)}
+
+FAQS (${hub.faqs.length} total):
+${hub.faqs.map(f => `Q: ${f.question}`).join('\n')}
+
+REVIEW CRITERIA
+1. Is this genuinely evergreen? (Not a news recap — can it be useful 3 months from now?)
+2. Does the FinCNews View section synthesize or just summarize?
+3. Does it establish topical authority without being clickbait?
+4. Does it reflect the persona's editorial expertise?
+
+DECISION OPTIONS
+- approve: publish as-is
+- edit: publish but writer needs the priority_fix applied next refresh
+- block: do not publish (quality too low or fundamentally wrong direction)
+
+Return ONLY valid JSON: { "decision": "approve|edit|block", "feedback": "one clear sentence", "priority_fix": "what must change — only required for edit or block" }`;
+
+  try {
+    const res = await callClaude({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 250,
+      messages: [{ role: 'user', content: prompt }],
+    });
+    const review = await parseClaudeJson<VictorHubReview>(res);
+    const decision = (['approve', 'edit', 'block'] as const).includes(review.decision as 'approve' | 'edit' | 'block')
+      ? review.decision
+      : 'approve';
+    return { decision, feedback: review.feedback ?? '', priority_fix: review.priority_fix };
+  } catch {
+    return { decision: 'approve', feedback: 'Review unavailable — published without Victor check' };
+  }
+}
+
+async function logHubContribution(
+  plan: TopicPlan,
+  personaId: string,
+  hub: GeneratedHub,
+  review: VictorHubReview,
+): Promise<void> {
+  try {
+    const db = supabaseAdmin();
+    await Promise.all([
+      db.from('persona_memory').insert({
+        persona_id: personaId,
+        memory_type: 'hub_contribution',
+        content: `Updated topic hub: ${hub.title}`,
+        metadata: {
+          topic_slug: plan.slug,
+          hub_title: hub.title,
+          victor_decision: review.decision,
+          victor_feedback: review.feedback,
+          generated_at: new Date().toISOString(),
+        },
+      }),
+      db.from('persona_memory').insert({
+        persona_id: 'victor-kane',
+        memory_type: 'hub_review',
+        content: `Hub review ${review.decision}: "${hub.title}"`,
+        metadata: {
+          topic_slug: plan.slug,
+          persona_id: personaId,
+          decision: review.decision,
+          feedback: review.feedback,
+          priority_fix: review.priority_fix ?? null,
+          reviewed_at: new Date().toISOString(),
+        },
+      }),
+    ]);
+  } catch {
+    // best effort — don't block publish
+  }
+}
+
 async function generateHub(
   plan: TopicPlan,
   related: RelatedArticleInput[],
+  personaId: string,
+  coverageContext: string,
 ): Promise<GeneratedHub> {
   const articleLines = related.length
     ? related.map((article, i) => {
@@ -592,7 +817,7 @@ Primary Keywords:
 ${plan.keywords.join(", ")}
 
 Recent FinCNews Coverage:
-${articleLines}
+${articleLines}${coverageContext}
 
 Allowed Internal Link Targets:
 ${related.slice(0, 10).map((article) => `- [${article.title}](/${article.category}/${article.slug})`).join("\n") || "- None"}
@@ -807,6 +1032,8 @@ The final article should read like a durable authority page that could remain va
 
 It should feel closer to a premium financial publication's topic hub than to a standard crypto news article.`;
 
+  const systemPrompt = PERSONA_HUB_VOICE[personaId] ?? PERSONA_HUB_VOICE['marcus-webb'];
+
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -815,7 +1042,8 @@ It should feel closer to a premium financial publication's topic hub than to a s
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: "claude-haiku-4-5-20251001",
+      model: "claude-sonnet-4-6",
+      system: systemPrompt,
       max_tokens: 5200,
       tools: [
         {
@@ -859,7 +1087,7 @@ It should feel closer to a premium financial publication's topic hub than to a s
       tool_choice: { type: "tool", name: "create_topic_hub" },
       messages: [{ role: "user", content: prompt }],
     }),
-    signal: AbortSignal.timeout(55000),
+    signal: AbortSignal.timeout(120000),
   });
 
   if (!res.ok) throw new Error(`Editorial agent API error: ${res.status}`);

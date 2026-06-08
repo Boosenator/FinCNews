@@ -2,6 +2,18 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+const PERSONA_LABEL: Record<string, string> = {
+  'marcus-webb': 'Marcus',
+  'elena-voss':  'Elena',
+  'leo-cruz':    'Leo',
+};
+
+const PERSONA_COLOR: Record<string, string> = {
+  'marcus-webb': 'bg-blue-500/15 text-blue-300',
+  'elena-voss':  'bg-violet-500/15 text-violet-300',
+  'leo-cruz':    'bg-amber-500/15 text-amber-300',
+};
+
 type TopicPlan = {
   slug: string;
   title: string;
@@ -11,6 +23,9 @@ type TopicPlan = {
   currentTitle: string | null;
   relatedCount: number;
   url: string | null;
+  personaId: string | null;
+  newArticleCount: number;
+  needsRefresh: boolean;
 };
 
 type AgentResult = {
@@ -22,6 +37,9 @@ type AgentResult = {
   sanityId?: string;
   analyzedArticles?: number;
   suggestions?: TopicSuggestion[];
+  personaId?: string;
+  victorDecision?: string;
+  victorFeedback?: string;
   error?: string;
 };
 
@@ -92,7 +110,7 @@ export default function ContentPlanTab() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         },
-        70000,
+        280000,
       );
       const text = await res.text();
       const data = text ? JSON.parse(text) : { error: `Editorial agent returned empty response (${res.status})` };
@@ -128,6 +146,7 @@ export default function ContentPlanTab() {
   const published = topics.filter((t) => t.status === "published").length;
   const privateCount = topics.filter((t) => t.status === "private").length;
   const planned = topics.length - published - privateCount;
+  const needsRefreshCount = topics.filter((t) => t.needsRefresh).length;
 
   return (
     <div className="space-y-6">
@@ -170,7 +189,7 @@ export default function ContentPlanTab() {
           { label: "Planned topics", value: String(topics.length), sub: "agent scope" },
           { label: "Published hubs", value: String(published), sub: `${planned} planned, ${privateCount} private` },
           { label: "Related articles", value: String(topics.reduce((sum, t) => sum + t.relatedCount, 0)), sub: "coverage signals" },
-          { label: "Next target", value: topics.find((t) => t.status !== "published")?.title ?? topics[0]?.title ?? "-", sub: "oldest missing" },
+          { label: "Needs refresh", value: String(needsRefreshCount), sub: "≥3 new articles since last update" },
         ].map((s) => (
           <div key={s.label} className="rounded-xl border border-white/[0.06] bg-zinc-900/40 p-4">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-600">{s.label}</p>
@@ -194,7 +213,11 @@ export default function ContentPlanTab() {
                 ? "Approved topic suggestion"
                 : lastResult.action === "dismiss-suggestion"
                   ? "Dismissed topic suggestion"
-                  : `Published ${lastResult.title} from ${lastResult.relatedArticles ?? 0} related articles`}
+                  : (() => {
+                      const personaLabel = lastResult.personaId ? (PERSONA_LABEL[lastResult.personaId] ?? lastResult.personaId) : null;
+                      const victorPart = lastResult.victorDecision ? ` · Victor: ${lastResult.victorDecision}${lastResult.victorFeedback ? ` — ${lastResult.victorFeedback}` : ''}` : '';
+                      return `Published "${lastResult.title}" from ${lastResult.relatedArticles ?? 0} related articles${personaLabel ? ` · ${personaLabel}` : ''}${victorPart}`;
+                    })()}
         </div>
       )}
 
@@ -286,7 +309,19 @@ export default function ContentPlanTab() {
                 return (
                   <tr key={topic.slug} className={isRunning ? "opacity-60" : ""}>
                     <td className="px-4 py-3">
-                      <p className="font-semibold text-zinc-100">{topic.title}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold text-zinc-100">{topic.title}</p>
+                        {topic.personaId && (
+                          <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${PERSONA_COLOR[topic.personaId] ?? 'bg-zinc-500/15 text-zinc-400'}`}>
+                            {PERSONA_LABEL[topic.personaId] ?? topic.personaId}
+                          </span>
+                        )}
+                        {topic.needsRefresh && (
+                          <span className="rounded bg-orange-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-orange-300">
+                            {topic.newArticleCount} new
+                          </span>
+                        )}
+                      </div>
                       <div className="mt-1 flex max-w-[420px] flex-wrap gap-1">
                         {topic.keywords.slice(0, 5).map((kw) => (
                           <span key={kw} className="rounded bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-zinc-600">

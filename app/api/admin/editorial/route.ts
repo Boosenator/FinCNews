@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isAuthed } from "@/lib/auth";
 import {
   approveTopicSuggestion,
+  checkCoverageRefreshNeeded,
   dismissTopicSuggestion,
   getTopicHubPlans,
   getTopicSuggestions,
@@ -11,7 +12,7 @@ import {
 import { sanityAdmin } from "@/lib/sanity";
 import { buildTopicArticleFilter } from "@/lib/topic-matching";
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export async function GET(req: NextRequest) {
   if (!isAuthed(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -31,30 +32,41 @@ export async function GET(req: NextRequest) {
   const privateBySlug = new Map(existing.filter((hub) => hub._id.includes(".")).map((hub) => [hub.slug, hub]));
 
   const plans = await getTopicHubPlans();
-  const topics = await Promise.all(
-    plans.map(async (plan) => {
-      const { filter, params } = buildTopicArticleFilter(plan.keywords);
-      const relatedCount = sanityAdmin
-        ? await sanityAdmin.fetch<number>(
-            `count(*[_type == "article" && defined(translations.en.title) && (${filter})])`,
-            params,
-          )
-        : 0;
-      const hub = publicBySlug.get(plan.slug);
-      const privateHub = privateBySlug.get(plan.slug);
-      return {
-        ...plan,
-        status: hub ? "published" : privateHub ? "private" : "planned",
-        updatedAt: hub?.updatedAt ?? privateHub?.updatedAt ?? null,
-        currentTitle: hub?.title ?? privateHub?.title ?? null,
-        relatedCount,
-        url: hub ? `/topics/${plan.slug}` : null,
-      };
-    }),
-  );
+  const [topics, refreshNeeded, suggestions] = await Promise.all([
+    Promise.all(
+      plans.map(async (plan) => {
+        const { filter, params } = buildTopicArticleFilter(plan.keywords);
+        const relatedCount = sanityAdmin
+          ? await sanityAdmin.fetch<number>(
+              `count(*[_type == "article" && defined(translations.en.title) && (${filter})])`,
+              params,
+            )
+          : 0;
+        const hub = publicBySlug.get(plan.slug);
+        const privateHub = privateBySlug.get(plan.slug);
+        return {
+          ...plan,
+          status: hub ? "published" : privateHub ? "private" : "planned",
+          updatedAt: hub?.updatedAt ?? privateHub?.updatedAt ?? null,
+          currentTitle: hub?.title ?? privateHub?.title ?? null,
+          relatedCount,
+          url: hub ? `/topics/${plan.slug}` : null,
+        };
+      }),
+    ),
+    checkCoverageRefreshNeeded(3),
+    getTopicSuggestions(),
+  ]);
 
-  const suggestions = await getTopicSuggestions();
-  return NextResponse.json({ topics, suggestions });
+  const refreshMap = new Map(refreshNeeded.map(r => [r.slug, r]));
+  const topicsWithRefresh = topics.map(t => ({
+    ...t,
+    personaId: refreshMap.get(t.slug)?.personaId ?? null,
+    newArticleCount: refreshMap.get(t.slug)?.newArticleCount ?? 0,
+    needsRefresh: refreshMap.has(t.slug),
+  }));
+
+  return NextResponse.json({ topics: topicsWithRefresh, suggestions, refreshNeeded });
 }
 
 export async function POST(req: NextRequest) {

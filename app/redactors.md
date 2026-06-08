@@ -556,3 +556,49 @@ QueueTab: колонки urgency + assigned_persona + expires_at
 | Elena Voss | 1 | 1 | 0 | 75.0 | **pending** (структура відкриття) |
 
 Віктор провів 3 editorial сесії (06-05, 06-07, 06-08). Системний патерн: всі троє отримують директиви про першу фразу — потрібна кількісна специфіка з самого початку.
+
+## Topics System Redesign (2026-06-08)
+
+### Проблеми старої системи
+- `generateHub` використовував `claude-haiku-4-5-20251001` — найнижча якість для evergreen SEO
+- Не було persona voice: всі хаби генерувались одним generic промптом
+- Не було Victor Kane review
+- Не було coverage_log тригера для авто-рефреша
+- Raw `fetch()` замість `callClaude`
+
+### Нова архітектура
+```
+coverage_log акумулюється
+    ↓ (≥3 нових статей на топік за 7 днів → needsRefresh)
+Persona assignment:
+  Marcus  → on-chain: bitcoin, ethereum
+  Elena   → macro: fed, sec, etfs, stablecoins
+  Leo     → narrative: xrp, solana
+    ↓
+Sonnet (claude-sonnet-4-6) генерує хаб
+  + persona system prompt (editorial voice per persona)
+  + coverage_log context (які статті команда публікувала цього тижня)
+    ↓
+Victor Kane review (approve / edit / block)
+  → при block: генерацію скасовано, кидається помилка
+  → результат: логується в persona_memory ('hub_review')
+    ↓
+Publish to Sanity + logHubContribution
+  → persona_memory ('hub_contribution') для редактора
+  → persona_memory ('hub_review') для Віктора
+```
+
+### Зміни в коді
+
+| Файл | Зміна |
+|------|-------|
+| `lib/editorial-agent.ts` | Додано `TOPIC_PERSONA_MAP`, `PERSONA_HUB_VOICE`, `fetchCoverageLogContext`, `reviewHubWithVictor`, `logHubContribution`, `checkCoverageRefreshNeeded`. Змінено модель Haiku → Sonnet + system prompt. Таймаут 55s → 120s |
+| `app/api/admin/editorial/route.ts` | Додано `checkCoverageRefreshNeeded` до GET відповіді. `maxDuration` 60 → 300. Topics тепер повертають `personaId`, `newArticleCount`, `needsRefresh` |
+| `app/(admin)/flows/_components/ContentPlanTab.tsx` | Persona badge (Marcus/Elena/Leo) на кожному топіку. Orange "N new" badge при `needsRefresh`. Victor decision у banner після запуску. Stats: "Next target" → "Needs refresh". POST timeout 70s → 280s |
+
+### Persona ↔ Topic Map
+| Persona | Topics |
+|---------|--------|
+| Marcus Webb | bitcoin, ethereum |
+| Elena Voss | crypto-etfs, sec-crypto, federal-reserve, stablecoins |
+| Leo Cruz | xrp, solana |
