@@ -15,6 +15,8 @@ export type PortableTextBlock = {
   _type: "block";
   _key?: string;
   style?: string;
+  listItem?: "bullet" | "number";
+  level?: number;
   children?: Array<{
     _type: "span";
     _key?: string;

@@ -5,7 +5,7 @@ import { sanityAdmin } from "@/lib/sanity";
 import { triageItems, type TriageInput } from "@/lib/automation/triage";
 import { generateDeskArticle } from "@/lib/automation/generate-desk";
 import { insertCoverageLog, getRecentCoverageForTriage } from "@/lib/automation/coverage-log";
-import { PERSONA_NAME, PERSONA_AVATAR } from "@/lib/personas/shared";
+import { PERSONA_NAME, PERSONA_AVATAR, stripMarkdown } from "@/lib/personas/shared";
 
 type FeedEntry = {
   title?: string;
@@ -995,7 +995,7 @@ export async function runAutomation(maxArticles = 2): Promise<AutomationResult> 
         slug: article.slug as string,
         category,
         excerpt: en.excerpt,
-        bodyPreview: (typeof en.body === "string" ? en.body : "").slice(0, 400),
+        bodyPreview: stripMarkdown(typeof en.body === "string" ? en.body : "").slice(0, 400),
         imageAttached: !!process.env.PEXELS_API_KEY,
         status: "published",
       });
@@ -1426,7 +1426,7 @@ async function processQueueItem(
       telegraph = await createTelegraphPage({
         title:       deskArticle.title,
         excerpt:     deskArticle.excerpt,
-        bodyPreview: deskArticle.body.slice(0, 800),
+        bodyPreview: stripMarkdown(deskArticle.body).slice(0, 800),
         siteUrl:     articleUrl,
         category,
         authorName,

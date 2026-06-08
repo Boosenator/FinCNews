@@ -36,37 +36,62 @@ export function slugify(title: string): string {
 // Converts markdown string to Sanity PortableText blocks.
 // Handles: ## h2, ### h3, **bold**, *italic*, plain paragraphs.
 export function markdownToPortableText(markdown: string): PortableTextBlock[] {
-  return markdown
-    .split(/\n{2,}/)
-    .map(p => p.trim())
-    .filter(Boolean)
-    .map((paragraph, i) => {
-      const h2 = paragraph.match(/^##\s+(.+)$/);
-      const h3 = paragraph.match(/^###\s+(.+)$/);
+  const blocks: PortableTextBlock[] = [];
+  let keyIdx = 0;
 
-      if (h2 ?? h3) {
-        return {
-          _type: 'block' as const,
-          _key: `b-${i}`,
-          style: h2 ? 'h2' : 'h3',
-          markDefs: [],
-          children: [{
-            _type: 'span' as const,
-            _key: `s-${i}-0`,
-            text: (h2?.[1] ?? h3?.[1])!,
-            marks: [],
-          }],
-        };
-      }
+  for (const section of markdown.split(/\n{2,}/).map(s => s.trim()).filter(Boolean)) {
+    const h2 = section.match(/^##\s+(.+)$/);
+    const h3 = section.match(/^###\s+(.+)$/);
 
-      return {
+    if (h2 ?? h3) {
+      blocks.push({
         _type: 'block' as const,
-        _key: `b-${i}`,
+        _key: `b-${keyIdx++}`,
+        style: h2 ? 'h2' : 'h3',
+        markDefs: [],
+        children: [{ _type: 'span' as const, _key: `s-${keyIdx}-0`, text: (h2?.[1] ?? h3?.[1])!, marks: [] }],
+      });
+      continue;
+    }
+
+    const lines = section.split('\n');
+    const hasBullets = lines.some(l => /^[-*]\s/.test(l));
+
+    if (hasBullets) {
+      for (const line of lines) {
+        const bullet = line.match(/^[-*]\s+(.+)$/);
+        if (bullet) {
+          blocks.push({
+            _type: 'block' as const,
+            _key: `b-${keyIdx++}`,
+            style: 'normal',
+            listItem: 'bullet' as const,
+            level: 1,
+            markDefs: [],
+            children: parseInlineMarkdown(bullet[1], keyIdx),
+          });
+        } else if (line.trim()) {
+          blocks.push({
+            _type: 'block' as const,
+            _key: `b-${keyIdx++}`,
+            style: 'normal',
+            markDefs: [],
+            children: parseInlineMarkdown(line.trim(), keyIdx),
+          });
+        }
+      }
+    } else {
+      blocks.push({
+        _type: 'block' as const,
+        _key: `b-${keyIdx++}`,
         style: 'normal',
         markDefs: [],
-        children: parseInlineMarkdown(paragraph, i),
-      };
-    });
+        children: parseInlineMarkdown(section, keyIdx),
+      });
+    }
+  }
+
+  return blocks;
 }
 
 type PTSpan = { _type: 'span'; _key: string; text: string; marks: string[] };
@@ -76,8 +101,8 @@ function parseInlineMarkdown(text: string, blockIdx: number): PTSpan[] {
   let idx = 0;
   let lastEnd = 0;
 
-  // Match **bold** before *italic* to avoid ambiguity
-  const re = /\*\*([^*\n]+)\*\*|\*([^*\n]+)\*/g;
+  // **bold** must be tried before *italic* to avoid partial matches
+  const re = /\*\*([^*]+?)\*\*|\*([^*\n]+?)\*/g;
   let m: RegExpExecArray | null;
 
   while ((m = re.exec(text)) !== null) {
@@ -85,7 +110,12 @@ function parseInlineMarkdown(text: string, blockIdx: number): PTSpan[] {
       spans.push({ _type: 'span', _key: `s-${blockIdx}-${idx++}`, text: text.slice(lastEnd, m.index), marks: [] });
     }
     const isBold = m[0].startsWith('**');
-    spans.push({ _type: 'span', _key: `s-${blockIdx}-${idx++}`, text: (isBold ? m[1] : m[2])!, marks: [isBold ? 'strong' : 'em'] });
+    spans.push({
+      _type: 'span',
+      _key: `s-${blockIdx}-${idx++}`,
+      text: (isBold ? m[1] : m[2])!,
+      marks: [isBold ? 'strong' : 'em'],
+    });
     lastEnd = m.index + m[0].length;
   }
 
@@ -94,6 +124,18 @@ function parseInlineMarkdown(text: string, blockIdx: number): PTSpan[] {
   }
 
   return spans.length > 0 ? spans : [{ _type: 'span', _key: `s-${blockIdx}-0`, text, marks: [] }];
+}
+
+export function stripMarkdown(text: string): string {
+  return text
+    .replace(/\*\*([^*]+?)\*\*/g, '$1')
+    .replace(/\*([^*\n]+?)\*/g, '$1')
+    .replace(/_{2}([^_]+?)_{2}/g, '$1')
+    .replace(/_([^_\n]+?)_/g, '$1')
+    .replace(/`([^`]+?)`/g, '$1')
+    .replace(/^[-*]\s+/gm, '')
+    .replace(/^#{1,3}\s+/gm, '')
+    .trim();
 }
 
 type SanityCoverRef = { _type: 'image'; asset: { _type: 'reference'; _ref: string } };

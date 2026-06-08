@@ -323,51 +323,59 @@ function normalizeBody(
   if (Array.isArray(body)) return body;
   if (!body) return [];
 
-  return body
-    .split(/\n{2,}/)
-    .map((t) => t.trim())
-    .filter(Boolean)
-    .map((paragraph, i) => {
-      const markDefs: Array<{ _type: "link"; _key: string; href: string }> = [];
-      const children: Array<{ _type: "span"; _key: string; text: string; marks: string[] }> = [];
+  const blocks: PortableTextBlock[] = [];
+  let blockIdx = 0;
 
-      let last = 0;
-      let spanIdx = 0;
-      INTERNAL_RE.lastIndex = 0;
+  for (const paragraph of body.split(/\n{2,}/).map(t => t.trim()).filter(Boolean)) {
+    const markDefs: Array<{ _type: "link"; _key: string; href: string }> = [];
+    type PTSpan = { _type: "span"; _key: string; text: string; marks: string[] };
+    const children: PTSpan[] = [];
+    let spanIdx = 0;
 
-      let m: RegExpExecArray | null;
-      while ((m = INTERNAL_RE.exec(paragraph)) !== null) {
-        const topic = m[1].trim();
+    // Combined regex: **bold**, *italic*, [INTERNAL: topic]
+    const re = /\*\*([^*]+?)\*\*|\*([^*\n]+?)\*|\[INTERNAL:\s*([^\]]+)\]/g;
+    let last = 0;
+    let m: RegExpExecArray | null;
+
+    while ((m = re.exec(paragraph)) !== null) {
+      if (m.index > last) {
+        children.push({ _type: "span", _key: `s-${blockIdx}-${spanIdx++}`, text: paragraph.slice(last, m.index), marks: [] });
+      }
+
+      if (m[1] !== undefined) {
+        // **bold**
+        children.push({ _type: "span", _key: `s-${blockIdx}-${spanIdx++}`, text: m[1], marks: ["strong"] });
+      } else if (m[2] !== undefined) {
+        // *italic*
+        children.push({ _type: "span", _key: `s-${blockIdx}-${spanIdx++}`, text: m[2], marks: ["em"] });
+      } else if (m[3] !== undefined) {
+        // [INTERNAL: topic]
+        const topic = m[3].trim();
         const href = links.get(topic);
-
-        // text before this match
-        if (m.index > last) {
-          children.push({ _type: "span", _key: `s-${i}-${spanIdx++}`, text: paragraph.slice(last, m.index), marks: [] });
-        }
-
         if (href) {
-          const linkKey = `lnk-${i}-${spanIdx}`;
+          const linkKey = `lnk-${blockIdx}-${spanIdx}`;
           markDefs.push({ _type: "link", _key: linkKey, href });
-          children.push({ _type: "span", _key: `s-${i}-${spanIdx++}`, text: topic, marks: [linkKey] });
+          children.push({ _type: "span", _key: `s-${blockIdx}-${spanIdx++}`, text: topic, marks: [linkKey] });
         } else {
-          // no match found — render topic text without link
-          children.push({ _type: "span", _key: `s-${i}-${spanIdx++}`, text: topic, marks: [] });
+          children.push({ _type: "span", _key: `s-${blockIdx}-${spanIdx++}`, text: topic, marks: [] });
         }
-
-        last = m.index + m[0].length;
       }
 
-      // remaining text after last match
-      if (last < paragraph.length) {
-        children.push({ _type: "span", _key: `s-${i}-${spanIdx}`, text: paragraph.slice(last), marks: [] });
-      }
+      last = m.index + m[0].length;
+    }
 
-      return {
-        _type: "block" as const,
-        _key: `b-${i}`,
-        style: "normal" as const,
-        markDefs,
-        children,
-      };
+    if (last < paragraph.length) {
+      children.push({ _type: "span", _key: `s-${blockIdx}-${spanIdx}`, text: paragraph.slice(last), marks: [] });
+    }
+
+    blocks.push({
+      _type: "block" as const,
+      _key: `b-${blockIdx++}`,
+      style: "normal" as const,
+      markDefs,
+      children: children.length > 0 ? children : [{ _type: "span", _key: `s-${blockIdx}-0`, text: paragraph, marks: [] }],
     });
+  }
+
+  return blocks;
 }
