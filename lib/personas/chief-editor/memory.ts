@@ -56,22 +56,23 @@ export async function saveToEditorialTables(
     if (!feedbackRow?.id) return;
     const feedbackId = feedbackRow.id as string;
 
-    // 2b + 2c in parallel: resolve old directives + insert new one
-    await Promise.all([
-      db.from('editorial_directives')
-        .update({ status: 'resolved', resolved_at: new Date().toISOString() })
-        .eq('persona_id', ctx.personaId)
-        .eq('status', 'pending'),
-      feedback.directive
-        ? db.from('editorial_directives').insert({
-            feedback_id:  feedbackId,
-            persona_id:   ctx.personaId,
-            directive:    feedback.directive,
-            issued_date:  session.date,
-            status:       'pending',
-          })
-        : Promise.resolve(),
-    ]);
+    // 2b: resolve old directives FIRST, then 2c: insert new one
+    // Must be sequential — parallel Promise.all causes the UPDATE to catch
+    // the newly inserted row and immediately resolve it (race condition)
+    await db.from('editorial_directives')
+      .update({ status: 'resolved', resolved_at: new Date().toISOString() })
+      .eq('persona_id', ctx.personaId)
+      .eq('status', 'pending');
+
+    if (feedback.directive) {
+      await db.from('editorial_directives').insert({
+        feedback_id:  feedbackId,
+        persona_id:   ctx.personaId,
+        directive:    feedback.directive,
+        issued_date:  session.date,
+        status:       'pending',
+      });
+    }
   }));
 }
 
