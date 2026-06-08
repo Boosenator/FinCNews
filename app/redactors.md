@@ -491,3 +491,68 @@ QueueTab: колонки urgency + assigned_persona + expires_at
 | Два RSS джерела, та сама подія, один batch | coverage_log + article_queue check блокує другий |
 | Breaking expires_at минув до генерації | Drop без публікації |
 | Proactive персона + RSS continuation того самого дня | RSS continuation не залежить від proactive score |
+
+---
+
+# Пост-деплой фікси та покращення
+**Дата:** 2026-06-08
+
+## Баги виправлені
+
+| Баг | Файл | Суть |
+|-----|------|------|
+| RSS статті не видно в "Recent Runs" | `lib/automation.ts` | Після публікації не вставлявся запис в `persona_runs`. Додано `await Promise.all([..., db.from("persona_runs").insert(...)])` |
+| `void` inserts гублять дані в serverless | `lib/automation.ts` | `coverage_log`, `persona_memory`, `persona_runs` були `void` — Vercel обрізав після відправки відповіді. Замінено на `await Promise.all([...])` |
+| RSS статті в Memory показували `[unknown]` топік | `lib/automation.ts` | `persona_memory` metadata не мав поля `topic`. Додано `topic: deskArticle.tags[0] ?? null` |
+| Victor директива auto-resolve в тій самій сесії | `lib/personas/chief-editor/memory.ts` | `Promise.all` запускав "resolve old" і "insert new" паралельно — UPDATE ловив щойно вставлений рядок. Виправлено на sequential: спочатку resolve, потім insert |
+| Publish timeout 70s → "publish timed out" | `app/api/admin/queue/[id]/route.ts`, `QueueTab.tsx` | Додано `export const maxDuration = 300`, client timeout підняли до 290s |
+| Author name / View source без пробілу | `app/(site)/[category]/[slug]/page.tsx` | Додано `block mt-0.5` на `<a>` View source |
+
+## Admin UI покращення (2026-06-08)
+
+### PersonasTab
+- **Pending directive banner** — amber попередження з текстом директиви Віктора і датою видачі. Завантажується при mount через GET `/api/admin/personas/{id}` (нове поле `pending_directive`)
+- **Recent Runs stats** — показує `N published · X RSS · Y proactive · avg SCORE` в заголовку секції
+- **RSS badge** — синій `RSS` бейдж на кожному run з `primary_signal: 'rss:*'`
+- **Article link** — використовує `data_snapshot.article_category` замість хардкоду `/crypto/`
+
+### ChiefEditorCard (Victor Kane)
+- **Desk note** — collapsible "Desk note ↓" під score-рядком в кожній сесії. Завантажується через `editorial_sessions` join в API
+
+### QueueTab
+- Нові колонки: urgency, assigned_persona, expires_at, article_type, continuation_of
+- Breaking badge `🔥`, continuation tag `↩`, persona кольорові бейджи
+- Expires countdown, червоний якщо < 30хв
+
+### LogsTab
+- Нові step labels: triage, angle_discovery, draft, critique, victor_review, victor_edit, memory_update
+- Persona badge + continuation tag в article step detail
+
+## API зміни
+
+| Endpoint | Зміна |
+|----------|-------|
+| `GET /api/admin/personas/[id]` | Додано `pending_directive` з `editorial_directives WHERE status='pending'` |
+| `POST /api/admin/personas/victor-kane` action=`recent-runs` | Додано `desk_note` з `editorial_sessions` join |
+| `GET /api/admin/queue` | Додано колонки urgency, assigned_persona, expires_at, article_type, continuation_of; сортування по urgency→score→queued_at |
+| `POST /api/admin/queue/[id]` | Додано `export const maxDuration = 300` |
+
+## DB Migrations
+
+| Файл | Статус | Суть |
+|------|--------|------|
+| `migration_017.sql` | ✅ Applied | coverage_log table + article_queue triage columns |
+| `migration_018.sql` | ✅ Applied | Backfill persona_runs для RSS статей з coverage_log + persona_memory |
+| `backfill_elena.sql` | ✅ Applied | Elena Voss RSS article backfill |
+| `backfill_marcus.sql` | ✅ Applied | Marcus Webb RSS articles backfill via processed_urls join |
+| `fix_leo_directive.sql` | ✅ Applied | Відновлення Leo Cruz directive 2026-06-08 до pending (race condition fix) |
+
+## Перший аудит редакції (2026-06-08)
+
+| Редактор | Опубліковано | RSS | Proactive | Avg Score | Статус директиви |
+|----------|-------------|-----|-----------|-----------|-----------------|
+| Marcus Webb | 4 | 3 | 1 | 61.8 | resolved |
+| Leo Cruz | 2 | 1 | 1 | 75.0 | **pending** (перша фраза з rank+σ) |
+| Elena Voss | 1 | 1 | 0 | 75.0 | **pending** (структура відкриття) |
+
+Віктор провів 3 editorial сесії (06-05, 06-07, 06-08). Системний патерн: всі троє отримують директиви про першу фразу — потрібна кількісна специфіка з самого початку.

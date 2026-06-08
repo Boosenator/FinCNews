@@ -193,8 +193,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       }
       if (action === 'recent-runs') {
         const db = supabaseAdmin();
-        const { data } = await db.from('persona_runs').select('*').eq('persona_id', 'victor-kane').order('created_at', { ascending: false }).limit(10);
-        return NextResponse.json({ ok: true, runs: data ?? [] });
+        const [{ data: runs }, { data: sessions }] = await Promise.all([
+          db.from('persona_runs').select('*').eq('persona_id', 'victor-kane').order('created_at', { ascending: false }).limit(10),
+          db.from('editorial_sessions').select('session_date, desk_note, ran_at').order('session_date', { ascending: false }).limit(10),
+        ]);
+        const sessionMap = Object.fromEntries((sessions ?? []).map((s) => [s.session_date, s.desk_note]));
+        const runsWithNote = (runs ?? []).map((r) => ({ ...r, desk_note: sessionMap[r.run_date] ?? null }));
+        return NextResponse.json({ ok: true, runs: runsWithNote });
       }
     }
 
@@ -207,9 +212,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   if (!isAuthed(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const db = supabaseAdmin();
-  const { data: persona } = await db.from('personas').select('*').eq('id', params.id).single();
-  const { data: runs } = await db.from('persona_runs').select('*').eq('persona_id', params.id).order('created_at', { ascending: false }).limit(5);
-  return NextResponse.json({ persona, recent_runs: runs ?? [] });
+  const [{ data: persona }, { data: runs }, { data: directive }] = await Promise.all([
+    db.from('personas').select('*').eq('id', params.id).single(),
+    db.from('persona_runs').select('*').eq('persona_id', params.id).order('created_at', { ascending: false }).limit(5),
+    db.from('editorial_directives').select('directive, issued_date').eq('persona_id', params.id).eq('status', 'pending').order('issued_date', { ascending: false }).limit(1).maybeSingle(),
+  ]);
+  return NextResponse.json({ persona, recent_runs: runs ?? [], pending_directive: directive ?? null });
 }
 
 async function getRecentSummary(personaId: string): Promise<string> {

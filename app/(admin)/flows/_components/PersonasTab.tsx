@@ -53,20 +53,22 @@ function PersonaCard({ personaId, name, role, avatar, sources, cronTime }: Perso
     "self-work":    { status: "idle", result: null },
     run:            { status: "idle", result: null },
   });
-  const [activeStep, setActiveStep]       = useState<PipelineStep | null>(null);
-  const [isActive, setIsActive]           = useState<boolean | null>(null);
-  const [recentRuns, setRecentRuns]       = useState<PersonaRun[]>([]);
-  const [runsLoaded, setRunsLoaded]       = useState(false);
-  const [contextLayers, setContextLayers] = useState<ContextLayer[] | null>(null);
+  const [activeStep, setActiveStep]         = useState<PipelineStep | null>(null);
+  const [isActive, setIsActive]             = useState<boolean | null>(null);
+  const [pendingDirective, setPendingDirective] = useState<{ directive: string; issued_date: string } | null>(null);
+  const [recentRuns, setRecentRuns]         = useState<PersonaRun[]>([]);
+  const [runsLoaded, setRunsLoaded]         = useState(false);
+  const [contextLayers, setContextLayers]   = useState<ContextLayer[] | null>(null);
   const [contextLoading, setContextLoading] = useState(false);
-  const [contextTopic, setContextTopic]   = useState("");
+  const [contextTopic, setContextTopic]     = useState("");
 
-  // Load actual is_active status from DB on mount
+  // Load is_active + pending directive on mount
   useEffect(() => {
     fetch(`/api/admin/personas/${personaId}`)
       .then((r) => r.json())
-      .then((d: { persona?: { is_active: boolean } }) => {
+      .then((d: { persona?: { is_active: boolean }; pending_directive?: { directive: string; issued_date: string } | null }) => {
         if (d.persona?.is_active !== undefined) setIsActive(d.persona.is_active);
+        setPendingDirective(d.pending_directive ?? null);
       })
       .catch(() => {/* best-effort */});
   }, [personaId]);
@@ -155,6 +157,21 @@ function PersonaCard({ personaId, name, role, avatar, sources, cronTime }: Perso
         </button>
       </div>
 
+      {/* Victor directive warning */}
+      {pendingDirective && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3">
+          <div className="flex items-start gap-2">
+            <span className="mt-0.5 flex-shrink-0 text-amber-400">⚠</span>
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-amber-400">
+                Victor directive · {pendingDirective.issued_date}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-amber-200/70">{pendingDirective.directive}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Pipeline steps */}
       <div>
         <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-zinc-600">Pipeline Steps</p>
@@ -201,7 +218,21 @@ function PersonaCard({ personaId, name, role, avatar, sources, cronTime }: Perso
       {/* Recent Runs */}
       <div className="rounded-xl border border-white/[0.06] bg-zinc-950/50 p-4">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-bold text-zinc-300">Recent Runs</p>
+          <div>
+            <p className="text-xs font-bold text-zinc-300">Recent Runs</p>
+            {runsLoaded && recentRuns.length > 0 && (() => {
+              const published = recentRuns.filter((r) => r.should_write);
+              const rss = published.filter((r) => r.primary_signal?.startsWith("rss:")).length;
+              const proactive = published.length - rss;
+              const avg = published.length ? Math.round(published.reduce((s, r) => s + r.score, 0) / published.length) : null;
+              return (
+                <p className="mt-0.5 text-[10px] text-zinc-600">
+                  {published.length} published · {rss} RSS · {proactive} proactive
+                  {avg !== null && <> · avg <span className={avg >= 75 ? "text-emerald-400" : avg >= 60 ? "text-amber-400" : "text-red-400"}>{avg}</span></>}
+                </p>
+              );
+            })()}
+          </div>
           <button onClick={loadRecentRuns} className="text-xs text-zinc-500 hover:text-zinc-300">
             {runsLoaded ? "↻ Refresh" : "Load"}
           </button>
@@ -324,6 +355,7 @@ interface VictorRun {
   id: string; run_date: string; should_write: boolean;
   reasoning: string; topic: string | null; created_at: string;
   data_snapshot: Record<string, unknown>;
+  desk_note: string | null;
 }
 
 function ChiefEditorCard() {
@@ -408,19 +440,26 @@ function ChiefEditorCard() {
         {runs.map((run) => {
           const scores = (run.data_snapshot?.scores ?? {}) as Record<string, number | null>;
           return (
-            <div key={run.id} className="flex items-start justify-between gap-4 border-t border-white/[0.04] py-2.5">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-zinc-300">{run.should_write ? '✓ Session' : '— Quiet desk'}</p>
-                <p className="mt-0.5 truncate text-[11px] text-zinc-600">{run.reasoning}</p>
-                {Object.keys(scores).length > 0 && (
-                  <div className="flex gap-3 mt-1 text-[10px]">
-                    {Object.entries(scores).map(([id, s]) => (
-                      <span key={id} className="text-zinc-600">{id.split('-')[0]}: <span className="text-zinc-400">{s ?? '—'}</span></span>
-                    ))}
-                  </div>
-                )}
+            <div key={run.id} className="border-t border-white/[0.04] py-2.5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-zinc-300">{run.should_write ? '✓ Session' : '— Quiet desk'}</p>
+                  {Object.keys(scores).length > 0 && (
+                    <div className="flex gap-3 mt-0.5 text-[10px]">
+                      {Object.entries(scores).map(([id, s]) => (
+                        <span key={id} className="text-zinc-600">{id.split('-')[0]}: <span className={`font-bold ${typeof s === 'number' && s >= 75 ? 'text-emerald-400' : typeof s === 'number' && s >= 60 ? 'text-amber-400' : 'text-red-400'}`}>{s ?? '—'}</span></span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <p className="text-[11px] text-zinc-600 flex-shrink-0">{run.run_date}</p>
               </div>
-              <p className="text-[11px] text-zinc-600 flex-shrink-0">{run.run_date}</p>
+              {run.desk_note && (
+                <details className="mt-1.5">
+                  <summary className="cursor-pointer text-[10px] text-zinc-700 hover:text-zinc-500">Desk note ↓</summary>
+                  <p className="mt-1 rounded bg-zinc-950 px-3 py-2 text-[11px] leading-5 text-zinc-400">{run.desk_note}</p>
+                </details>
+              )}
             </div>
           );
         })}
