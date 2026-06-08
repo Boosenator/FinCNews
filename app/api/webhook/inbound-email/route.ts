@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 
 const ALLOWED_RECIPIENTS = new Set([
-  "editorial@finc.news",
-  "privacy@finc.news",
-  "legal@finc.news",
-  "ads@finc.news",
-  "tech@finc.news",
+  "editorial@e.finc.news",
+  "privacy@e.finc.news",
+  "legal@e.finc.news",
+  "ads@e.finc.news",
+  "tech@e.finc.news",
 ]);
 
 type InboundWebhookPayload = {
