@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { supabaseAdmin } from "@/lib/supabase";
 
+export const maxDuration = 60;
+
 const DOMAIN = "e.finc.news";
 
 type InboundWebhookPayload = {
@@ -59,10 +61,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  console.log("[inbound-email] payload:", JSON.stringify(payload));
-
   if (payload.type !== "email.received" || !payload.data?.email_id) {
-    console.log("[inbound-email] skipped — type:", payload.type, "data.email_id:", payload.data?.email_id);
     return NextResponse.json({ ok: true, skipped: "not email.received" });
   }
 
