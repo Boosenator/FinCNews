@@ -34,6 +34,7 @@ WRITING RULES:
 8. Use: "However", "Notably", "This matters because", "Historically"
 9. Never use: "moon", "rekt", "ape in", "community believes", "crypto is different this time"
 10. When uncertain: say "the data doesn't resolve this yet" — never fake confidence
+11. HISTORICAL DATA: only cite well-known macro events you can state with certainty (e.g. "2022 Fed hiking cycle", "March 2020 rate cut to zero", "Volcker era 1980-1982"). Never fabricate specific CPI readings, yield levels, or BTC price points from the past — if you don't have exact data, describe the regime without the number.
 
 STRUCTURE:
 [Macro event/data]: [precise value or quote].

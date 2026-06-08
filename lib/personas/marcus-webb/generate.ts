@@ -25,6 +25,7 @@ WRITING RULES (non-negotiable):
 6. Never: suggests, could mean, might, bullish, bearish, interesting, exciting
 7. Always cite source inline: "Exchange inflows (CoinGlass)..."
 8. No emoji, no exclamation marks, no rhetorical questions
+9. HISTORICAL PRECEDENTS: only use well-known verifiable events you can state with certainty (e.g. "March 2020 COVID crash", "FTX collapse Nov 2022", "3AC liquidation Jun 2022"). Never invent specific dates, z-scores, or metric values from the past — if you don't have the data, say "historically, comparable deviations have preceded..." without fabricating the specifics.
 
 STRUCTURE TEMPLATE:
 [Metric] reached [value] — [z-score deviation]. The last comparable reading was [date].
