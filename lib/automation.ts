@@ -1464,40 +1464,42 @@ async function processQueueItem(
       articleSteps.push({ name: "telegram", status: "error", durationMs: Date.now() - t, note: String(e) });
     }
 
-    // ── coverage_log + persona_memory ────────────────────────────────────────
+    // ── coverage_log + persona_memory + persona_runs ─────────────────────────
     t = Date.now();
-    void insertCoverageLog({
-      title:           deskArticle.title,
-      excerpt:         deskArticle.excerpt,
-      slug,
-      persona_id:      personaId,
-      generation_type: 'rss',
-      source_url:      item.url,
-    });
-    void db.from("persona_memory").insert({
-      persona_id:  personaId,
-      memory_type: 'article',
-      content:     deskArticle.excerpt,
-      metadata: {
-        title:  deskArticle.title,
+    await Promise.all([
+      insertCoverageLog({
+        title:           deskArticle.title,
+        excerpt:         deskArticle.excerpt,
         slug,
-        topic:  deskArticle.tags[0] ?? null,
-        source: 'rss',
-        directive_followed: victorDecision.directive_followed,
-        generated_at: new Date().toISOString(),
-      },
-    });
-    void db.from("persona_runs").insert({
-      persona_id:     personaId,
-      should_write:   true,
-      score:          item.score,
-      reasoning:      `RSS desk: ${item.title ?? item.url}`,
-      topic:          deskArticle.tags[0] ?? null,
-      primary_signal: `rss:${item.urgency ?? 'standard'}`,
-      article_slug:   slug,
-      data_snapshot:  { source: 'rss', article_category: category, source_url: item.url, urgency: item.urgency, source_name: item.source_name },
-    });
-    articleSteps.push({ name: "memory_update", status: "ok", durationMs: Date.now() - t, note: "coverage_log + persona_memory" });
+        persona_id:      personaId,
+        generation_type: 'rss',
+        source_url:      item.url,
+      }),
+      db.from("persona_memory").insert({
+        persona_id:  personaId,
+        memory_type: 'article',
+        content:     deskArticle.excerpt,
+        metadata: {
+          title:  deskArticle.title,
+          slug,
+          topic:  deskArticle.tags[0] ?? null,
+          source: 'rss',
+          directive_followed: victorDecision.directive_followed,
+          generated_at: new Date().toISOString(),
+        },
+      }),
+      db.from("persona_runs").insert({
+        persona_id:     personaId,
+        should_write:   true,
+        score:          item.score,
+        reasoning:      `RSS desk: ${item.title ?? item.url}`,
+        topic:          deskArticle.tags[0] ?? null,
+        primary_signal: `rss:${item.urgency ?? 'standard'}`,
+        article_slug:   slug,
+        data_snapshot:  { source: 'rss', article_category: category, source_url: item.url, urgency: item.urgency, source_name: item.source_name },
+      }),
+    ]);
+    articleSteps.push({ name: "memory_update", status: "ok", durationMs: Date.now() - t, note: "coverage_log + persona_memory + persona_runs" });
 
     detail = { url: item.url, title: deskArticle.title, slug, category, excerpt: deskArticle.excerpt, bodyPreview: deskArticle.body.slice(0, 400), imageAttached: !!photoUrl, score: item.score, status: "published" };
   } catch (e) {
