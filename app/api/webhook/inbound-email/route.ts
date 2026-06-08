@@ -6,7 +6,7 @@ const DOMAIN = "e.finc.news";
 
 type InboundWebhookPayload = {
   type?: string;
-  data?: { id?: string; from?: string; to?: string[]; subject?: string };
+  data?: { email_id?: string; from?: string; to?: string[]; subject?: string };
 };
 
 type ResendReceivedEmail = {
@@ -61,12 +61,12 @@ export async function POST(req: NextRequest) {
 
   console.log("[inbound-email] payload:", JSON.stringify(payload));
 
-  if (payload.type !== "email.received" || !payload.data?.id) {
-    console.log("[inbound-email] skipped — type:", payload.type, "data.id:", payload.data?.id);
+  if (payload.type !== "email.received" || !payload.data?.email_id) {
+    console.log("[inbound-email] skipped — type:", payload.type, "data.email_id:", payload.data?.email_id);
     return NextResponse.json({ ok: true, skipped: "not email.received" });
   }
 
-  const { id: emailId, from: fromAddress = "unknown", to: toList = [], subject = "(no subject)" } = payload.data;
+  const { email_id: emailId, from: fromAddress = "unknown", to: toList = [], subject = "(no subject)" } = payload.data;
   const toAddress = toList[0] ?? "";
   const mailbox   = mailboxFromAddress(toAddress);
 
