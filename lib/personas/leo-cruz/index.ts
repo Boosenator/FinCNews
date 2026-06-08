@@ -2,7 +2,9 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { publishArticleToSanity } from '@/lib/personas/shared';
 import { generateLeoCover } from '@/lib/personas/cover-images';
 import { searchSimilarMemories, saveEmbedding } from '@/lib/personas/embeddings';
+import type { LeoDataPull } from './data-pull';
 import { pullLeoData } from './data-pull';
+import type { Signal } from './signals';
 import { detectSignals } from './signals';
 import { loadNarrativeHistory, updateNarrativeTracker, markNarrativeCovered } from './narratives';
 import { shouldWrite } from './should-write';
@@ -46,9 +48,11 @@ export async function runLeoCruz(): Promise<RunResult> {
     return { wrote: false, score: 0, reasoning: `Data pull failed: ${error}`, error };
   }
 
-  // 2. Load narrative history + detect signals
-  const narratives = await loadNarrativeHistory();
-  const signals    = detectSignals(data, narratives);
+  // 2. Load narrative history + detect signals (with prev snapshot for rankDelta)
+  const narratives   = await loadNarrativeHistory();
+  const prevCoins    = await fetchPrevSnapshotCoins(supabase);
+  const signals      = detectSignals(data, narratives, prevCoins);
+  await saveSignalSnapshot(supabase, data, signals);
 
   // 3. Build context
   const recentSummary = await buildContext(supabase, null);
@@ -218,21 +222,79 @@ async function buildContext(supabase: ReturnType<typeof supabaseAdmin>, topic?: 
 }
 
 async function buildVictorKaneContext(supabase: ReturnType<typeof supabaseAdmin>, personaId: string): Promise<string | null> {
-  const [{ data: feedback }, { data: pending }] = await Promise.all([
+  const [{ data: feedback }, { data: pending }, { data: snapshots }] = await Promise.all([
     supabase.from('persona_memory').select('metadata').eq('persona_id', personaId).eq('memory_type', 'editor_feedback').order('created_at', { ascending: false }).limit(1),
     supabase.from('editorial_directives').select('directive, issued_date').eq('persona_id', personaId).eq('status', 'pending').order('issued_date', { ascending: false }).limit(1),
+    supabase.from('persona_memory').select('content, created_at').eq('persona_id', personaId).eq('memory_type', 'signal_snapshot').order('created_at', { ascending: false }).limit(2),
   ]);
-  if (!feedback?.length) return null;
-  const f = feedback[0].metadata as { date?: string; score?: number; priority_fix?: string; directive?: string; pattern_warning?: string | null };
+  if (!feedback?.length && !snapshots?.length) return null;
+  const f = (feedback?.[0]?.metadata ?? {}) as { date?: string; score?: number; priority_fix?: string; directive?: string; pattern_warning?: string | null };
   const d = pending?.[0];
-  if (!f.priority_fix && !d) return null;
+  if (!f.priority_fix && !d && !snapshots?.length) return null;
   const lines = ['=== Victor Kane — last directive ==='];
   if (f.score !== undefined) lines.push(`Score: ${f.score}/100 (${f.date ?? ''})`);
   if (f.priority_fix) lines.push(`Priority fix: "${f.priority_fix}"`);
   if (d) { lines.push(`Directive: "${d.directive}"`); lines.push(`Status: PENDING — this directive has not been addressed yet`); }
-  else { lines.push(`Status: resolved — no active directive`); }
+  else if (f.priority_fix) { lines.push(`Status: resolved — no active directive`); }
   lines.push(f.pattern_warning ? `Pattern: [WARNING] ${f.pattern_warning}` : `Pattern: [none]`);
+  if (snapshots?.length) {
+    lines.push('=== Signal data (last 2 snapshots) ===');
+    snapshots.forEach((s, i) => lines.push(`[${i === 0 ? 'latest' : 'prev'}] ${s.content as string}`));
+  }
   return lines.join('\n');
+}
+
+// ── Signal snapshot ───────────────────────────────────────────────────────────
+
+async function fetchPrevSnapshotCoins(
+  supabase: ReturnType<typeof supabaseAdmin>
+): Promise<Array<{ id: string; score: number }>> {
+  try {
+    const { data } = await supabase
+      .from('persona_memory')
+      .select('metadata')
+      .eq('persona_id', PERSONA_ID)
+      .eq('memory_type', 'signal_snapshot')
+      .order('created_at', { ascending: false })
+      .limit(1);
+    const meta = data?.[0]?.metadata as { trendingCoins?: Array<{ id: string; score: number }> } | null;
+    return meta?.trendingCoins ?? [];
+  } catch {
+    return [];
+  }
+}
+
+async function saveSignalSnapshot(
+  supabase: ReturnType<typeof supabaseAdmin>,
+  data: LeoDataPull,
+  signals: Signal[]
+): Promise<void> {
+  try {
+    const topSignals = signals.slice(0, 3).map((s) => `${s.type}(${s.strength}): ${s.description}`);
+    const content = [
+      `Signal snapshot — ${data.pulledAt}`,
+      `Trending: ${data.trendingCoins.slice(0, 5).map((c) => `${c.symbol}(rank:${c.score})`).join(', ')}`,
+      `Fear & Greed: ${data.fearGreedCurrent} (${data.fearGreedDelta7d >= 0 ? '+' : ''}${data.fearGreedDelta7d} vs 7d ago)`,
+      `Sentiment: ${data.sentimentBreakdown.positive}pos / ${data.sentimentBreakdown.negative}neg / ${data.sentimentBreakdown.neutral}neu`,
+      `Top signals: ${topSignals.join(' | ') || 'none'}`,
+    ].join('\n');
+
+    await supabase.from('persona_memory').insert({
+      persona_id:  PERSONA_ID,
+      memory_type: 'signal_snapshot',
+      content,
+      metadata: {
+        trendingCoins:      data.trendingCoins.slice(0, 7).map((c) => ({ id: c.id, symbol: c.symbol, name: c.name, score: c.score })),
+        fearGreedCurrent:   data.fearGreedCurrent,
+        fearGreedDelta7d:   data.fearGreedDelta7d,
+        sentimentBreakdown: data.sentimentBreakdown,
+        hotPosts_count:     data.hotPosts.length,
+        dexBoosts_count:    data.dexBoosts.length,
+        topSignals:         signals.slice(0, 3).map((s) => ({ type: s.type, strength: s.strength, token: s.token, narrative: s.narrative, delta: s.delta })),
+        pulledAt:           data.pulledAt,
+      },
+    });
+  } catch { /* non-critical — run continues */ }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

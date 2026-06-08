@@ -2,8 +2,10 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { publishArticleToSanity } from '@/lib/personas/shared';
 import { generateMarcusCover } from '@/lib/personas/cover-images';
 import { searchSimilarMemories, saveEmbedding } from '@/lib/personas/embeddings';
+import type { MarcusDataPull } from './data-pull';
 import { pullMarcusData } from './data-pull';
 import { loadBaseline, updateBaseline } from './baseline';
+import type { Anomaly } from './anomalies';
 import { detectAnomalies } from './anomalies';
 import { shouldWrite } from './should-write';
 import { generateMarcusArticle } from './generate';
@@ -61,6 +63,7 @@ export async function runMarcusWebb(): Promise<RunResult> {
 
   // 3. Detect anomalies
   const anomalies = detectAnomalies(data, baseline);
+  await saveSignalSnapshot(supabase, data, anomalies);
 
   // 4. Build context
   const recentSummary = await buildContext(supabase, null);
@@ -168,21 +171,64 @@ async function buildContext(supabase: ReturnType<typeof supabaseAdmin>, topic?: 
 }
 
 async function buildVictorKaneContext(supabase: ReturnType<typeof supabaseAdmin>, personaId: string): Promise<string | null> {
-  const [{ data: feedback }, { data: pending }] = await Promise.all([
+  const [{ data: feedback }, { data: pending }, { data: snapshots }] = await Promise.all([
     supabase.from('persona_memory').select('metadata').eq('persona_id', personaId).eq('memory_type', 'editor_feedback').order('created_at', { ascending: false }).limit(1),
     supabase.from('editorial_directives').select('directive, issued_date').eq('persona_id', personaId).eq('status', 'pending').order('issued_date', { ascending: false }).limit(1),
+    supabase.from('persona_memory').select('content, created_at').eq('persona_id', personaId).eq('memory_type', 'signal_snapshot').order('created_at', { ascending: false }).limit(2),
   ]);
-  if (!feedback?.length) return null;
-  const f = feedback[0].metadata as { date?: string; score?: number; priority_fix?: string; directive?: string; pattern_warning?: string | null };
+  if (!feedback?.length && !snapshots?.length) return null;
+  const f = (feedback?.[0]?.metadata ?? {}) as { date?: string; score?: number; priority_fix?: string; directive?: string; pattern_warning?: string | null };
   const d = pending?.[0];
-  if (!f.priority_fix && !d) return null;
+  if (!f.priority_fix && !d && !snapshots?.length) return null;
   const lines = ['=== Victor Kane — last directive ==='];
   if (f.score !== undefined) lines.push(`Score: ${f.score}/100 (${f.date ?? ''})`);
   if (f.priority_fix) lines.push(`Priority fix: "${f.priority_fix}"`);
   if (d) { lines.push(`Directive: "${d.directive}"`); lines.push(`Status: PENDING — this directive has not been addressed yet`); }
-  else { lines.push(`Status: resolved — no active directive`); }
+  else if (f.priority_fix) { lines.push(`Status: resolved — no active directive`); }
   lines.push(f.pattern_warning ? `Pattern: [WARNING] ${f.pattern_warning}` : `Pattern: [none]`);
+  if (snapshots?.length) {
+    lines.push('=== Signal data (last 2 snapshots) ===');
+    snapshots.forEach((s, i) => lines.push(`[${i === 0 ? 'latest' : 'prev'}] ${s.content as string}`));
+  }
   return lines.join('\n');
+}
+
+// ── Signal snapshot ───────────────────────────────────────────────────────────
+
+async function saveSignalSnapshot(
+  supabase: ReturnType<typeof supabaseAdmin>,
+  data: MarcusDataPull,
+  anomalies: Anomaly[]
+): Promise<void> {
+  try {
+    const topAnomalies = anomalies.slice(0, 3).map((a) => `${a.metric}(z:${a.zScore.toFixed(1)}): ${a.context}`);
+    const content = [
+      `Signal snapshot — ${data.pulledAt}`,
+      `BTC: $${data.btcPrice.toLocaleString()} | Vol ratio: ${data.btcVolumeRatio.toFixed(2)}x | Dom: ${data.btcDominance.toFixed(1)}%`,
+      `Exchange netflow: ${data.btcExchangeNetflow >= 0 ? '+' : ''}${data.btcExchangeNetflow.toFixed(0)} BTC | Miner outflows: ${data.minerOutflows.toFixed(0)} BTC`,
+      `Hashrate: ${(data.btcHashrate / 1e6).toFixed(1)} EH/s | Fear&Greed: ${data.fearGreedIndex}`,
+      `Top anomalies: ${topAnomalies.join(' | ') || 'none'}`,
+    ].join('\n');
+
+    await supabase.from('persona_memory').insert({
+      persona_id:  PERSONA_ID,
+      memory_type: 'signal_snapshot',
+      content,
+      metadata: {
+        btcPrice:           data.btcPrice,
+        btcVolumeRatio:     data.btcVolumeRatio,
+        btcDominance:       data.btcDominance,
+        btcExchangeNetflow: data.btcExchangeNetflow,
+        minerOutflows:      data.minerOutflows,
+        mempoolTxCount:     data.mempoolTxCount,
+        mempoolAvgFeeRate:  data.mempoolAvgFeeRate,
+        btcHashrate:        data.btcHashrate,
+        fearGreedIndex:     data.fearGreedIndex,
+        topAnomalies:       anomalies.slice(0, 3).map((a) => ({ metric: a.metric, zScore: a.zScore, direction: a.direction })),
+        pulledAt:           data.pulledAt,
+      },
+    });
+  } catch { /* non-critical — run continues */ }
 }
 
 // ── Public context inspector ──────────────────────────────────────────────────

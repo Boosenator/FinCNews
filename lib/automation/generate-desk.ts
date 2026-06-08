@@ -1,6 +1,14 @@
 import { callClaude, parseClaudeJson, PERSONA_NAME } from '@/lib/personas/shared';
 import { supabaseAdmin } from '@/lib/supabase';
 
+// ── Per-persona article structures ────────────────────────────────────────────
+
+const PERSONA_ARTICLE_STRUCTURE: Record<string, string> = {
+  'elena-voss':  '## Context / ## What Changed / ## Macro Implications / ## What to Watch',
+  'marcus-webb': '## The Signal / ## On-Chain Context / ## Historical Precedent / ## What to Watch',
+  'leo-cruz':    '## The Narrative Shift / ## What the Data Shows / ## Where This Has Been Before / ## The Signal to Watch',
+};
+
 // ── Persona system prompts (RSS-adapted voice) ────────────────────────────────
 
 const PERSONA_SYSTEM: Record<string, string> = {
@@ -196,7 +204,7 @@ ${continuationNote}
 ${directiveSection}
 
 Write the article in your established voice. Use markdown ## headers.
-Structure: ## What Happened / ## Key Details / ## Why It Matters / ## What Happens Next
+Structure: ${PERSONA_ARTICLE_STRUCTURE[opts.personaId] ?? '## What Happened / ## Key Details / ## Why It Matters / ## What Happens Next'}
 
 Return ONLY valid JSON:
 {

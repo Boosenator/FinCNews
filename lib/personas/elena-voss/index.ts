@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { publishArticleToSanity } from '@/lib/personas/shared';
 import { generateElenaCover } from '@/lib/personas/cover-images';
 import { searchSimilarMemories, saveEmbedding } from '@/lib/personas/embeddings';
+import type { ElenaDataPull } from './data-pull';
 import { pullElenaData } from './data-pull';
 import { shouldWrite } from './should-write';
 import { generateElenaArticle } from './generate';
@@ -45,6 +46,9 @@ export async function runElenaVoss(): Promise<RunResult> {
     await logRun(supabase, { should_write: false, score: 0, reasoning: `Data pull failed: ${error}`, data_snapshot: {} });
     return { wrote: false, score: 0, reasoning: `Data pull failed: ${error}`, error };
   }
+
+  // Store signal snapshot early — available for context regardless of write decision
+  await saveSignalSnapshot(supabase, data);
 
   // 2. Build context (populated after should_write to know the topic)
   const recentSummary = await buildContext(supabase, null);
@@ -179,6 +183,41 @@ export async function runElenaVoss(): Promise<RunResult> {
     articleCategory: selfWorkResult.articleCategory,
     selfWork: selfWorkResult,
   };
+}
+
+// ── Signal snapshot ───────────────────────────────────────────────────────────
+
+async function saveSignalSnapshot(
+  supabase: ReturnType<typeof supabaseAdmin>,
+  data: ElenaDataPull
+): Promise<void> {
+  try {
+    const content = [
+      `Signal snapshot — ${data.pulledAt}`,
+      `Fed funds: ${data.fedFundsRate}% | CPI YoY: ${data.cpiYoY}% | Core PCE: ${data.corePce}%`,
+      `10Y yield: ${data.tenYearYield}% | 2Y yield: ${data.twoYearYield}% | Curve: ${data.yieldCurveSpread.toFixed(2)}bp`,
+      `DXY: ${data.dxyIndex.toFixed(2)} | BTC 24h: ${data.btcChange24h >= 0 ? '+' : ''}${data.btcChange24h.toFixed(2)}%`,
+      `SEC filings: ${data.secFilings.length}`,
+    ].join('\n');
+
+    await supabase.from('persona_memory').insert({
+      persona_id:  PERSONA_ID,
+      memory_type: 'signal_snapshot',
+      content,
+      metadata: {
+        fedFundsRate:     data.fedFundsRate,
+        cpiYoY:           data.cpiYoY,
+        corePce:          data.corePce,
+        tenYearYield:     data.tenYearYield,
+        twoYearYield:     data.twoYearYield,
+        dxyIndex:         data.dxyIndex,
+        yieldCurveSpread: data.yieldCurveSpread,
+        btcChange24h:     data.btcChange24h,
+        secFilings_count: data.secFilings.length,
+        pulledAt:         data.pulledAt,
+      },
+    });
+  } catch { /* non-critical — run continues */ }
 }
 
 // ─── Public context inspector (for admin UI) ─────────────────────────────────
@@ -372,7 +411,7 @@ async function buildContext(
 }
 
 async function buildVictorKaneContext(supabase: ReturnType<typeof supabaseAdmin>): Promise<string | null> {
-  const [{ data: feedback }, { data: pendingDirective }] = await Promise.all([
+  const [{ data: feedback }, { data: pendingDirective }, { data: snapshots }] = await Promise.all([
     supabase
       .from('persona_memory')
       .select('content, metadata, created_at')
@@ -387,17 +426,24 @@ async function buildVictorKaneContext(supabase: ReturnType<typeof supabaseAdmin>
       .eq('status', 'pending')
       .order('issued_date', { ascending: false })
       .limit(1),
+    supabase
+      .from('persona_memory')
+      .select('content, created_at')
+      .eq('persona_id', PERSONA_ID)
+      .eq('memory_type', 'signal_snapshot')
+      .order('created_at', { ascending: false })
+      .limit(2),
   ]);
 
-  if (!feedback?.length) return null;
+  if (!feedback?.length && !snapshots?.length) return null;
 
-  const f = feedback[0].metadata as {
+  const f = (feedback?.[0]?.metadata ?? {}) as {
     date?: string; score?: number; priority_fix?: string;
     directive?: string; pattern_warning?: string | null;
   };
 
   const directive = pendingDirective?.[0];
-  if (!directive && !f.priority_fix) return null;
+  if (!directive && !f.priority_fix && !snapshots?.length) return null;
 
   const lines = ['=== Victor Kane — last directive ==='];
   if (f.score !== undefined) lines.push(`Score: ${f.score}/100 (${f.date ?? ''})`);
@@ -405,11 +451,16 @@ async function buildVictorKaneContext(supabase: ReturnType<typeof supabaseAdmin>
   if (directive) {
     lines.push(`Directive: "${directive.directive}"`);
     lines.push(`Status: PENDING — this directive has not been addressed yet`);
-  } else {
+  } else if (f.priority_fix) {
     lines.push(`Status: resolved — no active directive`);
   }
   if (f.pattern_warning) lines.push(`Pattern: [WARNING] ${f.pattern_warning}`);
   else lines.push(`Pattern: [none]`);
+
+  if (snapshots?.length) {
+    lines.push('=== Signal data (last 2 snapshots) ===');
+    snapshots.forEach((s, i) => lines.push(`[${i === 0 ? 'latest' : 'prev'}] ${s.content as string}`));
+  }
 
   return lines.join('\n');
 }

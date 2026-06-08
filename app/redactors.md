@@ -602,3 +602,96 @@ Publish to Sanity + logHubContribution
 | Marcus Webb | bitcoin, ethereum |
 | Elena Voss | crypto-etfs, sec-crypto, federal-reserve, stablecoins |
 | Leo Cruz | xrp, solana |
+
+---
+
+## Signal Snapshot System (2026-06-08)
+
+Кожен запуск аналітика тепер зберігає знімок ринкових даних у `persona_memory` (`memory_type: 'signal_snapshot'`). Це дозволяє:
+- Вікторові Кейну бачити що саме бачив аналітик під час генерації — конкретні цифри, аномалії, сигнали
+- Обчислювати дельти між запусками (rankDelta для Leo, тренди для Marcus/Elena)
+- Порівнювати що змінилось від попереднього запуску
+
+### Структура snapshot по персонах
+
+**Leo Cruz** — `lib/personas/leo-cruz/index.ts`
+```
+content (text):
+  Signal snapshot — <pulledAt>
+  Trending: BTC(rank:0), ETH(rank:1), ...
+  Fear & Greed: 65 (+10 vs 7d ago)
+  Sentiment: 5pos / 3neg / 7neu
+  Top signals: new_trending(75): XRP ... | rotation(85): ...
+
+metadata (JSON):
+  trendingCoins: [{id, symbol, name, score}]   ← для rankDelta наступного запуску
+  fearGreedCurrent, fearGreedDelta7d
+  sentimentBreakdown: {positive, negative, neutral}
+  hotPosts_count, dexBoosts_count
+  topSignals: [{type, strength, token, narrative, delta}]
+```
+
+**Marcus Webb** — `lib/personas/marcus-webb/index.ts`
+```
+content (text):
+  Signal snapshot — <pulledAt>
+  BTC: $97,500 | Vol ratio: 1.42x | Dom: 54.2%
+  Exchange netflow: -1250 BTC | Miner outflows: 450 BTC
+  Hashrate: 650.3 EH/s | Fear&Greed: 62
+  Top anomalies: btcExchangeNetflow(z:-2.4): ... | ...
+
+metadata (JSON):
+  btcPrice, btcVolumeRatio, btcDominance
+  btcExchangeNetflow, minerOutflows
+  mempoolTxCount, mempoolAvgFeeRate
+  btcHashrate, fearGreedIndex
+  topAnomalies: [{metric, zScore, direction}]
+```
+
+**Elena Voss** — `lib/personas/elena-voss/index.ts`
+```
+content (text):
+  Signal snapshot — <pulledAt>
+  Fed funds: 5.25% | CPI YoY: 3.2% | Core PCE: 2.8%
+  10Y yield: 4.45% | 2Y yield: 4.89% | Curve: -0.44bp
+  DXY: 104.23 | BTC 24h: +2.15%
+  SEC filings: 3
+
+metadata (JSON):
+  fedFundsRate, cpiYoY, corePce
+  tenYearYield, twoYearYield, dxyIndex, yieldCurveSpread
+  btcChange24h, secFilings_count
+```
+
+### rankDelta для Leo
+
+`lib/personas/leo-cruz/signals.ts` — `detectSignals()` тепер приймає опціональний `prevCoins?: Array<{id, score}>`.
+
+Перед кожним запуском Leo:
+1. Завантажується попередній snapshot (`fetchPrevSnapshotCoins`)
+2. Для кожного trending coin обчислюється `rankDelta = prevScore - currentScore` (позитивне = поліпшення)
+3. Delta включається в `signal.delta` та в `signal.description`
+
+### Victor Kane context
+
+`buildVictorKaneContext()` у всіх трьох `index.ts` тепер також завантажує 2 останніх `signal_snapshot` і включає їх у контекст під заголовком `=== Signal data (last 2 snapshots) ===`. Так Віктор бачить не тільки директиви але й конкретні дані які були доступні аналітику.
+
+### Зміни в коді
+
+| Файл | Зміна |
+|------|-------|
+| `lib/automation/generate-desk.ts` | Додано `PERSONA_ARTICLE_STRUCTURE` map. Замінено хардкод `## What Happened / ...` на per-persona структури для Elena/Marcus/Leo |
+| `lib/personas/leo-cruz/signals.ts` | `detectSignals()` + `detectNewTrending()` приймають `prevCoins?` для rankDelta |
+| `lib/personas/leo-cruz/index.ts` | Додано `fetchPrevSnapshotCoins()`, `saveSignalSnapshot()`. Виклик після data pull. `buildVictorKaneContext()` завантажує signal_snapshot |
+| `lib/personas/marcus-webb/index.ts` | Додано `saveSignalSnapshot()`. Виклик після anomaly detection. `buildVictorKaneContext()` завантажує signal_snapshot |
+| `lib/personas/elena-voss/index.ts` | Додано `saveSignalSnapshot()`. Виклик після data pull. `buildVictorKaneContext()` завантажує signal_snapshot |
+
+### Per-persona article structures (generate-desk.ts)
+
+RSS-статті більше не використовують хардкод `## What Happened / ## Key Details / ## Why It Matters / ## What Happens Next`. Кожна персона отримує власну структуру:
+
+| Persona | Структура |
+|---------|-----------|
+| Elena Voss | `## Context / ## What Changed / ## Macro Implications / ## What to Watch` |
+| Marcus Webb | `## The Signal / ## On-Chain Context / ## Historical Precedent / ## What to Watch` |
+| Leo Cruz | `## The Narrative Shift / ## What the Data Shows / ## Where This Has Been Before / ## The Signal to Watch` |

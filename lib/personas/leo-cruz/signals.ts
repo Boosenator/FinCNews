@@ -22,19 +22,30 @@ export interface Signal {
 
 function detectNewTrending(
   trendingCoins: TrendingCoin[],
-  narratives: NarrativeState[]
+  narratives: NarrativeState[],
+  prevCoins?: Array<{ id: string; score: number }>
 ): Signal[] {
   const trackedNames = new Set(narratives.map((n) => n.narrative.toLowerCase()));
+  const prevMap = new Map(prevCoins?.map((c) => [c.id, c.score]) ?? []);
+
   return trendingCoins
     .filter((c) => !trackedNames.has(c.name.toLowerCase()) && !trackedNames.has(c.symbol.toLowerCase()))
     .slice(0, 3)
-    .map((c) => ({
-      type:        'new_trending' as SignalType,
-      strength:    Math.max(40, 80 - c.score * 8), // lower score = higher trending rank
-      token:       c.symbol,
-      narrative:   c.name,
-      description: `${c.name} (${c.symbol}) is new in CoinGecko trending top-7 — not tracked before`,
-    }));
+    .map((c) => {
+      const prevScore = prevMap.get(c.id);
+      const rankDelta = prevScore !== undefined ? prevScore - c.score : null; // positive = improved rank
+      const deltaNote = rankDelta !== null
+        ? ` (rank ${rankDelta > 0 ? `+${rankDelta}` : String(rankDelta)} vs last run)`
+        : '';
+      return {
+        type:        'new_trending' as SignalType,
+        strength:    Math.max(40, 80 - c.score * 8),
+        token:       c.symbol,
+        narrative:   c.name,
+        delta:       rankDelta ?? undefined,
+        description: `${c.name} (${c.symbol}) is new in CoinGecko trending top-7 — not tracked before${deltaNote}`,
+      };
+    });
 }
 
 function detectSentimentShift(
@@ -116,8 +127,12 @@ function detectRedditBuzz(hotPosts: LeoDataPull['hotPosts'], trendingCoins: Tren
 
 // ── Main detector ─────────────────────────────────────────────────────────────
 
-export function detectSignals(data: LeoDataPull, narratives: NarrativeState[]): Signal[] {
-  const newTrending  = detectNewTrending(data.trendingCoins, narratives);
+export function detectSignals(
+  data:      LeoDataPull,
+  narratives: NarrativeState[],
+  prevCoins?: Array<{ id: string; score: number }>
+): Signal[] {
+  const newTrending  = detectNewTrending(data.trendingCoins, narratives, prevCoins);
   const sentShift    = detectSentimentShift(data.fearGreedCurrent, data.fearGreedDelta7d);
   const fading       = detectFadingNarratives(data.trendingCoins, narratives);
   const rotation     = detectRotation(fading, newTrending);
