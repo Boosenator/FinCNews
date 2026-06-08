@@ -59,7 +59,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
+  console.log("[inbound-email] payload:", JSON.stringify(payload));
+
   if (payload.type !== "email.received" || !payload.data?.id) {
+    console.log("[inbound-email] skipped — type:", payload.type, "data.id:", payload.data?.id);
     return NextResponse.json({ ok: true, skipped: "not email.received" });
   }
 
