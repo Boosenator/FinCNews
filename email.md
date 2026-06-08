@@ -9,7 +9,7 @@
 
 | Крок | Що | Статус |
 |------|----|--------|
-| 1 | ImprovMX + MX в Vercel | ✅ Done |
+| 1 | Resend Inbound + MX в Vercel (замінено ImprovMX) | 🔜 DNS + Resend Dashboard |
 | 2 | SPF + DMARC | ✅ Done |
 | 3 | Оновити email в коді (`@fincnews.com` → `@finc.news`) | ✅ Done |
 | 4 | Resend: домен `e.finc.news` верифіковано, API key в Vercel | ✅ Done |
@@ -132,16 +132,65 @@ Redirect вже налаштовано в `next.config.mjs`.
 
 ---
 
-## Частина 1 — Отримання пошти (ImprovMX) ✅
+## Частина 1 — Отримання пошти (Resend Inbound)
 
-Форвардить `@finc.news` → Gmail. MX записи додані.
+> ImprovMX замінено на Resend Inbound. Пошта `@finc.news` → Resend → webhook → пересилається на Gmail.
+
+### Як це працює
 
 ```
-editorial  →  твій_gmail@gmail.com
-privacy    →  твій_gmail@gmail.com
-legal      →  твій_gmail@gmail.com
-ads        →  твій_gmail@gmail.com
+Хтось пише на editorial@finc.news
+  → MX record фінансує на inbound.resend.com
+  → Resend приймає лист
+  → POST /api/webhook/inbound-email?secret=...
+    → webhook перевіряє secret
+    → resend.emails.send() пересилає на INBOUND_FORWARD_TO
+    → ти бачиш у Gmail з subject "[editorial@finc.news] Оригінальна тема"
+    → replyTo = оригінальний відправник (відповідаєш прямо йому)
 ```
+
+### Кроки налаштування (одноразово)
+
+**1. Resend Dashboard → Domains → Add Domain**
+- Додати `finc.news` (окремо від `e.finc.news`) як inbound domain
+- Resend покаже MX record: `inbound.resend.com` priority 10
+
+**2. Vercel DNS — оновити MX записи для `finc.news`**
+```bash
+# Видалити старі ImprovMX записи:
+vercel dns rm finc.news MX "mx.improvmx.com"
+vercel dns rm finc.news MX "mx2.improvmx.com"
+
+# Додати Resend inbound:
+vercel dns add finc.news @ MX "inbound.resend.com" 10
+```
+Або через Vercel Dashboard → Project → Domains → DNS Records.
+
+**3. Resend Dashboard → Domains → finc.news → Inbound → Add Route**
+- Match: `*@finc.news` (або конкретні адреси)
+- Webhook URL: `https://finc.news/api/webhook/inbound-email?secret=<RESEND_INBOUND_SECRET>`
+
+**4. Env vars (Vercel + `.env.local`)**
+```
+RESEND_INBOUND_SECRET=<generate: openssl rand -hex 32>
+INBOUND_FORWARD_TO=boosyonya@gmail.com
+```
+
+### Адреси що форвардяться
+```
+editorial@finc.news  →  INBOUND_FORWARD_TO
+privacy@finc.news    →  INBOUND_FORWARD_TO
+legal@finc.news      →  INBOUND_FORWARD_TO
+ads@finc.news        →  INBOUND_FORWARD_TO
+tech@finc.news       →  INBOUND_FORWARD_TO
+```
+Усі інші адреси (`@finc.news`) ігноруються (spam trap захист).
+
+### Файли
+
+| Файл | Роль |
+|------|------|
+| `app/api/webhook/inbound-email/route.ts` | Приймає Resend inbound POST, пересилає на Gmail |
 
 ---
 
