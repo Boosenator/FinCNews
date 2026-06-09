@@ -14,6 +14,7 @@ type InboundWebhookPayload = {
 type ResendReceivedEmail = {
   id: string; from?: string; to?: string[];
   subject?: string; html?: string; text?: string;
+  attachments?: Array<{ filename?: string; content?: string; contentType?: string }>;
 };
 
 type EmailRoute = {
@@ -107,6 +108,10 @@ export async function POST(req: NextRequest) {
   const resend   = new Resend(process.env.RESEND_API_KEY);
   const fwdSubject = formatSubject(mailbox, email.subject ?? subject);
 
+  const attachments = (email.attachments ?? [])
+    .filter((a) => a.content)
+    .map((a) => ({ filename: a.filename, content: a.content as string, contentType: a.contentType }));
+
   const { error } = await resend.emails.send({
     from:    `FinCNews Inbound <tech@${DOMAIN}>`,
     to:      route.forward_to,
@@ -118,6 +123,7 @@ export async function POST(req: NextRequest) {
       "X-Forwarded-To":   toAddress   || "",
       "X-Forwarded-From": fromAddress || "",
     },
+    ...(attachments.length > 0 && { attachments }),
   });
 
   const status = error ? "failed" : "forwarded";
@@ -136,6 +142,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: String(error) }, { status: 500 });
   }
 
-  console.log(`[inbound-email] ${toAddress} → ${route.forward_to} | from: ${fromAddress}`);
+  console.log(`[inbound-email] ${toAddress} → ${route.forward_to} | from: ${fromAddress}${attachments.length > 0 ? ` | attachments: ${attachments.length}` : ''}`);
   return NextResponse.json({ ok: true });
 }
