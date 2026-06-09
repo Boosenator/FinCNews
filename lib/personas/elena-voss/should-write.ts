@@ -1,21 +1,43 @@
 import type { ElenaDataPull } from './data-pull';
 
 // Dates of scheduled high-priority macro events — extend quarterly
+// Verify against official Fed calendar: federalreserve.gov/monetarypolicy/fomccalendars.htm
 const HIGH_PRIORITY_DATES: Record<string, string> = {
-  '2025-06-11': 'CPI Release',
-  '2025-06-12': 'FOMC Rate Decision',
-  '2025-06-18': 'FOMC Minutes',
-  '2025-06-27': 'PCE Release',
-  '2025-07-09': 'CPI Release',
-  '2025-07-16': 'FOMC Minutes',
-  '2025-07-30': 'FOMC Rate Decision',
-  '2025-08-01': 'NFP Release',
-  '2025-08-13': 'CPI Release',
-  '2025-08-22': 'PCE Release',
-  '2025-09-05': 'NFP Release',
-  '2025-09-10': 'CPI Release',
-  '2025-09-17': 'FOMC Rate Decision',
-  '2025-09-26': 'PCE Release',
+  // ── June 2026 ──
+  '2026-06-11': 'CPI Release',
+  '2026-06-18': 'FOMC Rate Decision',
+  '2026-06-26': 'PCE Release',
+  // ── July 2026 ──
+  '2026-07-02': 'NFP Release',
+  '2026-07-09': 'FOMC Minutes',
+  '2026-07-14': 'CPI Release',
+  '2026-07-30': 'FOMC Rate Decision',
+  '2026-07-31': 'PCE Release',
+  // ── August 2026 ──
+  '2026-08-07': 'NFP Release',
+  '2026-08-13': 'CPI Release',
+  '2026-08-20': 'FOMC Minutes',
+  '2026-08-28': 'PCE Release',
+  // ── September 2026 ──
+  '2026-09-04': 'NFP Release',
+  '2026-09-10': 'CPI Release',
+  '2026-09-17': 'FOMC Rate Decision',
+  '2026-09-25': 'PCE Release',
+  // ── October 2026 ──
+  '2026-10-02': 'NFP Release',
+  '2026-10-08': 'FOMC Minutes',
+  '2026-10-14': 'CPI Release',
+  '2026-10-29': 'FOMC Rate Decision',
+  '2026-10-30': 'PCE Release',
+  // ── November 2026 ──
+  '2026-11-06': 'NFP Release',
+  '2026-11-12': 'CPI Release',
+  '2026-11-19': 'FOMC Minutes',
+  '2026-11-25': 'PCE Release',
+  // ── December 2026 ──
+  '2026-12-04': 'NFP Release',
+  '2026-12-10': 'CPI Release + FOMC Rate Decision',
+  '2026-12-24': 'PCE Release',
 };
 
 export interface ShouldWriteResult {
