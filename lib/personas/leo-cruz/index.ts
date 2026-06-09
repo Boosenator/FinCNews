@@ -10,6 +10,7 @@ import { loadNarrativeHistory, updateNarrativeTracker, markNarrativeCovered } fr
 import { shouldWrite } from './should-write';
 import { generateLeoArticle } from './generate';
 import { decideSelfWork, executeSelfWork, type SelfWorkResult } from './self-work';
+import { buildVerifiedHistory } from '@/lib/personas/verified-history';
 
 const PERSONA_ID = 'leo-cruz';
 
@@ -83,9 +84,11 @@ export async function runLeoCruz(): Promise<RunResult> {
       ? await buildContext(supabase, evalResult.topic)
       : recentSummary;
 
+    const verifiedHistory = await buildVerifiedHistory(supabase, PERSONA_ID);
+
     let article;
     try {
-      article = await generateLeoArticle(data, signals, evalResult, narratives, contextWithTopic);
+      article = await generateLeoArticle(data, signals, evalResult, narratives, contextWithTopic, verifiedHistory);
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
       return { wrote: false, score: evalResult.score, reasoning: `Generation failed: ${error}`, error };

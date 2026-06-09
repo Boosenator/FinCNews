@@ -638,3 +638,231 @@ app/api/webhook/inbound-email/route.ts      — Resend inbound webhook
 app/api/admin/email-routes/route.ts         — CRUD для email routes
 app/(admin)/flows/_components/EmailTab.tsx  — email admin UI
 ```
+
+---
+
+## Operational Guide
+
+### API Dependencies
+
+Що ламається коли який API недоступний:
+
+| API | Хто залежить | Що відбувається при збої |
+|-----|-------------|--------------------------|
+| Anthropic Claude | Всі три персони, Victor Kane | Всі cron'и падають з 5xx. Перезапуск автоматичний при наступному cron tick. Vercel логи: `Claude generate failed` / `Claude eval failed`. |
+| FRED (stlouisfed.org) | Elena Voss | `pullElenaData()` кидає exception → cron Elena падає цілком. Стаття не пишеться, persona_runs не записується. |
+| CoinGlass | Marcus Webb | Exchange netflow і miner outflows = null → z-score для них = 0 → аномалії по цих метриках не детектуються → Marcus може пропустити день без запису помилки. |
+| mempool.space | Marcus Webb | Hashrate і mempool tx = null → аналогічно. Marcus не падає, але ефективно сліпий. |
+| CoinGecko | Marcus, Elena, Leo | BTC price/volume/trending = null. Marcus: volume ratio = 0x, Leo: trendingCoins = []. Не падає, але аналіз деградує. |
+| alternative.me (F&G) | Marcus, Leo | fearGreedIndex = null. Marcus: цей сигнал пропадає. Leo: sentiment shift не детектується. |
+| OpenAI embeddings | Всі (post-publish) | `saveEmbedding()` — fire-and-forget, не блокує публікацію. Але без embedding: semantic search деградує, detectOverlap у Victor Kane перестає знаходити overlap. **Тихий збій** — в логах буде помилка, але стаття вийде. |
+| SEC EDGAR | Elena Voss | `secFilings` = []. Elena не падає, але SEC enforcement actions не враховуються в shouldWrite. |
+| LunarCrush | Leo Cruz | Sentiment = null. Leo не падає, але sentiment_shift сигнали не генеруються. |
+| Reddit API | Leo Cruz | Reddit buzz = []. Leo не падає, reddit_buzz сигнали пропадають. |
+| Sanity CMS | Всі три персони | `publishArticleToSanity()` кидає exception → стаття НЕ публікується, але Victor review вже відбувся. Cron падає з помилкою. Стаття втрачається (не перезапускається автоматично). |
+| Telegraph (telegra.ph) | Всі три персони | Публікація в Sanity вже відбулась. Telegraph link відсутній → Telegram пост без посилання або без Telegraph. |
+| Pexels | Всі три персони | Обкладинка не підбирається → Sanity запис без cover image. Не блокує публікацію. |
+| Telegram Bot API | Всі три персони | Стаття вже в Sanity. Telegram пост не відправляється. Тихий збій. |
+| Resend (email) | Email system | Inbound forwardng не відбувається. Outbound листи не надсилаються. Cron не залежить від цього. |
+
+---
+
+### Failure Modes по кроках
+
+**RSS Collect (*/30 хв)**
+
+| Крок | Що може зламатись | Симптом | Де дивитись |
+|------|------------------|---------|-------------|
+| RSS fetch | 1+ стрічок недоступна | Решта стрічок обробляється. Мовчазний partial збій. | Vercel функція `/api/cron/rss-collect` logs |
+| AI Scoring (Haiku) | Anthropic API down | Весь Collect падає. Черга не поповнюється. | Vercel logs: `Claude eval failed` |
+| Embeddings dedup | OpenAI API down | `saveEmbedding` fail → новини проходять без перевірки на дублікати → можливі дублікати в `article_queue` | Vercel logs: embedding error |
+| Cosine similarity | pgvector не відповідає | Суаbase timeout → вся дедуплікація пропускається → більше дублікатів | Supabase logs |
+
+**RSS Generate (кожну годину)**
+
+| Крок | Що може зламатись | Симптом | Де дивитись |
+|------|------------------|---------|-------------|
+| Triage (Sonnet) | Anthropic down | Весь Generate падає. Черга залишається. | Vercel logs |
+| generateDeskArticle | Anthropic down | Одна стаття не генерується, але не блокує решту в черзі | Vercel logs: `generateDeskArticle failed` |
+| Victor pre-publish | Anthropic down | `victorPrePublishReview()` повертає `approve` (fallback). Стаття виходить без реального review. | Vercel logs: `Victor review failed — auto-approved` |
+| publishArticleToSanity | Sanity down | Стаття не виходить. Запис в article_queue залишається. Наступний Generate run може спробувати знову (якщо не `expires_at`). | Vercel logs |
+
+**Proactive crons (07:00/08:00/10:00/13:00)**
+
+| Крок | Що може зламатись | Симптом | Де дивитись |
+|------|------------------|---------|-------------|
+| Data pull | API недоступне | Elena/Marcus повністю падають. Leo частково деградує. | persona_runs: відсутній запис за день |
+| buildVerifiedHistory | Supabase timeout | Повертає порожню verified history. Персона пише без anti-hallucination захисту. **Тихий збій.** | Supabase logs |
+| generateArticle | Anthropic down | Cron падає. persona_runs = no write. | Vercel logs |
+| Victor pre-publish (self-work) | Anthropic down | `victorPrePublishReview()` повертає approve (fallback). Self-work виходить без review. | Vercel logs |
+
+**Victor Kane nightly (21:00 UTC)**
+
+| Ситуація | Поведінка |
+|----------|-----------|
+| Жодна персона не публікувала сьогодні | "Quiet desk" → стоп. Нова директива не виставляється. Стара директива залишається pending — може застаріти. |
+| Anthropic down | Весь nightly review падає. evaluateAnalyst не відбувається. Директиви за цей день не оновлюються. |
+| detectOverlap (embeddings) недоступний | Cross-persona overlap не детектується. Victor пише desk note без цього контексту. |
+| Persona не публікувала кілька днів | Victor oцінює статті з минулих днів. Директиви можуть бути неактуальними. |
+
+---
+
+### Де дивитись помилки
+
+**1. Vercel Function Logs**
+- Відкрити: Vercel Dashboard → Project → Functions → вибрати функцію → Logs
+- Фільтр по часу і рівню (ERROR)
+- Ключові функції: `/api/cron/marcus`, `/api/cron/elena`, `/api/cron/leo`, `/api/cron/chief-editor`, `/api/cron/rss-collect`, `/api/cron/rss-generate`
+
+**2. `persona_runs` table (Supabase)**
+```sql
+-- Останні 24h всіх персон
+SELECT persona_id, created_at, should_write, wrote_article, error_message, skipped_reason
+FROM persona_runs
+WHERE created_at > now() - interval '24 hours'
+ORDER BY created_at DESC;
+
+-- Персона не писала сьогодні?
+SELECT * FROM persona_runs
+WHERE persona_id = 'elena-voss'
+AND created_at > current_date
+ORDER BY created_at DESC;
+```
+
+**3. `article_queue` table (Supabase)**
+```sql
+-- Що зависло в черзі?
+SELECT id, title, persona_id, status, created_at, expires_at
+FROM article_queue
+WHERE status = 'pending'
+ORDER BY created_at ASC;
+
+-- Протухлі новини (expires_at минув):
+SELECT * FROM article_queue
+WHERE expires_at < now() AND status = 'pending';
+```
+
+**4. `coverage_log` table**
+```sql
+-- Що публікувалось за останні 48h
+SELECT title, persona_id, published_at, slug
+FROM coverage_log
+ORDER BY published_at DESC
+LIMIT 20;
+```
+
+**5. `editorial_directives` table**
+```sql
+-- Активні директиви
+SELECT persona_id, directive, created_at
+FROM editorial_directives
+WHERE status = 'pending'
+ORDER BY created_at DESC;
+```
+
+**Ознаки тихих збоїв (нічого не ламається, але поведінка деградує):**
+- `persona_memory` не має нових `signal_snapshot` → data pull не відбувається
+- `coverage_log` має статті, але `persona_memory.embedding` NULL → OpenAI embeddings падають
+- Victor Kane активна директива старіша за 7 днів → nightly review не відбувається
+- Elena `should_write` завжди false на FOMC/CPI дні → `HIGH_PRIORITY_DATES` застаріли
+
+---
+
+### Відомі тихі збої (Silent Failures)
+
+| Збій | Чому тихий | Як виявити |
+|------|-----------|------------|
+| OpenAI embeddings fail | `saveEmbedding()` fire-and-forget, не кидає в cron | `persona_memory` rows без embedding; semantic search повертає [] |
+| buildVerifiedHistory timeout | Повертає порожній рядок, не кидає | Перевірити чи prompt містить `VERIFIED HISTORICAL RECORD` в Vercel logs |
+| Victor review fallback | `victorPrePublishReview()` catch → auto-approve | Vercel logs: "Victor review failed — auto-approved" |
+| CoinGlass API down | `btcExchangeNetflow = null` → z-score = 0, не аномалія | Marcus не пише навіть при реальній аномалії в netflow |
+| Elena HIGH_PRIORITY_DATES застаріли | calendar override не спрацьовує, score залишається <60 | Elena мовчить на FOMC/CPI дні; persona_runs: `should_write: false` |
+| Leo narrative tracker не оновлюється | `update_tracker_only` не логується в persona_runs | `persona_memory` narratives мають старі `updated_at` |
+| self-work articles до вчора | self-work не мав Victor review (до фікса) | Виправлено: Victor Kane тепер перевіряє всі non-bootstrap self-work |
+| RSS "already wrote today" обхід | RSS генерує через `generateDeskArticle()` напряму, минаючи guard | Marcus може написати 2 статті в один день якщо RSS + proactive |
+
+---
+
+### Обслуговування (Maintenance Calendar)
+
+**Щоквартально (обов'язково):**
+
+- [ ] Оновити `HIGH_PRIORITY_DATES` в трьох файлах:
+  - `lib/personas/elena-voss/should-write.ts`
+  - `lib/personas/elena-voss/generate.ts`
+  - `lib/personas/elena-voss/self-work.ts`
+  - Перевіряти по: `federalreserve.gov/monetarypolicy/fomccalendars.htm`
+  - Якщо всі дати в минулому — calendar override не спрацьовує взагалі
+
+- [ ] Перевірити `KNOWN_EVENTS_*` в `verified-history.ts`:
+  - Додати великі події з минулого кварталу (ETF рішення, Fed actions, ATH/ATL)
+  - Формат: `[YYYY-MM-DD] Event: Key number. Source fact.`
+  - Тільки 100% верифіковані числа. Ніяких приблизних.
+
+**Щомісяця:**
+
+- [ ] Перевірити активні директиви Victor Kane — чи не застаріли (> 14 днів pending без resolve)
+- [ ] Перевірити `article_queue` на завислі pending-статті
+- [ ] Перевірити `persona_runs` на персони що не писали > 5 днів підряд
+
+**При ротації API ключів:**
+
+| Змінний ключ | Де використовується | Env var |
+|-------------|--------------------|---------| 
+| Anthropic | Всі LLM виклики | `ANTHROPIC_API_KEY` |
+| OpenAI | Embeddings | `OPENAI_API_KEY` |
+| CoinGlass | Marcus data pull | `COINGLASS_API_KEY` |
+| LunarCrush | Leo data pull | `LUNARCRUSH_API_KEY` |
+| FRED | Elena data pull | `FRED_API_KEY` |
+| Sanity | CMS publish | `SANITY_API_TOKEN` |
+| Telegram | Bot posting | `TELEGRAM_BOT_TOKEN` |
+| Resend | Email | `RESEND_API_KEY` |
+
+---
+
+### Юридичні та редакційні ризики
+
+**Фабрикація фактів (hallucination)**
+
+Система має 4 шари захисту (verified history, system prompt rules, critique pass, Victor Kane review), але ризик не нульовий:
+
+- RSS pipeline: Victor може auto-approve якщо Anthropic API тимчасово нестабільний (fallback)
+- Якщо `buildVerifiedHistory()` повертає порожнє через timeout → persona пише без anchor
+- Critique перевіряє тільки перші 2500 символів body (раніше 1200 — виправлено)
+- Marcus RSS prompt раніше мав "If real-time data isn't available, cite the pattern context" — запрошував до фабрикації. **Виправлено.**
+
+**Якщо виявлена стаття з фабрикованими фактами:**
+1. Видалити з Sanity (неопублікувати або видалити)
+2. Видалити Telegram пост якщо вийшов
+3. Заблокувати персону в БД (`is_active = false`)
+4. Додати event в `KNOWN_EVENTS_*` якщо факт стосується реальної події
+
+**Авторські права на зображення**
+
+Pexels — ліцензія Pexels License (безкоштовно, без атрибуції). Але Telegraph embeds зовнішні URL — якщо Pexels видалить фото, Telegraph посилання зламається.
+
+**Ринкові поради і disclaimer**
+
+Жодна персона не робить price predictions і не каже "buy/sell". Elena: "the data doesn't resolve this yet". Marcus: тільки "what to watch" з порогом. Leo: "the signal to watch", не торгові рекомендації.
+
+Але: forecasts (`memory_type: forecast`) містять implicit directional calls. Якщо домен набере трафіку — варто додати явний disclaimer на рівні сайту.
+
+**GDPR і email**
+
+Email підписники отримують тип листа `welcome` і `digest`. Opt-in у формі підписки — переконайтесь що він explicit. Resend зберігає email у своїй БД. `email_logs` в Supabase — не видаляються автоматично.
+
+---
+
+### Відмінності: RSS pipeline vs Proactive pipeline
+
+| Аспект | RSS Pipeline | Proactive Pipeline |
+|--------|-------------|-------------------|
+| Тригер | Новина в `article_queue` | Cron (фіксований час) |
+| Anti-hallucination | `buildVerifiedHistory` в `loadPersonaContext` | `buildVerifiedHistory` в `buildContext` кожного index.ts |
+| Victor review | ✅ в `generateDeskArticle()` | ✅ для proactive; ✅ для self-work (після фікса) |
+| "Already wrote today" guard | ❌ RSS може обійти — генерує напряму | ✅ Marcus перевіряє `persona_runs` |
+| Persona assignment | Triage (Sonnet) вирішує | Жорстко: cron → одна персона |
+| Topic | Зовнішня новина | Власна логіка shouldWrite |
+| 3-pass critique | ✅ critiqueAndFix (2500 chars) | ❌ Немає окремого critique pass |
+| Baseline/tracker update | Не оновлює | Marcus оновлює baseline; Leo оновлює tracker |
+| self-work | Немає | Якщо score < 60 → decideSelfWork |

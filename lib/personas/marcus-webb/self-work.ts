@@ -5,6 +5,7 @@ import type { MarcusDataPull } from './data-pull';
 import type { MarcusBaseline } from './baseline';
 import { updateBaseline } from './baseline';
 import { verifyOpenForecasts } from './forecasts';
+import { victorPrePublishReview, applyVictorEdit, type DeskArticle } from '@/lib/automation/generate-desk';
 
 const PERSONA_ID = 'marcus-webb';
 
@@ -73,6 +74,37 @@ export async function executeSelfWork(
     article = await generateBootstrap(data, baseline);
   } else {
     article = await generateWeeklySummary(data, baseline, context);
+
+    // Victor pre-publish review for weekly_summary
+    const db = supabaseAdmin();
+    const { data: directives } = await db.from('editorial_directives')
+      .select('directive')
+      .eq('persona_id', PERSONA_ID)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+      .limit(1);
+    const activeDirective = directives?.[0]?.directive ?? null;
+
+    const victorDecision = await victorPrePublishReview({
+      article: article as DeskArticle,
+      personaId: PERSONA_ID,
+      activeDirective,
+      generationType: 'self_work',
+    });
+
+    if (victorDecision.decision === 'block') {
+      return {
+        wrote: false,
+        type: task.type,
+        reasoning: `Victor blocked: ${victorDecision.reason}`,
+        baselineUpdated: true,
+        forecastsVerified: forecasts,
+      };
+    }
+
+    if (victorDecision.decision === 'edit' && victorDecision.edit_instruction) {
+      article = await applyVictorEdit(article as DeskArticle, PERSONA_ID, victorDecision.edit_instruction) as PublishableArticle;
+    }
   }
 
   const { slug, id } = await publishArticleToSanity(article, PERSONA_ID);

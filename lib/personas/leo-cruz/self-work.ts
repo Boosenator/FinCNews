@@ -4,6 +4,7 @@ import { saveEmbedding } from '@/lib/personas/embeddings';
 import type { LeoDataPull } from './data-pull';
 import type { NarrativeState } from './narratives';
 import { updateNarrativeTracker } from './narratives';
+import { victorPrePublishReview, applyVictorEdit, type DeskArticle } from '@/lib/automation/generate-desk';
 
 const PERSONA_ID = 'leo-cruz';
 
@@ -78,6 +79,37 @@ export async function executeSelfWork(
     article = await generateBootstrap(data, narratives);
   } else {
     article = await generateWeeklyNarrativeMap(data, narratives, context);
+
+    // Victor pre-publish review for weekly_narrative_map
+    const db = supabaseAdmin();
+    const { data: directives } = await db.from('editorial_directives')
+      .select('directive')
+      .eq('persona_id', PERSONA_ID)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+      .limit(1);
+    const activeDirective = directives?.[0]?.directive ?? null;
+
+    const victorDecision = await victorPrePublishReview({
+      article: article as DeskArticle,
+      personaId: PERSONA_ID,
+      activeDirective,
+      generationType: 'self_work',
+    });
+
+    if (victorDecision.decision === 'block') {
+      const updates = await updateNarrativeTracker(data.trendingCoins);
+      return {
+        wrote: false,
+        type: task.type,
+        reasoning: `Victor blocked: ${victorDecision.reason}`,
+        trackerUpdates: updates,
+      };
+    }
+
+    if (victorDecision.decision === 'edit' && victorDecision.edit_instruction) {
+      article = await applyVictorEdit(article as DeskArticle, PERSONA_ID, victorDecision.edit_instruction) as PublishableArticle;
+    }
   }
 
   const { slug, id } = await publishArticleToSanity(article, PERSONA_ID);

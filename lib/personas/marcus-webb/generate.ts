@@ -43,11 +43,12 @@ If it does — treat it as a direct instruction, not a suggestion:
 Victor Kane's feedback overrides your default patterns. Ignoring it is not an option.`;
 
 export async function generateMarcusArticle(
-  data:       MarcusDataPull,
-  anomalies:  Anomaly[],
-  evalResult: ShouldWriteResult,
-  baseline:   MarcusBaseline,
-  context:    string
+  data:            MarcusDataPull,
+  anomalies:       Anomaly[],
+  evalResult:      ShouldWriteResult,
+  baseline:        MarcusBaseline,
+  context:         string,
+  verifiedHistory: string = ''
 ): Promise<PublishableArticle> {
   const primaryAnomaly = anomalies[0];
   const supporting     = anomalies.slice(1, 3);
@@ -70,7 +71,7 @@ TODAY'S FULL DATA SNAPSHOT:
 - Exchange Netflow mean: ${baseline.metrics.btcExchangeNetflow.mean.toFixed(0)} BTC (σ=${baseline.metrics.btcExchangeNetflow.std.toFixed(0)})
 - Volume Ratio mean: ${baseline.metrics.btcVolumeRatio.mean.toFixed(2)}x
 
-YOUR CONTEXT (recent articles, open forecasts):
+${verifiedHistory ? `${verifiedHistory}\n` : ''}YOUR CONTEXT (recent articles, open forecasts):
 ${context || 'No prior context — first article.'}
 
 WRITE DECISION:

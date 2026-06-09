@@ -1,5 +1,6 @@
 import { callClaude, parseClaudeJson, PERSONA_NAME } from '@/lib/personas/shared';
 import { supabaseAdmin } from '@/lib/supabase';
+import { buildVerifiedHistory } from '@/lib/personas/verified-history';
 
 // ── Per-persona article structures ────────────────────────────────────────────
 
@@ -34,7 +35,7 @@ EDITORIAL DIRECTIVE is injected in context — treat as direct instruction.`,
 
 CORE BELIEF: Markets are flows. Everything leaves an on-chain trace.
 
-WHEN COVERING NEWS: Interpret events through the on-chain lens. Cite what exchange data, miner behavior, or network metrics would likely show in this scenario — reference historical precedents with specific values. If real-time data isn't available, cite the pattern context.
+WHEN COVERING NEWS: Interpret events through the on-chain lens. Cite exchange data, miner behavior, or network metrics from the VERIFIED HISTORICAL RECORD in context. Never fabricate specific on-chain values, z-scores, dates, or prices not present in the provided data.
 
 VOICE RULES:
 - Open with a specific metric, value, and its deviation from norm
@@ -95,6 +96,7 @@ export type DeskGenerateResult = {
 type PersonaContext = {
   recentArticles:  string;
   activeDirective: string | null;
+  verifiedHistory: string;
 };
 
 // ── Load persona context from DB ──────────────────────────────────────────────
@@ -102,7 +104,7 @@ type PersonaContext = {
 async function loadPersonaContext(personaId: string): Promise<PersonaContext> {
   const db = supabaseAdmin();
 
-  const [{ data: memories }, { data: directives }] = await Promise.all([
+  const [{ data: memories }, { data: directives }, verifiedHistory] = await Promise.all([
     db.from('persona_memory')
       .select('content, metadata')
       .eq('persona_id', personaId)
@@ -115,6 +117,7 @@ async function loadPersonaContext(personaId: string): Promise<PersonaContext> {
       .eq('status', 'pending')
       .order('created_at', { ascending: false })
       .limit(1),
+    buildVerifiedHistory(db, personaId),
   ]);
 
   const recentArticles = (memories ?? [])
@@ -126,7 +129,7 @@ async function loadPersonaContext(personaId: string): Promise<PersonaContext> {
 
   const activeDirective = directives?.[0]?.directive ?? null;
 
-  return { recentArticles, activeDirective };
+  return { recentArticles, activeDirective, verifiedHistory };
 }
 
 // ── Step 7a: Angle discovery ──────────────────────────────────────────────────
@@ -177,6 +180,7 @@ async function generateDraft(opts: {
   angle:           string;
   activeDirective: string | null;
   continuationOf:  string | null;
+  verifiedHistory: string;
 }): Promise<DeskArticle> {
   const system  = PERSONA_SYSTEM[opts.personaId] ?? PERSONA_SYSTEM['leo-cruz'];
   const date    = opts.item.pubDate?.slice(0, 10) ?? new Date().toISOString().slice(0, 10);
@@ -201,7 +205,7 @@ EDITORIAL ANGLE (assigned by editors): ${opts.angle}
 
 ${continuationNote}
 
-${directiveSection}
+${opts.verifiedHistory ? `${opts.verifiedHistory}\n` : ''}${directiveSection}
 
 Write the article in your established voice. Use markdown ## headers.
 Structure: ${PERSONA_ARTICLE_STRUCTURE[opts.personaId] ?? '## What Happened / ## Key Details / ## Why It Matters / ## What Happens Next'}
@@ -232,7 +236,7 @@ async function critiqueAndFix(draft: DeskArticle, personaId: string): Promise<De
 DRAFT:
 Title: "${draft.title}"
 Excerpt: "${draft.excerpt}"
-Body: "${draft.body.slice(0, 1200)}..."
+Body: "${draft.body.slice(0, 2500)}${draft.body.length > 2500 ? '...' : ''}"
 
 Check for these issues (ONLY flag real problems — do not invent issues):
 1. Conclusion is a question or vague ("we'll see") instead of a specific watch metric
@@ -274,11 +278,11 @@ Return the corrected article as valid JSON in the exact same format.`;
 
 // ── Step 8: Victor Kane pre-publish review ────────────────────────────────────
 
-async function victorPrePublishReview(opts: {
+export async function victorPrePublishReview(opts: {
   article:         DeskArticle;
   personaId:       string;
   activeDirective: string | null;
-  generationType:  'rss' | 'continuation';
+  generationType:  'rss' | 'continuation' | 'self_work';
 }): Promise<VictorDecision> {
   const personaName = PERSONA_NAME[opts.personaId] ?? opts.personaId;
 
@@ -293,7 +297,7 @@ Excerpt: "${opts.article.excerpt}"
 Body: "${opts.article.body.slice(0, 900)}..."
 
 AUTHOR: ${personaName}
-TYPE: ${opts.generationType === 'continuation' ? 'Continuation of previous story' : 'New RSS article'}
+TYPE: ${opts.generationType === 'continuation' ? 'Continuation of previous story' : opts.generationType === 'self_work' ? 'Self-initiated article (no RSS source)' : 'New RSS article'}
 
 ACTIVE DIRECTIVE FOR ${personaName.toUpperCase()}:
 ${opts.activeDirective ?? 'None currently active'}
@@ -323,7 +327,7 @@ Return ONLY valid JSON:
 
 // ── Step 8b: Apply Victor's edit ──────────────────────────────────────────────
 
-async function applyVictorEdit(article: DeskArticle, personaId: string, instruction: string): Promise<DeskArticle> {
+export async function applyVictorEdit(article: DeskArticle, personaId: string, instruction: string): Promise<DeskArticle> {
   const system    = PERSONA_SYSTEM[personaId] ?? PERSONA_SYSTEM['leo-cruz'];
   const prompt    = `You are ${PERSONA_NAME[personaId] ?? personaId}. Your chief editor has one specific revision request.
 
@@ -381,6 +385,7 @@ export async function generateDeskArticle(opts: {
     angle,
     activeDirective: ctx.activeDirective,
     continuationOf:  opts.continuationOf,
+    verifiedHistory: ctx.verifiedHistory,
   });
   steps.push({ name: 'draft', status: 'ok', durationMs: Date.now() - t, note: `"${article.title.slice(0, 60)}"` });
 

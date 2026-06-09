@@ -1,57 +1,69 @@
--- Backfill for queue item 84d724e4-938c-4792-9de6-89e0349b221e
--- Step 1: find what was published
+-- Backfill persona_runs for ALL personas — RSS articles already in persona_memory
+-- Run in Supabase Dashboard → SQL Editor → Run
+
+-- ── Step 1: see what's in persona_memory (source=rss) across all personas ─────
 select
-  id,
-  title,
-  url,
-  assigned_persona,
-  score,
-  urgency,
-  status,
-  processed_at
-from article_queue
-where id = '84d724e4-938c-4792-9de6-89e0349b221e';
-
--- Step 2: find the article in coverage_log (if it was written)
-select * from coverage_log order by published_at desc limit 5;
-
--- Step 3: find the article in persona_memory for leo-cruz (if it was written)
-select id, content, metadata, created_at
+  persona_id,
+  metadata->>'slug'  as slug,
+  metadata->>'title' as title,
+  metadata->>'topic' as topic,
+  created_at
 from persona_memory
-where persona_id = 'leo-cruz'
-  and memory_type = 'article'
-order by created_at desc limit 5;
+where memory_type = 'article'
+  and metadata->>'source' = 'rss'
+order by created_at desc;
 
--- Step 4: manually insert into persona_runs
--- FILL IN: replace <SLUG> with the actual slug of the published article
---          replace <TITLE> with the article title
---          replace <CATEGORY> with the article category (crypto/markets/etc)
---          replace <SCORE> with the score from article_queue
-/*
+-- ── Step 2: backfill persona_runs for all of them ─────────────────────────────
 insert into persona_runs (
-  persona_id, should_write, score, reasoning, topic,
-  primary_signal, article_slug, data_snapshot, run_date, created_at
-) values (
-  'leo-cruz',
+  persona_id,
+  should_write,
+  score,
+  reasoning,
+  topic,
+  primary_signal,
+  article_slug,
+  data_snapshot,
+  run_date,
+  created_at
+)
+select
+  pm.persona_id,
   true,
-  <SCORE>,
-  'RSS desk: <TITLE>',
-  null,
-  'rss:standard',
-  '<SLUG>',
-  '{"source":"rss","article_category":"<CATEGORY>","backfilled":true}'::jsonb,
-  current_date,
-  now()
-);
-*/
+  coalesce(
+    (
+      select aq.score
+      from article_queue aq
+      where aq.assigned_persona = pm.persona_id
+        and aq.status = 'done'
+        and aq.processed_at between pm.created_at - interval '5 minutes'
+                                and pm.created_at + interval '5 minutes'
+      limit 1
+    ),
+    65
+  )                                                                    as score,
+  'RSS desk: ' || coalesce(pm.metadata->>'title', '(no title)')        as reasoning,
+  pm.metadata->>'topic'                                                as topic,
+  'rss:standard'                                                       as primary_signal,
+  pm.metadata->>'slug'                                                 as article_slug,
+  jsonb_build_object(
+    'source',           'rss',
+    'article_category', 'crypto',
+    'backfilled',       true
+  )                                                                    as data_snapshot,
+  (pm.created_at at time zone 'utc')::date                             as run_date,
+  pm.created_at
+from persona_memory pm
+where pm.memory_type = 'article'
+  and pm.metadata->>'source' = 'rss'
+  and pm.metadata->>'slug'   is not null
+  and not exists (
+    select 1 from persona_runs pr
+    where pr.persona_id  = pm.persona_id
+      and pr.article_slug = pm.metadata->>'slug'
+  );
 
--- Step 5: manually insert into persona_memory (if not already there)
-/*
-insert into persona_memory (persona_id, memory_type, content, metadata)
-values (
-  'leo-cruz',
-  'article',
-  '<EXCERPT>',
-  '{"title":"<TITLE>","slug":"<SLUG>","topic":null,"source":"rss","generated_at":"<NOW>"}'::jsonb
-);
-*/
+-- ── Step 3: verify all personas ───────────────────────────────────────────────
+select persona_id, primary_signal, article_slug, score, run_date
+from persona_runs
+where primary_signal like 'rss:%'
+order by created_at desc;

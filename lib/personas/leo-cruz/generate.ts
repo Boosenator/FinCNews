@@ -47,11 +47,12 @@ If it does — treat it as a direct instruction, not a suggestion:
 Victor Kane's feedback overrides your default patterns. Ignoring it is not an option.`;
 
 export async function generateLeoArticle(
-  data:        LeoDataPull,
-  signals:     Signal[],
-  evalResult:  ShouldWriteResult,
-  narratives:  NarrativeState[],
-  context:     string
+  data:            LeoDataPull,
+  signals:         Signal[],
+  evalResult:      ShouldWriteResult,
+  narratives:      NarrativeState[],
+  context:         string,
+  verifiedHistory: string = ''
 ): Promise<PublishableArticle> {
   const topSignals = signals.slice(0, 4);
 
@@ -81,7 +82,7 @@ TODAY'S WRITE DECISION:
 - Cycle stage: ${evalResult.cycle_stage ?? 'unknown'}
 - Reasoning: ${evalResult.reasoning}
 
-YOUR CONTEXT (past articles + active narratives):
+${verifiedHistory ? `${verifiedHistory}\n` : ''}YOUR CONTEXT (past articles + active narratives):
 ${context || 'No prior context yet — this is your first article.'}
 
 Write the article. Return ONLY valid JSON:

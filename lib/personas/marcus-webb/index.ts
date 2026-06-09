@@ -12,6 +12,7 @@ import { generateMarcusArticle } from './generate';
 import { extractAndSaveForecast, getForecastContext } from './forecasts';
 import { decideSelfWork, executeSelfWork, type SelfWorkResult } from './self-work';
 import { extractAndSavePosition } from '../elena-voss/position'; // reuse same pattern
+import { buildVerifiedHistory } from '@/lib/personas/verified-history';
 
 const PERSONA_ID = 'marcus-webb';
 
@@ -85,9 +86,10 @@ export async function runMarcusWebb(): Promise<RunResult> {
     });
 
     const contextWithTopic = evalResult.topic ? await buildContext(supabase, evalResult.topic) : recentSummary;
+    const verifiedHistory = await buildVerifiedHistory(supabase, PERSONA_ID);
 
     let article;
-    try { article = await generateMarcusArticle(data, anomalies, evalResult, baseline, contextWithTopic); }
+    try { article = await generateMarcusArticle(data, anomalies, evalResult, baseline, contextWithTopic, verifiedHistory); }
     catch (err) {
       const error = err instanceof Error ? err.message : String(err);
       return { wrote: false, score: evalResult.score, reasoning: `Generation failed: ${error}`, error };

@@ -9,6 +9,7 @@ import { generateElenaArticle } from './generate';
 import { decideSelfWork, executeSelfWork, type SelfWorkResult } from './self-work';
 import { extractAndSaveForecast, getOpenForecastsContext } from './forecasts';
 import { extractAndSavePosition, getCurrentPosition } from './position';
+import { buildVerifiedHistory } from '@/lib/personas/verified-history';
 
 const PERSONA_ID = 'elena-voss';
 
@@ -79,9 +80,11 @@ export async function runElenaVoss(): Promise<RunResult> {
       data_snapshot: data,
     });
 
+    const verifiedHistory = await buildVerifiedHistory(supabase, PERSONA_ID);
+
     let article;
     try {
-      article = await generateElenaArticle(data, evalResult, contextWithTopic);
+      article = await generateElenaArticle(data, evalResult, contextWithTopic, verifiedHistory);
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
       return { wrote: false, score: evalResult.score, reasoning: `Generation failed: ${error}`, error };

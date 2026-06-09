@@ -4,35 +4,48 @@ import { saveEmbedding } from '@/lib/personas/embeddings';
 import { extractAndSaveForecast } from './forecasts';
 import { extractAndSavePosition } from './position';
 import type { ElenaDataPull } from './data-pull';
+import { victorPrePublishReview, applyVictorEdit, type DeskArticle } from '@/lib/automation/generate-desk';
 
 const PERSONA_ID = 'elena-voss';
 
 // Shared calendar — same source of truth as should-write.ts
+// Extend quarterly. Verify: federalreserve.gov/monetarypolicy/fomccalendars.htm
 export const HIGH_PRIORITY_DATES: Record<string, string> = {
-  '2025-06-11': 'CPI Release',
-  '2025-06-12': 'FOMC Rate Decision',
-  '2025-06-18': 'FOMC Minutes',
-  '2025-06-27': 'PCE Release',
-  '2025-07-04': 'NFP Release',
-  '2025-07-09': 'CPI Release',
-  '2025-07-16': 'FOMC Minutes',
-  '2025-07-30': 'FOMC Rate Decision',
-  '2025-08-01': 'NFP Release',
-  '2025-08-13': 'CPI Release',
-  '2025-08-22': 'PCE Release',
-  '2025-09-05': 'NFP Release',
-  '2025-09-10': 'CPI Release',
-  '2025-09-17': 'FOMC Rate Decision',
-  '2025-09-26': 'PCE Release',
-  '2026-01-29': 'FOMC Rate Decision',
-  '2026-02-11': 'CPI Release',
-  '2026-02-27': 'PCE Release',
-  '2026-03-18': 'FOMC Rate Decision',
-  '2026-04-10': 'CPI Release',
-  '2026-05-06': 'FOMC Rate Decision',
-  '2026-06-05': 'NFP Release',
-  '2026-06-10': 'CPI Release',
-  '2026-06-17': 'FOMC Rate Decision',
+  // ── June 2026 ──
+  '2026-06-11': 'CPI Release',
+  '2026-06-18': 'FOMC Rate Decision',
+  '2026-06-26': 'PCE Release',
+  // ── July 2026 ──
+  '2026-07-02': 'NFP Release',
+  '2026-07-09': 'FOMC Minutes',
+  '2026-07-14': 'CPI Release',
+  '2026-07-30': 'FOMC Rate Decision',
+  '2026-07-31': 'PCE Release',
+  // ── August 2026 ──
+  '2026-08-07': 'NFP Release',
+  '2026-08-13': 'CPI Release',
+  '2026-08-20': 'FOMC Minutes',
+  '2026-08-28': 'PCE Release',
+  // ── September 2026 ──
+  '2026-09-04': 'NFP Release',
+  '2026-09-10': 'CPI Release',
+  '2026-09-17': 'FOMC Rate Decision',
+  '2026-09-25': 'PCE Release',
+  // ── October 2026 ──
+  '2026-10-02': 'NFP Release',
+  '2026-10-08': 'FOMC Minutes',
+  '2026-10-14': 'CPI Release',
+  '2026-10-29': 'FOMC Rate Decision',
+  '2026-10-30': 'PCE Release',
+  // ── November 2026 ──
+  '2026-11-06': 'NFP Release',
+  '2026-11-12': 'CPI Release',
+  '2026-11-19': 'FOMC Minutes',
+  '2026-11-25': 'PCE Release',
+  // ── December 2026 ──
+  '2026-12-04': 'NFP Release',
+  '2026-12-10': 'CPI Release + FOMC Rate Decision',
+  '2026-12-24': 'PCE Release',
 };
 
 export type SelfWorkType = 'bootstrap' | 'weekly_preview' | 'weekly_summary' | 'event_preview';
@@ -112,6 +125,37 @@ export async function executeSelfWork(
     case 'event_preview':
       article = await generateEventPreview(data, task.eventName!);
       break;
+  }
+
+  // Victor pre-publish review for all non-bootstrap articles
+  if (task.type !== 'bootstrap') {
+    const db = supabaseAdmin();
+    const { data: directives } = await db.from('editorial_directives')
+      .select('directive')
+      .eq('persona_id', PERSONA_ID)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+      .limit(1);
+    const activeDirective = directives?.[0]?.directive ?? null;
+
+    const victorDecision = await victorPrePublishReview({
+      article: article as DeskArticle,
+      personaId: PERSONA_ID,
+      activeDirective,
+      generationType: 'self_work',
+    });
+
+    if (victorDecision.decision === 'block') {
+      return {
+        wrote: false,
+        type: task.type,
+        reasoning: `Victor blocked: ${victorDecision.reason}`,
+      };
+    }
+
+    if (victorDecision.decision === 'edit' && victorDecision.edit_instruction) {
+      article = await applyVictorEdit(article as DeskArticle, PERSONA_ID, victorDecision.edit_instruction) as PublishableArticle;
+    }
   }
 
   const { slug, id } = await publishArticleToSanity(article, PERSONA_ID);
