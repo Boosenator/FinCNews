@@ -198,11 +198,44 @@ export function callClaude(body: {
   });
 }
 
+// Claude sometimes emits raw control characters (literal newlines/tabs) inside
+// JSON string values, which is invalid per the JSON spec. Escape any control
+// character found between unescaped quotes before parsing.
+function sanitizeJsonControlChars(raw: string): string {
+  let out = '';
+  let inString = false;
+  let escaped = false;
+  for (const ch of raw) {
+    if (inString && !escaped && /[\x00-\x1f]/.test(ch)) {
+      switch (ch) {
+        case '\n': out += '\\n'; break;
+        case '\r': out += '\\r'; break;
+        case '\t': out += '\\t'; break;
+        default: out += ' ';
+      }
+      continue;
+    }
+    out += ch;
+    if (escaped) {
+      escaped = false;
+    } else if (ch === '\\') {
+      escaped = true;
+    } else if (ch === '"') {
+      inString = !inString;
+    }
+  }
+  return out;
+}
+
 export async function parseClaudeJson<T>(res: Response): Promise<T> {
   if (!res.ok) throw new Error(`Claude API ${res.status}: ${await res.text()}`);
   const json = await res.json() as { content: { text: string }[] };
   const text = json.content[0]?.text ?? '';
   const match = text.match(/\{[\s\S]*\}/);
   if (!match) throw new Error('Claude returned no JSON');
-  return JSON.parse(match[0]) as T;
+  try {
+    return JSON.parse(match[0]) as T;
+  } catch {
+    return JSON.parse(sanitizeJsonControlChars(match[0])) as T;
+  }
 }

@@ -298,13 +298,29 @@ export default function QueueTab() {
                         </div>
                       )}
                       {activeStatus === "error" && (
-                        <button
-                          onClick={() => reject(item.id)}
-                          disabled={busy}
-                          className="rounded border border-white/[0.06] px-2.5 py-1 text-[11px] text-zinc-500 transition hover:border-red-500/20 hover:text-red-400"
-                        >
-                          Remove
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => publishNow(item.id)}
+                            disabled={busy}
+                            title="Retry"
+                            className="rounded border border-emerald-500/20 bg-emerald-500/5 px-2.5 py-1 text-[11px] font-semibold text-emerald-400 transition hover:bg-emerald-500/15 disabled:cursor-wait disabled:opacity-40"
+                          >
+                            {isPublishing ? (
+                              <span className="flex items-center gap-1">
+                                <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border border-current border-t-transparent" />
+                                Retrying…
+                              </span>
+                            ) : "↻ Retry"}
+                          </button>
+                          <button
+                            onClick={() => reject(item.id)}
+                            disabled={busy}
+                            title="Remove"
+                            className="rounded border border-white/[0.06] px-2.5 py-1 text-[11px] text-zinc-500 transition hover:border-red-500/20 hover:text-red-400"
+                          >
+                            {isRejecting ? "…" : "✕"}
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>
