@@ -236,6 +236,13 @@ export async function parseClaudeJson<T>(res: Response): Promise<T> {
   try {
     return JSON.parse(match[0]) as T;
   } catch {
-    return JSON.parse(sanitizeJsonControlChars(match[0])) as T;
+    // fall through
   }
+  try {
+    return JSON.parse(sanitizeJsonControlChars(match[0])) as T;
+  } catch {
+    // fall through
+  }
+  const { jsonrepair } = await import('jsonrepair');
+  return JSON.parse(jsonrepair(sanitizeJsonControlChars(match[0]))) as T;
 }
