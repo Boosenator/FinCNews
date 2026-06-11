@@ -14,8 +14,20 @@ type InboundWebhookPayload = {
 type ResendReceivedEmail = {
   id: string; from?: string; to?: string[];
   subject?: string; html?: string; text?: string;
-  attachments?: Array<{ filename?: string; content?: string; contentType?: string }>;
+  // GET /emails/receiving/{id} only returns attachment metadata — no content.
+  // Actual bytes must be fetched per-attachment via the signed download_url.
+  attachments?: Array<{ id: string; filename: string | null; content_type: string; content_id: string | null }>;
 };
+
+async function fetchAttachmentContent(resend: Resend, emailId: string, attachmentId: string): Promise<string | null> {
+  const { data, error } = await resend.emails.receiving.attachments.get({ emailId, id: attachmentId });
+  if (error || !data?.download_url) return null;
+
+  const fileRes = await fetch(data.download_url);
+  if (!fileRes.ok) return null;
+
+  return Buffer.from(await fileRes.arrayBuffer()).toString("base64");
+}
 
 type EmailRoute = {
   id: string; recipient: string; forward_to: string;
@@ -108,9 +120,20 @@ export async function POST(req: NextRequest) {
   const resend   = new Resend(process.env.RESEND_API_KEY);
   const fwdSubject = formatSubject(mailbox, email.subject ?? subject);
 
-  const attachments = (email.attachments ?? [])
-    .filter((a) => a.content)
-    .map((a) => ({ filename: a.filename, content: a.content as string, contentType: a.contentType }));
+  const attachments = (
+    await Promise.all(
+      (email.attachments ?? []).map(async (a) => {
+        const content = await fetchAttachmentContent(resend, emailId, a.id);
+        if (!content) return null;
+        return {
+          filename: a.filename ?? `attachment-${a.id}`,
+          content,
+          contentType: a.content_type,
+          ...(a.content_id ? { contentId: a.content_id } : {}),
+        };
+      }),
+    )
+  ).filter((a): a is NonNullable<typeof a> => a !== null);
 
   const { error } = await resend.emails.send({
     from:    `FinCNews Inbound <tech@${DOMAIN}>`,
