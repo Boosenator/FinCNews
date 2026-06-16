@@ -276,15 +276,80 @@ Return the corrected article as valid JSON in the exact same format.`;
   }
 }
 
+// ── Victor Kane review helpers ────────────────────────────────────────────────
+
+const LEAKED_QA_PATTERNS = [
+  /\[EDITOR FLAG:/i,
+  /Editor'?s?\s+[Nn]ote:/i,
+  /\[BASELINE VALUE REQUIRED/i,
+  /\[σ-distance requires/i,
+  /\[σ-distance requires/i,
+  /\[verify price before publish/i,
+  /\(verify against[\s\S]{0,60}before publication\)/i,
+  /Editorial Hold\s*[—–\-]/i,
+  /Note to editor:/i,
+  /verify exact figures before publication/i,
+  /live\s+\S{0,30}\s+data unavailable at publish/i,
+  /pending (?:source|final publication) verification/i,
+  /will be appended\b/i,
+  /requires? (?:source|live) (?:confirmation|verification) before publication/i,
+];
+
+function detectLeakedQaText(body: string): string | null {
+  for (const p of LEAKED_QA_PATTERNS) {
+    const m = body.match(p);
+    if (m) return `Leaked QA annotation detected: "${m[0].slice(0, 80)}"`;
+  }
+  return null;
+}
+
+export function isHardBlock(reason: string): boolean {
+  return reason.startsWith('Leaked QA')
+    || reason.startsWith('Duplicate detected')
+    || reason.startsWith('Victor review unavailable');
+}
+
+const STOP_WORDS = new Set(['the','and','for','this','with','that','from','into','about','are','was','has','its','but','not','can','will','have','been','when','they','their']);
+
+function titleIsDuplicate(newTitle: string, recentTitles: string[]): string | null {
+  const tokenize = (t: string) =>
+    t.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 3 && !STOP_WORDS.has(w));
+
+  const newTokens = new Set(tokenize(newTitle));
+  for (const recent of recentTitles) {
+    const overlap = tokenize(recent).filter(w => newTokens.has(w)).length;
+    if (overlap >= 3) return recent;
+  }
+  return null;
+}
+
 // ── Step 8: Victor Kane pre-publish review ────────────────────────────────────
 
 export async function victorPrePublishReview(opts: {
-  article:         DeskArticle;
-  personaId:       string;
-  activeDirective: string | null;
-  generationType:  'rss' | 'continuation' | 'self_work';
+  article:             DeskArticle;
+  personaId:           string;
+  activeDirective:     string | null;
+  generationType:      'rss' | 'continuation' | 'self_work';
+  recentArticleTitles?: string[];
 }): Promise<VictorDecision> {
+  // Pre-scan: block immediately if article leaks internal QA/editorial text
+  const leakReason = detectLeakedQaText(opts.article.body);
+  if (leakReason) {
+    return { decision: 'block', edit_instruction: null, reason: `Leaked QA annotation detected — blocked before Victor review: ${leakReason}`, directive_followed: false };
+  }
+
+  // Pre-scan: block if title closely matches recent articles
+  if (opts.recentArticleTitles?.length) {
+    const dupTitle = titleIsDuplicate(opts.article.title, opts.recentArticleTitles);
+    if (dupTitle) {
+      return { decision: 'block', edit_instruction: null, reason: `Duplicate detected — closely matches recent article: "${dupTitle.slice(0, 100)}"`, directive_followed: true };
+    }
+  }
+
   const personaName = PERSONA_NAME[opts.personaId] ?? opts.personaId;
+  const bodyPreview = opts.article.body.length > 4000
+    ? opts.article.body.slice(0, 4000) + '…'
+    : opts.article.body;
 
   const prompt = `You are Victor Kane, Chief Editor of finc.news.
 20 years financial journalism — Reuters, Bloomberg Opinion. You manage AI analyst agents.
@@ -294,7 +359,7 @@ PRE-PUBLICATION REVIEW
 ARTICLE:
 Title: "${opts.article.title}"
 Excerpt: "${opts.article.excerpt}"
-Body: "${opts.article.body.slice(0, 900)}..."
+Body: "${bodyPreview}"
 
 AUTHOR: ${personaName}
 TYPE: ${opts.generationType === 'continuation' ? 'Continuation of previous story' : opts.generationType === 'self_work' ? 'Self-initiated article (no RSS source)' : 'New RSS article'}
@@ -305,7 +370,7 @@ ${opts.activeDirective ?? 'None currently active'}
 YOUR DECISION:
 Approve this for immediate publication, request ONE specific edit, or block it.
 
-block ONLY if: fabricated numbers/facts not in source material, or obvious duplicate.
+block ONLY if: fabricated numbers/facts that cannot be corrected with a rewrite.
 edit for: directive not followed, voice breaks, weak conclusion, missing critical context.
 approve if: ready to publish as-is.
 
@@ -318,10 +383,16 @@ Return ONLY valid JSON:
 }`;
 
   try {
-    const res = await callClaude({ model: 'claude-sonnet-4-6', max_tokens: 250, messages: [{ role: 'user', content: prompt }] });
+    let res: Response;
+    try {
+      res = await callClaude({ model: 'claude-sonnet-4-6', max_tokens: 250, messages: [{ role: 'user', content: prompt }] });
+    } catch {
+      await new Promise(r => setTimeout(r, 2000));
+      res = await callClaude({ model: 'claude-sonnet-4-6', max_tokens: 250, messages: [{ role: 'user', content: prompt }] });
+    }
     return await parseClaudeJson<VictorDecision>(res);
   } catch {
-    return { decision: 'approve', edit_instruction: null, reason: 'Victor review failed — auto-approved', directive_followed: true };
+    return { decision: 'block', edit_instruction: null, reason: 'Victor review unavailable — blocked pending manual review', directive_followed: false };
   }
 }
 
@@ -360,21 +431,28 @@ export async function generateDeskArticle(opts: {
   category:       string;
   articleType:    'new' | 'continuation';
   continuationOf: string | null;
+  isBreaking?:    boolean;
 }): Promise<DeskGenerateResult> {
   const steps: DeskGenerateResult['steps'] = [];
   const ctx     = await loadPersonaContext(opts.personaId);
   const genType: 'rss' | 'continuation' = opts.articleType === 'continuation' ? 'continuation' : 'rss';
 
-  // 7a: Angle discovery
+  // 7a: Angle discovery — skipped for breaking news (use headline directly to save time)
   let t = Date.now();
-  const angle = await discoverAngle({
-    item:           opts.item,
-    personaId:      opts.personaId,
-    recentArticles: ctx.recentArticles,
-    articleType:    opts.articleType,
-    continuationOf: opts.continuationOf,
-  });
-  steps.push({ name: 'angle_discovery', status: 'ok', durationMs: Date.now() - t, note: angle.slice(0, 80) });
+  let angle: string;
+  if (opts.isBreaking) {
+    angle = opts.item.title;
+    steps.push({ name: 'angle_discovery', status: 'skip', durationMs: 0, note: 'breaking — using headline as angle' });
+  } else {
+    angle = await discoverAngle({
+      item:           opts.item,
+      personaId:      opts.personaId,
+      recentArticles: ctx.recentArticles,
+      articleType:    opts.articleType,
+      continuationOf: opts.continuationOf,
+    });
+    steps.push({ name: 'angle_discovery', status: 'ok', durationMs: Date.now() - t, note: angle.slice(0, 80) });
+  }
 
   // 7b: Draft
   t = Date.now();
@@ -389,12 +467,14 @@ export async function generateDeskArticle(opts: {
   });
   steps.push({ name: 'draft', status: 'ok', durationMs: Date.now() - t, note: `"${article.title.slice(0, 60)}"` });
 
-  // 7c: Critique
-  t = Date.now();
-  const beforeCritique = article.title;
-  article = await critiqueAndFix(article, opts.personaId);
-  const critiqued = article.title !== beforeCritique;
-  steps.push({ name: 'critique', status: 'ok', durationMs: Date.now() - t, note: critiqued ? 'revised' : 'approved as-is' });
+  // 7c: Critique — skipped for breaking news
+  if (!opts.isBreaking) {
+    t = Date.now();
+    const beforeCritique = article.title;
+    article = await critiqueAndFix(article, opts.personaId);
+    const critiqued = article.title !== beforeCritique;
+    steps.push({ name: 'critique', status: 'ok', durationMs: Date.now() - t, note: critiqued ? 'revised' : 'approved as-is' });
+  }
 
   // 8: Victor pre-publish
   t = Date.now();
@@ -412,6 +492,31 @@ export async function generateDeskArticle(opts: {
     article = await applyVictorEdit(article, opts.personaId, victorDecision.edit_instruction);
     victorDecision = { ...victorDecision, decision: 'approve' };
     steps.push({ name: 'victor_edit', status: 'ok', durationMs: Date.now() - t, note: 'applied' });
+  }
+
+  // 8c: Soft block → rewrite attempt (hard blocks from pre-scan are never retried)
+  if (victorDecision.decision === 'block' && !isHardBlock(victorDecision.reason)) {
+    t = Date.now();
+    article = await applyVictorEdit(article, opts.personaId, victorDecision.reason);
+    steps.push({ name: 'victor_rewrite', status: 'ok', durationMs: Date.now() - t, note: 'rewritten from soft block' });
+
+    // One re-review after rewrite — if still blocked, it propagates as final decision
+    t = Date.now();
+    victorDecision = await victorPrePublishReview({
+      article,
+      personaId:       opts.personaId,
+      activeDirective: ctx.activeDirective,
+      generationType:  genType,
+    });
+    steps.push({ name: 'victor_recheck', status: 'ok', durationMs: Date.now() - t, note: victorDecision.decision });
+
+    // Apply edit from re-review if needed
+    if (victorDecision.decision === 'edit' && victorDecision.edit_instruction) {
+      t = Date.now();
+      article = await applyVictorEdit(article, opts.personaId, victorDecision.edit_instruction);
+      victorDecision = { ...victorDecision, decision: 'approve' };
+      steps.push({ name: 'victor_edit_2', status: 'ok', durationMs: Date.now() - t, note: 'applied' });
+    }
   }
 
   return { article, victorDecision, steps };

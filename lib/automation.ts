@@ -1025,6 +1025,7 @@ export type CollectResult = {
   itemsAfterKeywords: number;
   itemsAfterDedup: number;
   itemsQueued: number;
+  breakingQueued: number;
   itemsSkipped: number;
   durationMs: number;
   steps: import("@/lib/supabase").PipelineStep[];
@@ -1038,7 +1039,7 @@ export async function runCollect(opts: { minScore?: number } = {}): Promise<Coll
 
   const { data: sources } = await db.from("rss_sources").select("*").eq("enabled", true);
   if (!sources?.length) {
-    return { sourcesChecked: 0, itemsFound: 0, itemsAfterKeywords: 0, itemsAfterDedup: 0, itemsQueued: 0, itemsSkipped: 0, durationMs: Date.now() - start, steps, debug: {} };
+    return { sourcesChecked: 0, itemsFound: 0, itemsAfterKeywords: 0, itemsAfterDedup: 0, itemsQueued: 0, breakingQueued: 0, itemsSkipped: 0, durationMs: Date.now() - start, steps, debug: {} };
   }
 
   type FeedItem = { title?: string; link?: string; pubDate?: string; contentSnippet?: string; sourceCategory: string; sourceName: string };
@@ -1102,7 +1103,7 @@ export async function runCollect(opts: { minScore?: number } = {}): Promise<Coll
   });
 
   if (!fresh.length) {
-    return { sourcesChecked: sources.length, itemsFound: allItems.length, itemsAfterKeywords: 0, itemsAfterDedup: 0, itemsQueued: 0, itemsSkipped: 0, durationMs: Date.now() - start, steps, debug: {} };
+    return { sourcesChecked: sources.length, itemsFound: allItems.length, itemsAfterKeywords: 0, itemsAfterDedup: 0, itemsQueued: 0, breakingQueued: 0, itemsSkipped: 0, durationMs: Date.now() - start, steps, debug: {} };
   }
 
   // ── Step 3: AI Scoring ────────────────────────────────────────────────────
@@ -1193,7 +1194,7 @@ export async function runCollect(opts: { minScore?: number } = {}): Promise<Coll
   });
 
   if (!newItems.length) {
-    return { sourcesChecked: sources.length, itemsFound: allItems.length, itemsAfterKeywords: fresh.length, itemsAfterDedup: 0, itemsQueued: 0, itemsSkipped: fresh.length, durationMs: Date.now() - start, steps, debug: {} };
+    return { sourcesChecked: sources.length, itemsFound: allItems.length, itemsAfterKeywords: fresh.length, itemsAfterDedup: 0, itemsQueued: 0, breakingQueued: 0, itemsSkipped: fresh.length, durationMs: Date.now() - start, steps, debug: {} };
   }
 
   // ── Step 5: Triage (Sonnet batch) ────────────────────────────────────────
@@ -1278,6 +1279,7 @@ export async function runCollect(opts: { minScore?: number } = {}): Promise<Coll
     itemsAfterKeywords: fresh.length,
     itemsAfterDedup: newItems.length,
     itemsQueued: inserted?.length ?? 0,
+    breakingQueued: triageResults.filter((r) => r.urgency === 'breaking').length,
     itemsSkipped: fresh.length - newItems.length,
     durationMs: Date.now() - start,
     steps,
@@ -1363,6 +1365,7 @@ async function processQueueItem(
       category,
       articleType,
       continuationOf: item.continuation_of ?? null,
+      isBreaking:     item.urgency === 'breaking',
     });
 
     // Push desk generation sub-steps into articleSteps

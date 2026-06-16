@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runCollect } from "@/lib/automation";
+import { runCollect, runGenerate } from "@/lib/automation";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getPipelineConfig } from "@/lib/pipeline-config";
 
-export const maxDuration = 30;
+export const maxDuration = 120;
 
 function isAuthed(req: NextRequest) {
   return process.env.CRON_SECRET && req.headers.get("authorization") === `Bearer ${process.env.CRON_SECRET}`;
@@ -24,6 +24,13 @@ async function handle(req: NextRequest) {
   try {
     const result = await runCollect({ minScore: config.min_score });
 
+    // Trigger immediate generation when breaking news was found — don't wait for hourly cron
+    let breakingGenerated = 0;
+    if (result.breakingQueued > 0 && config.generate_enabled) {
+      const genResult = await runGenerate(result.breakingQueued);
+      breakingGenerated = genResult.articlesPublished;
+    }
+
     await db.from("run_logs").update({
       run_type: "collect",
       status: "success",
@@ -36,7 +43,7 @@ async function handle(req: NextRequest) {
       details: [],
     }).eq("id", log.id);
 
-    return NextResponse.json({ ok: true, ...result });
+    return NextResponse.json({ ok: true, ...result, breakingGenerated });
   } catch (e) {
     await db.from("run_logs").update({
       status: "error",

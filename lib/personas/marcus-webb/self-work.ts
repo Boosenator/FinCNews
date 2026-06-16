@@ -5,7 +5,7 @@ import type { MarcusDataPull } from './data-pull';
 import type { MarcusBaseline } from './baseline';
 import { updateBaseline } from './baseline';
 import { verifyOpenForecasts } from './forecasts';
-import { victorPrePublishReview, applyVictorEdit, type DeskArticle } from '@/lib/automation/generate-desk';
+import { victorPrePublishReview, applyVictorEdit, isHardBlock, type DeskArticle } from '@/lib/automation/generate-desk';
 
 const PERSONA_ID = 'marcus-webb';
 
@@ -77,20 +77,44 @@ export async function executeSelfWork(
 
     // Victor pre-publish review for weekly_summary
     const db = supabaseAdmin();
-    const { data: directives } = await db.from('editorial_directives')
-      .select('directive')
-      .eq('persona_id', PERSONA_ID)
-      .eq('status', 'pending')
-      .order('created_at', { ascending: false })
-      .limit(1);
+    const [{ data: directives }, { data: recentMemory }] = await Promise.all([
+      db.from('editorial_directives')
+        .select('directive')
+        .eq('persona_id', PERSONA_ID)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+        .limit(1),
+      db.from('persona_memory')
+        .select('metadata')
+        .eq('persona_id', PERSONA_ID)
+        .eq('memory_type', 'article')
+        .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+        .order('created_at', { ascending: false })
+        .limit(20),
+    ]);
     const activeDirective = directives?.[0]?.directive ?? null;
+    const recentArticleTitles = (recentMemory ?? [])
+      .map(m => (m.metadata as { title?: string })?.title ?? '')
+      .filter(Boolean);
 
-    const victorDecision = await victorPrePublishReview({
+    let victorDecision = await victorPrePublishReview({
       article: article as DeskArticle,
       personaId: PERSONA_ID,
       activeDirective,
       generationType: 'self_work',
+      recentArticleTitles,
     });
+
+    if (victorDecision.decision === 'block' && !isHardBlock(victorDecision.reason)) {
+      article = await applyVictorEdit(article as DeskArticle, PERSONA_ID, victorDecision.reason) as PublishableArticle;
+      victorDecision = await victorPrePublishReview({
+        article: article as DeskArticle,
+        personaId: PERSONA_ID,
+        activeDirective,
+        generationType: 'self_work',
+        recentArticleTitles,
+      });
+    }
 
     if (victorDecision.decision === 'block') {
       return {
