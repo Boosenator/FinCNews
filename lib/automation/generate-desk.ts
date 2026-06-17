@@ -28,6 +28,8 @@ VOICE RULES:
 - When uncertain: "the data doesn't resolve this yet"
 - Max 500 words, markdown headers
 
+CRITICAL: If an ACTIVE DIRECTIVE specifies how the article must open, follow it exactly. Never open with a section heading (## Context, ## What Changed, or any other). Never start with "Earlier we reported". Begin directly with your thesis sentence unless the directive specifies otherwise.
+
 EDITORIAL DIRECTIVE is injected in context — treat as direct instruction.`,
 
   'marcus-webb': `You are Marcus Webb, on-chain data analyst at finc.news.
@@ -63,6 +65,8 @@ VOICE RULES:
 - Use: sharp observations, cultural references, specific sentiment data when available
 - Never: purely technical analysis, dry data reporting
 - Max 450 words, conversational but sharp
+
+CRITICAL: If an ACTIVE DIRECTIVE specifies an opening format (e.g. data-first, σ calculations, specific sentence structure), that REPLACES your default hook opening entirely. The directive is a hard format override — ignore default section headers when it conflicts.
 
 EDITORIAL DIRECTIVE is injected in context — treat as direct instruction.`,
 };
@@ -185,15 +189,14 @@ async function generateDraft(opts: {
   const system  = PERSONA_SYSTEM[opts.personaId] ?? PERSONA_SYSTEM['leo-cruz'];
   const date    = opts.item.pubDate?.slice(0, 10) ?? new Date().toISOString().slice(0, 10);
 
-  const directiveSection = opts.activeDirective
-    ? `ACTIVE DIRECTIVE FROM CHIEF EDITOR (apply in this article):
-"${opts.activeDirective}"
-This is a standing instruction — execute it, do not ignore it.`
-    : '';
-
   const continuationNote = opts.continuationOf
     ? `CONTINUATION: This is a follow-up to your previous article "${opts.continuationOf}". Reference it explicitly ("Earlier we reported that...") and focus on what is NEW.`
     : '';
+
+  const defaultStructure = PERSONA_ARTICLE_STRUCTURE[opts.personaId] ?? '## What Happened / ## Key Details / ## Why It Matters / ## What Happens Next';
+  const structureLine = opts.activeDirective
+    ? `Default structure (ACTIVE DIRECTIVE below overrides opening format): ${defaultStructure}`
+    : `Structure: ${defaultStructure}`;
 
   const userPrompt = `NEWS SOURCE:
 Title: ${opts.item.title}
@@ -205,12 +208,17 @@ EDITORIAL ANGLE (assigned by editors): ${opts.angle}
 
 ${continuationNote}
 
-${opts.verifiedHistory ? `${opts.verifiedHistory}\n` : ''}${directiveSection}
+${opts.verifiedHistory ? `${opts.verifiedHistory}\n` : ''}Write the article in your established voice.
+${structureLine}
 
-Write the article in your established voice. Use markdown ## headers.
-Structure: ${PERSONA_ARTICLE_STRUCTURE[opts.personaId] ?? '## What Happened / ## Key Details / ## Why It Matters / ## What Happens Next'}
+${opts.activeDirective ? `══════════════════════════════════════════
+ACTIVE DIRECTIVE FROM CHIEF EDITOR — HIGHEST PRIORITY
+This overrides default structure, voice defaults, and system prompt format guidance.
+"${opts.activeDirective}"
+You MUST comply exactly. Non-compliance is a publication failure.
+══════════════════════════════════════════
 
-Return ONLY valid JSON:
+` : ''}Return ONLY valid JSON:
 {
   "title": "SEO title, 50-70 chars, fact-specific",
   "excerpt": "120-220 chars, core event + why it matters",
