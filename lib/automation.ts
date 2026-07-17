@@ -4,6 +4,7 @@ import { BASE_URL } from "@/lib/config";
 import { sanityAdmin } from "@/lib/sanity";
 import { triageItems, type TriageInput } from "@/lib/automation/triage";
 import { generateDeskArticle } from "@/lib/automation/generate-desk";
+import { getPersonaArticleCountsToday, DAILY_ARTICLE_CAP } from "@/lib/automation/daily-cap";
 import { insertCoverageLog, getRecentCoverageForTriage } from "@/lib/automation/coverage-log";
 import { PERSONA_NAME, PERSONA_AVATAR, stripMarkdown } from "@/lib/personas/shared";
 
@@ -1586,14 +1587,41 @@ export async function runGenerate(maxArticles = 2): Promise<GenerateResult> {
   // Dynamic maxArticles: breaking items always run; standard capped at maxArticles
   const breakingCount = sorted.filter((c) => c.urgency === 'breaking').length;
   const dynamicMax    = breakingCount > maxArticles ? breakingCount : maxArticles;
-  const items         = sorted.slice(0, dynamicMax);
 
-  if (!items?.length) {
-    return { queueSize: 0, articlesPublished: 0, durationMs: Date.now() - start, details: [], steps: [] };
+  // Daily cap: max DAILY_ARTICLE_CAP published articles per persona per day.
+  // Breaking bypasses the cap; capped standard items stay pending and expire naturally.
+  const personaCounts = await getPersonaArticleCountsToday(db);
+  const items: typeof sorted = [];
+  let cappedSkipped = 0;
+  for (const c of sorted) {
+    if (items.length >= dynamicMax) break;
+    const isBreaking = c.urgency === 'breaking';
+    const personaId  = c.assigned_persona ?? 'leo-cruz';
+    if (!isBreaking && (personaCounts[personaId] ?? 0) >= DAILY_ARTICLE_CAP) {
+      cappedSkipped++;
+      continue;
+    }
+    items.push(c);
+    personaCounts[personaId] = (personaCounts[personaId] ?? 0) + 1;
   }
 
   const details: DetailEntry[] = [];
   const steps: import("@/lib/supabase").PipelineStep[] = [];
+
+  if (cappedSkipped > 0) {
+    steps.push({
+      name:      "daily_cap",
+      status:    "ok",
+      durationMs: 0,
+      in:        sorted.length,
+      out:       items.length,
+      note:      `${cappedSkipped} item(s) held — persona daily cap ${DAILY_ARTICLE_CAP} reached`,
+    });
+  }
+
+  if (!items?.length) {
+    return { queueSize: 0, articlesPublished: 0, durationMs: Date.now() - start, details: [], steps };
+  }
 
   for (const item of items) {
     await db.from("article_queue").update({ status: "processing" }).eq("id", item.id);

@@ -13,6 +13,7 @@ import { extractAndSaveForecast, getForecastContext } from './forecasts';
 import { decideSelfWork, executeSelfWork, type SelfWorkResult } from './self-work';
 import { extractAndSavePosition } from '../elena-voss/position'; // reuse same pattern
 import { buildVerifiedHistory } from '@/lib/personas/verified-history';
+import { isPersonaAtDailyCap, DAILY_ARTICLE_CAP } from '@/lib/automation/daily-cap';
 
 const PERSONA_ID = 'marcus-webb';
 
@@ -25,6 +26,7 @@ export interface RunResult {
   selfWork?:         SelfWorkResult;
   skippedInactive?:  boolean;
   skippedAlreadyWrote?: boolean;
+  skippedDailyCap?:  boolean;
   error?:            string;
 }
 
@@ -35,6 +37,11 @@ export async function runMarcusWebb(): Promise<RunResult> {
   const { data: persona } = await supabase.from('personas').select('is_active').eq('id', PERSONA_ID).single();
   if (!(persona as { is_active: boolean } | null)?.is_active) {
     return { wrote: false, reasoning: 'Persona is inactive', skippedInactive: true };
+  }
+
+  // 0a2. Daily cap — no LLM calls if already at the limit
+  if (await isPersonaAtDailyCap(supabase, PERSONA_ID)) {
+    return { wrote: false, reasoning: `Daily article cap reached (${DAILY_ARTICLE_CAP}/day) — run skipped`, skippedDailyCap: true };
   }
 
   // 0b. Second chance check: don't write twice in one day

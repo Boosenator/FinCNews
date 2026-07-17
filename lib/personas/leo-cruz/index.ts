@@ -11,6 +11,7 @@ import { shouldWrite } from './should-write';
 import { generateLeoArticle } from './generate';
 import { decideSelfWork, executeSelfWork, type SelfWorkResult } from './self-work';
 import { buildVerifiedHistory } from '@/lib/personas/verified-history';
+import { isPersonaAtDailyCap, DAILY_ARTICLE_CAP } from '@/lib/automation/daily-cap';
 
 const PERSONA_ID = 'leo-cruz';
 
@@ -22,6 +23,7 @@ export interface RunResult {
   articleCategory?: string;
   selfWork?:        SelfWorkResult;
   skippedInactive?: boolean;
+  skippedDailyCap?: boolean;
   error?:           string;
 }
 
@@ -37,6 +39,11 @@ export async function runLeoCruz(): Promise<RunResult> {
 
   if (!(persona as { is_active: boolean } | null)?.is_active) {
     return { wrote: false, reasoning: 'Persona is inactive', skippedInactive: true };
+  }
+
+  // 0b. Daily cap — no LLM calls if already at the limit
+  if (await isPersonaAtDailyCap(supabase, PERSONA_ID)) {
+    return { wrote: false, reasoning: `Daily article cap reached (${DAILY_ARTICLE_CAP}/day) — run skipped`, skippedDailyCap: true };
   }
 
   // 1. Pull data

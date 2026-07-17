@@ -10,6 +10,7 @@ import { decideSelfWork, executeSelfWork, type SelfWorkResult } from './self-wor
 import { extractAndSaveForecast, getOpenForecastsContext } from './forecasts';
 import { extractAndSavePosition, getCurrentPosition } from './position';
 import { buildVerifiedHistory } from '@/lib/personas/verified-history';
+import { isPersonaAtDailyCap, DAILY_ARTICLE_CAP } from '@/lib/automation/daily-cap';
 
 const PERSONA_ID = 'elena-voss';
 
@@ -21,6 +22,7 @@ export interface RunResult {
   articleCategory?: string;
   selfWork?: SelfWorkResult;
   skippedInactive?: boolean;
+  skippedDailyCap?: boolean;
   error?: string;
 }
 
@@ -36,6 +38,11 @@ export async function runElenaVoss(): Promise<RunResult> {
 
   if (!(persona as { is_active: boolean } | null)?.is_active) {
     return { wrote: false, reasoning: 'Persona is inactive', skippedInactive: true };
+  }
+
+  // 0b. Daily cap — no LLM calls if already at the limit
+  if (await isPersonaAtDailyCap(supabase, PERSONA_ID)) {
+    return { wrote: false, reasoning: `Daily article cap reached (${DAILY_ARTICLE_CAP}/day) — run skipped`, skippedDailyCap: true };
   }
 
   // 1. Pull live macro data
