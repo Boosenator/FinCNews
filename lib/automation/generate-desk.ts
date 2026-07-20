@@ -440,6 +440,7 @@ export async function generateDeskArticle(opts: {
   articleType:    'new' | 'continuation';
   continuationOf: string | null;
   isBreaking?:    boolean;
+  recentTitles?:  string[];
 }): Promise<DeskGenerateResult> {
   const steps: DeskGenerateResult['steps'] = [];
   const ctx     = await loadPersonaContext(opts.personaId);
@@ -485,12 +486,16 @@ export async function generateDeskArticle(opts: {
   }
 
   // 8: Victor pre-publish
+  // Title dedup pre-scan only for new articles — continuations legitimately
+  // overlap the original story's title.
+  const dedupTitles = opts.articleType === 'new' ? opts.recentTitles : undefined;
   t = Date.now();
   let victorDecision = await victorPrePublishReview({
     article,
-    personaId:       opts.personaId,
-    activeDirective: ctx.activeDirective,
-    generationType:  genType,
+    personaId:           opts.personaId,
+    activeDirective:     ctx.activeDirective,
+    generationType:      genType,
+    recentArticleTitles: dedupTitles,
   });
   steps.push({ name: 'victor_review', status: 'ok', durationMs: Date.now() - t, note: `${victorDecision.decision}${victorDecision.edit_instruction ? ` — "${victorDecision.edit_instruction.slice(0, 60)}"` : ''}` });
 
@@ -512,9 +517,10 @@ export async function generateDeskArticle(opts: {
     t = Date.now();
     victorDecision = await victorPrePublishReview({
       article,
-      personaId:       opts.personaId,
-      activeDirective: ctx.activeDirective,
-      generationType:  genType,
+      personaId:           opts.personaId,
+      activeDirective:     ctx.activeDirective,
+      generationType:      genType,
+      recentArticleTitles: dedupTitles,
     });
     steps.push({ name: 'victor_recheck', status: 'ok', durationMs: Date.now() - t, note: victorDecision.decision });
 

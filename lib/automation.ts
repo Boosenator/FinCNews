@@ -1355,6 +1355,16 @@ async function processQueueItem(
     const personaId   = item.assigned_persona ?? 'leo-cruz';
     const articleType = (item.article_type === 'continuation' ? 'continuation' : 'new') as 'new' | 'continuation';
 
+    // Recent titles (48h) for Victor's duplicate pre-scan — catches same-story
+    // re-publications that slip past the 0.35 similarity check above
+    const { data: recentPublished } = await db
+      .from("processed_urls")
+      .select("title")
+      .gte("published_at", new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString())
+      .not("title", "is", null)
+      .limit(60);
+    const recentTitles = (recentPublished ?? []).map((r: { title: string }) => r.title);
+
     const { article: deskArticle, victorDecision, steps: deskSteps } = await generateDeskArticle({
       item: {
         title:   item.title ?? "Untitled",
@@ -1367,6 +1377,7 @@ async function processQueueItem(
       articleType,
       continuationOf: item.continuation_of ?? null,
       isBreaking:     item.urgency === 'breaking',
+      recentTitles,
     });
 
     // Push desk generation sub-steps into articleSteps
