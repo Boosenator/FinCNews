@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { sanityAdmin } from "@/lib/sanity";
 import type { TelegraphNode } from "@/lib/telegraph";
 import { isAuthedOrN8n } from "@/lib/auth";
+import { TELEGRAM_CHANNEL_LABEL, TELEGRAM_CHANNEL_URL } from "@/lib/config";
 
 export const maxDuration = 300;
 
@@ -10,7 +11,29 @@ const NEW = "finc.news";
 
 type MigrateResult = { path: string; status: string };
 
-function patchNodes(nodes: TelegraphNode[]): { nodes: TelegraphNode[]; changed: boolean } {
+function hasTelegramChannelLink(nodes: TelegraphNode[]): boolean {
+  return nodes.some((node) => {
+    if (typeof node === "string") return node.includes(TELEGRAM_CHANNEL_URL);
+    if (node.attrs?.href === TELEGRAM_CHANNEL_URL) return true;
+    return node.children ? hasTelegramChannelLink(node.children) : false;
+  });
+}
+
+function telegramCtaNode(): TelegraphNode {
+  return {
+    tag: "p",
+    children: [
+      "For real-time finance and crypto alerts, follow us on Telegram: ",
+      {
+        tag: "a",
+        attrs: { href: TELEGRAM_CHANNEL_URL },
+        children: [TELEGRAM_CHANNEL_LABEL],
+      },
+    ],
+  };
+}
+
+function patchNodes(nodes: TelegraphNode[], appendTelegramCta = true): { nodes: TelegraphNode[]; changed: boolean } {
   let changed = false;
   const patched = nodes.map((node): TelegraphNode => {
     if (typeof node === "string") {
@@ -25,10 +48,14 @@ function patchNodes(nodes: TelegraphNode[]): { nodes: TelegraphNode[]; changed: 
           }),
         )
       : node.attrs;
-    const childResult = node.children ? patchNodes(node.children) : null;
+    const childResult = node.children ? patchNodes(node.children, false) : null;
     if (childResult?.changed) changed = true;
     return { ...node, attrs: newAttrs, children: childResult?.nodes ?? node.children };
   });
+  if (appendTelegramCta && !hasTelegramChannelLink(patched)) {
+    patched.push(telegramCtaNode());
+    changed = true;
+  }
   return { nodes: patched, changed };
 }
 

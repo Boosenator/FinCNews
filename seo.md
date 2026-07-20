@@ -1,259 +1,319 @@
-# FinCNews SEO Master Plan — 2027 Edition
+# FinCNews SEO Plan
 
-> **Context**: Google 2026-2027 = AI Overviews dominate above the fold, E-E-A-T is existential for YMYL finance sites, structured data feeds Gemini citations directly, Core Web Vitals are ranking factors. Zero-click is 65%+ of searches. Win = be the cited source, not just rank #1.
+This document reflects the current FinCNews SEO architecture as of May 31, 2026.
 
----
+FinCNews is a finance and crypto YMYL site. The SEO goal is not only to publish fresh news, but to build crawlable category archives, evergreen topic hubs, strong internal links, and enough editorial trust signals for Google Search, Google News, Discover, and AI answer surfaces.
 
-## The 2027 Paradigm Shift
+## Current SEO Status
 
-Finance is YMYL (Your Money Your Life) — highest scrutiny tier. Google's quality raters evaluate every signal. One bad E-E-A-T signal can suppress the entire domain. Our moat: **speed + AI-generated volume + entity authority**.
+Implemented:
 
-```
-2020s SEO: keyword → rank → click
-2027 SEO:  entity → authority → citation in AI Overview → brand search → click
-```
+- Article pages with `NewsArticle`, `BreadcrumbList`, and `Speakable` JSON-LD
+- Homepage with `WebSite` and `Organization` JSON-LD
+- Topic hub pages with `CollectionPage` and `FAQPage` JSON-LD
+- Canonical URLs on articles, categories, topic hubs, and archive pages
+- Open Graph and Twitter metadata
+- Google News sitemap at `/news-sitemap.xml`
+- Full sitemap at `/sitemap.xml`
+- Category archive pagination, so old articles are reachable through HTML links
+- Topic hub index at `/topics`
+- Topic hub pages at `/topics/{slug}`
+- `/about` and `/editorial-policy` pages
+- Financial disclaimer on article pages
+- Robots rules for admin/API areas
+- Middleware fast 404 for WordPress/PHP probe paths
 
----
+Known gaps:
 
-## Phase 1 — Technical Foundation (Week 1) ✅ IN PROGRESS
+- No named author `Person` schema yet
+- Article OG images still rely mostly on generic/default OG behavior
+- Google Search Console and Publisher Center setup still need manual completion
+- Analytics and monthly SEO audit process need formalization
 
-### 1.1 Structured Data (JSON-LD)
+## Indexation Strategy
 
-| Schema | Page | Status | Why |
-|--------|------|--------|-----|
-| `NewsArticle` | Article | ✅ Done | Feeds Google News + AI Overviews |
-| `BreadcrumbList` | Article | ❌ Missing | SERP breadcrumbs, entity hierarchy |
-| `WebSite` + SearchAction | Root | ❌ Missing | Sitelinks searchbox in SERP |
-| `Organization` | Root | ❌ Missing | Entity establishment, Knowledge Panel |
-| `Speakable` | Article | ❌ Missing | Voice search + AI summaries use this |
-| `FAQPage` | Article (future) | ❌ Missing | Zero-click featured snippets |
-| `Person` (author) | Article | ❌ Missing | E-E-A-T signal |
+Pages should not depend only on `sitemap.xml`. Google should be able to discover important URLs through internal HTML links.
 
-### 1.2 Meta & OG
-- ❌ Homepage H1 missing
-- ❌ Homepage `metadata` export missing
-- ❌ Category pages: no OG/Twitter
-- ❌ Dynamic per-article OG image (article slug page)
-- ❌ X (Twitter) card `creator` tag
+Current crawl paths:
 
-### 1.3 Robots & Crawl
-- ❌ `/api/*`, `/flows`, `/studio` not blocked
-- ❌ Separate Google News sitemap (`/news-sitemap.xml`)
-- ⚠️ Category `lastModified` = always now() (false freshness)
+- Homepage links to latest articles, categories, and selected topic hubs.
+- Category pages link to recent articles.
+- Paginated category archives expose older articles through `/category/page/2`, `/category/page/3`, etc.
+- Topic hubs link to related articles through contextual anchors and sidebar cards.
+- Header and footer link to `/topics`.
+- Sitemap includes article URLs, category URLs, archive URLs, `/topics`, and individual topic hubs.
 
-### 1.4 Core Web Vitals (Vercel + Next.js = already strong)
-- ✅ ISR 60s revalidation
-- ✅ next/image optimization
-- ❌ No `loading="lazy"` on below-fold images explicitly
-- ❌ No `fetchpriority="high"` on hero image
-- ❌ Font preload missing
+Manual request indexing is only useful for priority URLs. It should not be required for every article.
 
----
+Priority URLs for manual indexing:
 
-## Phase 2 — Content Architecture (Month 1)
+- Homepage
+- `/topics`
+- high-value topic hubs such as `/topics/bitcoin`
+- major category pages
+- major evergreen or high-quality news articles
 
-### 2.1 Topic Clusters Strategy
-Don't chase single keywords. Own **topic clusters** — one pillar + satellites.
+## Topic Hubs
 
-```
-Pillar: "Bitcoin ETF" (/crypto/bitcoin-etf-guide)
-  ├── Satellite: "BlackRock IBIT inflows 2026"
-  ├── Satellite: "Bitcoin ETF vs direct BTC"
-  ├── Satellite: "Tax implications Bitcoin ETF"
-  └── Satellite: "Best Bitcoin ETFs ranked"
-        ↓ all link to pillar
-```
+Topic hubs are evergreen authority pages maintained by the editorial agent.
 
-Priority clusters for 2027:
-1. `Bitcoin ETF` — institutional demand narrative
-2. `CLARITY Act` / `Crypto regulation US` — policy content
-3. `Federal Reserve + Bitcoin` — macro-crypto correlation
-4. `Stablecoin yield` — fintech angle
-5. `XRP legal / Ripple` — ongoing high-volume topic
+Current planned topics:
 
-### 2.2 Evergreen Pages (Programmatic SEO)
-Auto-generate from Sanity data:
-- `/crypto/bitcoin` — Bitcoin hub (price history, all articles, key stats)
-- `/crypto/ethereum` — Ethereum hub
-- `/markets/sp500` — S&P 500 hub
-- `/company/coinbase` — Company hubs (earnings, articles, key metrics)
+- Bitcoin
+- Ethereum
+- Crypto ETFs
+- SEC Crypto Regulation
+- Federal Reserve Policy
+- Stablecoins
+- XRP
+- Solana
 
-These pages rank for "what is X" queries and funnel into news articles.
+Topic hub document IDs must be public Sanity IDs:
 
-### 2.3 Internal Linking Rules
-Implement in automation prompt:
-- Every article must link to 2 older articles (`[INTERNAL: topic]` placeholders → resolve in publish pipeline)
-- Category pages link to pillar articles
-- Footer "Most Read" section (static, manually curated quarterly)
-
-### 2.4 Content Cadence
-| Type | Frequency | Source | Goal |
-|------|-----------|--------|------|
-| Breaking news | As it happens (cron) | RSS → Claude Haiku | Volume, freshness |
-| Analysis | 2-3/day (generated) | RSS → Claude Sonnet | Depth, E-E-A-T |
-| Evergreen guides | 1/week (manual) | Research | Longtail, clusters |
-| Price updates | Daily (programmatic) | CoinGecko | "bitcoin price today" |
-
----
-
-## Phase 3 — E-E-A-T (Month 1-2)
-
-Google's financial content quality raters look for:
-
-### 3.1 Author Entity
-- Create `/about` page: FinCNews Editorial team description, methodology, fact-checking policy
-- Create `Person` schema: "FinCNews Editorial" as named entity with credentials
-- Add author byline with photo to every article (even if team photo)
-- Link author to Twitter/X profile (entity signal)
-
-### 3.2 Editorial Standards Page
-Google's quality raters check for: `/about`, `/editorial-policy`, `/corrections`
-```
-/about — who we are, how we generate content, AI disclosure
-/editorial-policy — accuracy standards, source requirements
-/advertise — monetization transparency (required for YMYL trust)
+```text
+topicHub-bitcoin
+topicHub-ethereum
 ```
 
-### 3.3 Financial Disclaimer
-Every article and page footer must have:
-> "FinCNews content is AI-assisted and for informational purposes only. Not financial advice. Always consult a qualified advisor."
+Do not use dotted IDs:
 
-Currently: in T&C only. Needs to be in article JSON-LD and visible on page.
-
-### 3.4 Fact-Checking & Citations
-In Claude prompt: require at least 2 named sources per article.
-Add `sourceUrl` display prominently (already in code — surface it better).
-
----
-
-## Phase 4 — Distribution & Off-Page (Month 2-3)
-
-### 4.1 Google News Inclusion
-- Submit to Google News Publisher Center
-- Requires: `/news-sitemap.xml` with last 2 days of articles
-- Requires: Clear bylines, publication dates, original content signal
-- Payoff: massive traffic spike potential, "Top Stories" carousel
-
-### 4.2 Google Discover
-Discover shows cards to users based on interests, not search queries. Keys:
-- High-quality cover images (we have Pexels ✅)
-- Engaging titles (not clickbait but compelling)
-- Fast page speed (✅)
-- E-E-A-T (phase 3)
-
-### 4.3 Telegram as SEO Flywheel
-```
-Article published → Telegram post → Engagement → Shares → Backlinks
-                                              ↓
-                              Brand searches ("FinCNews bitcoin")
-                                              ↓
-                              Google sees branded demand → trust boost
+```text
+topicHub.bitcoin
 ```
 
-### 4.4 Reddit Strategy (2027: Reddit ranks for everything)
-Manual posting of satellite content to:
-- r/CryptoCurrency (1.5M members)
-- r/Bitcoin (7M members)
-- r/investing
-- r/wallstreetbets (carefully)
+Sanity treats dotted IDs as private paths that require a token, so the public frontend may 404 even when the admin token can see the document.
 
-Link back to article. Reddit links = nofollow but Google trusts Reddit content as signals.
+## Topic Hub Agent
 
-### 4.5 X (Twitter) Presence
-Auto-post article title + link via X API when published.
-X links index fast and appear in Google News results.
+The topic hub system has two agents:
 
-### 4.6 Backlink Strategy
-Target: niche finance aggregators that link to primary sources.
-- CryptoPanic.com — submit RSS
-- CoinSpectator.com — submit feed
-- Feedly curated lists
+- Topic Discovery Agent: suggests new evergreen hub candidates for human approval.
+- Topic Hub Agent: refreshes approved durable evergreen pages.
 
----
+The refresh agent is designed to explain broad topics, not recap recent news.
 
-## Phase 5 — Analytics & Monitoring (Ongoing)
+Schedule:
 
-### 5.1 Google Search Console
-- Submit sitemap: `finc.news/sitemap.xml`
-- Submit news sitemap: `finc.news/news-sitemap.xml`
-- Monitor: Core Web Vitals, crawl errors, manual actions
-- Track: impressions vs clicks per article (CTR optimization)
+- Discovery: `/api/cron/editorial/discovery` at `02:30 UTC`, currently `05:30 Kyiv`
+- Morning: `/api/cron/editorial/morning` at `03:00 UTC`, currently `06:00 Kyiv`
+- Evening: `/api/cron/editorial/evening` at `14:00 UTC`, currently `17:00 Kyiv`
 
-### 5.2 Analytics (Privacy-first)
-Add Plausible or Umami (no cookie banner needed):
-```
-NEXT_PUBLIC_PLAUSIBLE_DOMAIN=finc.news
-```
+Discovery logic:
 
-### 5.3 KPIs to Track
-| Metric | Target 3mo | Target 6mo | Target 12mo |
-|--------|-----------|-----------|------------|
-| Organic sessions/mo | 5K | 25K | 100K |
-| Indexed articles | 500 | 2000 | 5000 |
-| Google News inclusion | — | ✅ | ✅ |
-| Domain Rating (Ahrefs) | 10 | 20 | 35 |
-| Avg position (finance KWs) | 45 | 25 | 15 |
-| Telegram subscribers | 500 | 2K | 10K |
+1. Analyze FinCNews articles from the last 72 hours.
+2. Compare emerging themes against approved static and dynamic topic plans.
+3. Suggest only missing topics that can stay evergreen for 3-6 months.
+4. Require at least 3 related recent articles or a clear multi-article pattern.
+5. Store candidates as `editorialTopicSuggestion-{slug}` with `suggested`, `approved`, or `dismissed` status.
 
-### 5.4 Content Audit (Monthly)
-- Articles with 0 impressions after 30 days → update or redirect
-- Articles with high impressions but low CTR → rewrite title/meta
-- Category pages with thin content → add curated list intro
+Admin actions:
 
----
+- `Analyze new topics` runs discovery manually.
+- `Approve` adds the suggestion as an approved dynamic topic plan.
+- `Create hub` approves the suggestion and immediately creates the hub.
+- `Dismiss` removes it from the pending suggestions list.
 
-## What AI Overviews Mean for Us (2027 Reality)
+Refresh logic:
 
-Google's AI Overviews cite sources. Being cited = brand exposure without a click = brand search → direct traffic.
+1. Once per Kyiv day, score configured and approved topic plans by recent related coverage.
+2. Use recent 24-hour and 72-hour article counts.
+3. Select the top two hot topics.
+4. Refresh the first in the morning and the second in the evening.
+5. Store the daily plan in Sanity as `editorialHotPlan-YYYY-MM-DD`.
 
-To be cited:
-1. **Unique data**: include specific numbers, dates, percentages (already in prompt ✅)
-2. **First-person expert angle**: "Based on my analysis of on-chain data..." (already in prompt ✅)
-3. **Structured data**: JSON-LD NewsArticle with all fields populated ✅
-4. **Speakable schema**: marks which sentences are summary-worthy for AI
-5. **E-E-A-T**: Google only cites trusted sources for YMYL
+The agent uses Anthropic tool output, not raw JSON text, to prevent malformed JSON errors.
 
----
+Output fields:
 
-## Implementation Checklist
+- `title`
+- `description`
+- `body`
+- `faqs`
 
-### Technical (can code now)
-- [ ] Homepage H1 + metadata
-- [ ] Category pages: OG + Twitter metadata
-- [ ] WebSite + Organization schema in root layout
-- [ ] BreadcrumbList JSON-LD in article pages
-- [ ] Speakable JSON-LD in article pages
-- [ ] Dynamic OG image per article
-- [ ] Google News sitemap `/news-sitemap.xml`
-- [ ] Fix robots.txt (block /api, /flows)
-- [ ] Fix JSON-LD image → ImageObject format
-- [ ] Font preload in layout
+Required body sections:
 
-### Content (editorial/automation)
-- [ ] /about page
-- [ ] /editorial-policy page
-- [ ] Financial disclaimer on articles
-- [ ] Internal linking in Claude prompt
-- [ ] 5 pillar evergreen articles (manual)
+- `What It Is`
+- `Why It Matters`
+- `Latest Developments`
+- `What to Watch`
+- `FinCNews View`
+- `How FinCNews Covers It`
 
-### Distribution
-- [ ] Google News Publisher Center submission
-- [ ] Submit RSS to CryptoPanic + CoinSpectator
-- [ ] X (Twitter) auto-post on publish
-- [ ] Google Search Console setup + sitemap submit
+Internal linking rules:
 
-### Analytics
-- [ ] Plausible or Umami install
-- [ ] Monthly content audit process
+- Include 4-8 contextual markdown links.
+- Use only allowed internal targets from recent related FinCNews coverage.
+- Use descriptive anchor text.
+- Put links inside paragraphs.
+- Never add a standalone "Related Coverage" list.
 
----
+The code also has a fallback that weaves contextual links into `How FinCNews Covers It` if the model under-links.
 
-## Anti-patterns to Avoid in 2027
+## News Article Agent
 
-- ❌ Keyword stuffing in titles — AI detects, hurts CTR
-- ❌ Thin content < 400 words — Google filters AI-generated if no added value
-- ❌ Duplicate topics without differentiation — semantic dedup needed
-- ❌ Missing financial disclaimers — YMYL manual penalty risk
-- ❌ No author attribution — instant E-E-A-T red flag
-- ❌ Images without alt text — accessibility = ranking signal
-- ❌ Links to low-trust sources — trust flows both ways
+The news article agent writes factual news from source reports.
+
+Current editorial positioning:
+
+- journalist, not analyst
+- no unsupported speculation
+- facts only from source text
+- Bloomberg/Reuters/CoinDesk/The Block style target
+- accuracy first, then clarity, context, relevance
+
+Required body sections:
+
+- `What Happened`
+- `Key Details`
+- `Why It Matters`
+- `What Happens Next`
+
+Article length adapts to story importance:
+
+- Minor update: 250-450 words
+- Standard news: 400-700 words
+- Major market-moving story: 700-1000 words
+
+The prompt requires the differentiator to appear in:
+
+- title
+- slug
+- excerpt
+- metaTitle
+
+This is intended to reduce duplicate angles and thin repeated coverage.
+
+## Internal Linking
+
+Current internal linking layers:
+
+- Related article sidebar on article pages
+- Related article sidebar on topic hub pages
+- Contextual topic hub links generated by the topic agent
+- Category archive links
+- Homepage category and topic hub sections
+
+Next improvements:
+
+- Add topic hub links from article pages when tags match a hub.
+- Add breadcrumb or "Topic" chips linking from articles to hubs.
+- Add curated hub modules on category pages.
+- Add a recurring audit for orphan URLs.
+
+## Structured Data
+
+Implemented:
+
+| Schema | Page Type | Status |
+| --- | --- | --- |
+| `NewsArticle` | Article | Done |
+| `BreadcrumbList` | Article, category | Done |
+| `Speakable` | Article | Done |
+| `WebSite` | Homepage | Done |
+| `Organization` | Homepage | Done |
+| `CollectionPage` | Topic hub | Done |
+| `FAQPage` | Topic hub | Done |
+
+To add:
+
+- `Person` or stronger author entity
+- `disclaimer` field in article structured data if supported cleanly
+- richer `ItemList` modules for categories and topic indexes
+
+## Crawl And Technical SEO
+
+Implemented:
+
+- `/robots.txt`
+- `/sitemap.xml`
+- `/news-sitemap.xml`
+- canonical URLs
+- server-rendered article/topic pages
+- paginated category archives
+- middleware block for `.php`, `/wp-admin`, `/wp-login.php`, `/xmlrpc.php`, `/wp-content`, `/wp-includes`
+
+Notes:
+
+- WordPress probes are expected bot noise. They now return fast 404s before hitting the article route.
+- Category pagination is important because sitemap-only discovery is weaker than internal HTML discovery.
+- GSC "Discovered, currently not indexed" should be handled by improving internal links, quality, and crawl paths, not by manually submitting every URL.
+
+## E-E-A-T
+
+Implemented:
+
+- `/about`
+- `/editorial-policy`
+- visible article disclaimer
+- source URL stored and displayed
+- fact-focused news prompt
+- topic hub authority prompt
+
+Recommended next:
+
+- Add named editorial author entity.
+- Add author profile page.
+- Make source attribution more visible.
+- Add correction/update notes where relevant.
+- Add `/advertise` or monetization transparency page if monetization begins.
+
+## Google News And Discover
+
+Ready:
+
+- Recent news sitemap
+- publication dates
+- article structured data
+- cover image pipeline
+- editorial policy page
+
+Still needed:
+
+- Google News Publisher Center submission
+- Search Console sitemap submission
+- stronger author/byline signals
+- monitor Discover image quality and article originality
+
+## Analytics And Audits
+
+Recommended monthly audit:
+
+- URLs discovered but not indexed
+- articles with 0 impressions after 30 days
+- articles with high impressions but low CTR
+- orphan articles not linked from category/archive/topic pages
+- topic hubs with stale related coverage
+- duplicate or near-duplicate article angles
+
+Recommended tracking:
+
+- organic clicks and impressions
+- indexed article count
+- indexed topic hub count
+- category archive crawl activity
+- topic hub assisted clicks
+- Telegram -> Telegraph -> site referral flow
+
+## Current SEO Priorities
+
+1. Merge and deploy the current SEO/topic hub branch.
+2. Confirm `/topics/bitcoin` and other hubs are live with the new formatting.
+3. Submit `/sitemap.xml` and `/news-sitemap.xml` in Search Console.
+4. Request indexing for homepage, `/topics`, key topic hubs, and main categories.
+5. Add article-to-topic-hub links.
+6. Add stronger author entity and byline schema.
+7. Set up monthly indexation and content quality audit.
+
+## Anti-Patterns
+
+Avoid:
+
+- raw plain URL lists in content
+- FAQ text duplicated inside article body
+- dotted Sanity document IDs for public pages
+- duplicate article angles without a clear differentiator
+- invented prices, dates, market data, or legal status
+- generic AI headline frames
+- thin pages reachable only through sitemap
+- linking from site articles back to Telegraph copies
+- hiding source attribution too deeply

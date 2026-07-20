@@ -9,8 +9,7 @@ import ArticleCard from "@/components/ArticleCard";
 import TelegramCTA from "@/components/TelegramCTA";
 import { getArticle, getRelatedArticles, findArticleByTopic, readingTime, timeAgo, type PortableTextBlock } from "@/lib/sanity";
 import { isCategory, categoryLabels, type Category } from "@/lib/i18n";
-
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? "https://fincnews.com";
+import { BASE_URL } from "@/lib/config";
 
 type Props = { params: { category: string; slug: string } };
 
@@ -77,11 +76,17 @@ export default async function ArticlePage({ params }: Props) {
     description: t.metaDescription ?? t.excerpt,
     datePublished: article.publishedAt,
     dateModified: article.publishedAt,
-    author: {
-      "@type": "Organization",
-      name: "FinCNews Editorial",
-      url: `${BASE_URL}/about`,
-    },
+    author: article.persona
+      ? {
+          "@type": "Person",
+          name: article.authorName ?? "FinCNews Editorial",
+          url: `${BASE_URL}/author/${article.persona}`,
+        }
+      : {
+          "@type": "Organization",
+          name: "FinCNews Editorial",
+          url: `${BASE_URL}/about`,
+        },
     publisher: {
       "@type": "Organization",
       name: "FinCNews",
@@ -171,18 +176,43 @@ export default async function ArticlePage({ params }: Props) {
 
             {/* Byline + share */}
             <div className="mt-5 flex flex-wrap items-center justify-between gap-4 border-y border-white/[0.06] py-4">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-400/10 text-xs font-black text-cyan-400">
-                  FC
-                </div>
+              <div className="flex items-center gap-3">
+                {article.persona ? (
+                  <Link href={`/author/${article.persona}`} className="group flex-shrink-0">
+                    <div className="relative h-11 w-11 overflow-hidden rounded-full border border-white/[0.1] transition group-hover:border-white/30">
+                      {article.authorAvatar ? (
+                        <Image
+                          src={article.authorAvatar}
+                          alt={article.authorName ?? 'Author'}
+                          fill
+                          className="object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center bg-cyan-400/10 text-xs font-black text-cyan-400">
+                          {(article.authorName ?? 'FC').slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                  </Link>
+                ) : (
+                  <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-cyan-400/10 text-xs font-black text-cyan-400">
+                    FC
+                  </div>
+                )}
                 <div className="text-sm">
-                  <p className="font-semibold text-zinc-200">FinCNews Editorial</p>
+                  {article.persona ? (
+                    <Link href={`/author/${article.persona}`} className="font-semibold text-zinc-200 transition hover:text-white">
+                      {article.authorName ?? 'FinCNews Editorial'}
+                    </Link>
+                  ) : (
+                    <p className="font-semibold text-zinc-200">{article.authorName ?? 'FinCNews Editorial'}</p>
+                  )}
                   {article.sourceUrl && (
                     <a
                       href={article.sourceUrl}
                       target="_blank"
                       rel="noreferrer nofollow"
-                      className="text-xs text-zinc-600 underline underline-offset-2 transition hover:text-zinc-400"
+                      className="mt-0.5 block text-xs text-zinc-600 underline underline-offset-2 transition hover:text-zinc-400"
                     >
                       View source
                     </a>
@@ -293,51 +323,59 @@ function normalizeBody(
   if (Array.isArray(body)) return body;
   if (!body) return [];
 
-  return body
-    .split(/\n{2,}/)
-    .map((t) => t.trim())
-    .filter(Boolean)
-    .map((paragraph, i) => {
-      const markDefs: Array<{ _type: "link"; _key: string; href: string }> = [];
-      const children: Array<{ _type: "span"; _key: string; text: string; marks: string[] }> = [];
+  const blocks: PortableTextBlock[] = [];
+  let blockIdx = 0;
 
-      let last = 0;
-      let spanIdx = 0;
-      INTERNAL_RE.lastIndex = 0;
+  for (const paragraph of body.split(/\n{2,}/).map(t => t.trim()).filter(Boolean)) {
+    const markDefs: Array<{ _type: "link"; _key: string; href: string }> = [];
+    type PTSpan = { _type: "span"; _key: string; text: string; marks: string[] };
+    const children: PTSpan[] = [];
+    let spanIdx = 0;
 
-      let m: RegExpExecArray | null;
-      while ((m = INTERNAL_RE.exec(paragraph)) !== null) {
-        const topic = m[1].trim();
+    // Combined regex: **bold**, *italic*, [INTERNAL: topic]
+    const re = /\*\*([^*]+?)\*\*|\*([^*\n]+?)\*|\[INTERNAL:\s*([^\]]+)\]/g;
+    let last = 0;
+    let m: RegExpExecArray | null;
+
+    while ((m = re.exec(paragraph)) !== null) {
+      if (m.index > last) {
+        children.push({ _type: "span", _key: `s-${blockIdx}-${spanIdx++}`, text: paragraph.slice(last, m.index), marks: [] });
+      }
+
+      if (m[1] !== undefined) {
+        // **bold**
+        children.push({ _type: "span", _key: `s-${blockIdx}-${spanIdx++}`, text: m[1], marks: ["strong"] });
+      } else if (m[2] !== undefined) {
+        // *italic*
+        children.push({ _type: "span", _key: `s-${blockIdx}-${spanIdx++}`, text: m[2], marks: ["em"] });
+      } else if (m[3] !== undefined) {
+        // [INTERNAL: topic]
+        const topic = m[3].trim();
         const href = links.get(topic);
-
-        // text before this match
-        if (m.index > last) {
-          children.push({ _type: "span", _key: `s-${i}-${spanIdx++}`, text: paragraph.slice(last, m.index), marks: [] });
-        }
-
         if (href) {
-          const linkKey = `lnk-${i}-${spanIdx}`;
+          const linkKey = `lnk-${blockIdx}-${spanIdx}`;
           markDefs.push({ _type: "link", _key: linkKey, href });
-          children.push({ _type: "span", _key: `s-${i}-${spanIdx++}`, text: topic, marks: [linkKey] });
+          children.push({ _type: "span", _key: `s-${blockIdx}-${spanIdx++}`, text: topic, marks: [linkKey] });
         } else {
-          // no match found — render topic text without link
-          children.push({ _type: "span", _key: `s-${i}-${spanIdx++}`, text: topic, marks: [] });
+          children.push({ _type: "span", _key: `s-${blockIdx}-${spanIdx++}`, text: topic, marks: [] });
         }
-
-        last = m.index + m[0].length;
       }
 
-      // remaining text after last match
-      if (last < paragraph.length) {
-        children.push({ _type: "span", _key: `s-${i}-${spanIdx}`, text: paragraph.slice(last), marks: [] });
-      }
+      last = m.index + m[0].length;
+    }
 
-      return {
-        _type: "block" as const,
-        _key: `b-${i}`,
-        style: "normal" as const,
-        markDefs,
-        children,
-      };
+    if (last < paragraph.length) {
+      children.push({ _type: "span", _key: `s-${blockIdx}-${spanIdx}`, text: paragraph.slice(last), marks: [] });
+    }
+
+    blocks.push({
+      _type: "block" as const,
+      _key: `b-${blockIdx++}`,
+      style: "normal" as const,
+      markDefs,
+      children: children.length > 0 ? children : [{ _type: "span", _key: `s-${blockIdx}-0`, text: paragraph, marks: [] }],
     });
+  }
+
+  return blocks;
 }

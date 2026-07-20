@@ -3,26 +3,26 @@
 import { useState, useEffect, useCallback } from "react";
 
 type QueueItem = {
-  id: string;
-  url: string;
-  title: string | null;
-  snippet: string | null;
-  source_category: string;
-  source_name: string | null;
-  pub_date: string | null;
-  queued_at: string;
-  status: string;
-  score: number;
-  error_text: string | null;
+  id:               string;
+  url:              string;
+  title:            string | null;
+  snippet:          string | null;
+  source_category:  string;
+  source_name:      string | null;
+  pub_date:         string | null;
+  queued_at:        string;
+  status:           string;
+  score:            number;
+  error_text:       string | null;
+  urgency:          'breaking' | 'standard' | null;
+  assigned_persona: string | null;
+  expires_at:       string | null;
+  article_type:     'new' | 'continuation' | null;
+  continuation_of:  string | null;
 };
 
 const STATUS_TABS = ["pending", "processing", "error", "done"] as const;
 type StatusTab = (typeof STATUS_TABS)[number];
-
-const CATEGORY_EMOJI: Record<string, string> = {
-  crypto: "₿", markets: "📈", economy: "🏦",
-  fintech: "⚡", policy: "⚖️", companies: "🏢",
-};
 
 function timeAgo(d: string) {
   const m = Math.floor((Date.now() - new Date(d).getTime()) / 60000);
@@ -36,9 +36,38 @@ function timeAgo(d: string) {
 function ScoreBadge({ score }: { score: number }) {
   const cls = score >= 80 ? "bg-emerald-500/15 text-emerald-400"
     : score >= 60 ? "bg-cyan-500/15 text-cyan-400"
-    : score >= 45 ? "bg-zinc-700 text-zinc-400"
     : "bg-red-500/10 text-red-500";
   return <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold tabular-nums ${cls}`}>{score}</span>;
+}
+
+const PERSONA_SHORT: Record<string, string> = {
+  'elena-voss':  'Elena',
+  'marcus-webb': 'Marcus',
+  'leo-cruz':    'Leo',
+};
+
+const PERSONA_COLOR: Record<string, string> = {
+  'elena-voss':  'bg-violet-500/15 text-violet-400',
+  'marcus-webb': 'bg-cyan-500/15 text-cyan-400',
+  'leo-cruz':    'bg-amber-500/15 text-amber-400',
+};
+
+function expiresIn(expiresAt: string): { label: string; urgent: boolean } {
+  const ms = new Date(expiresAt).getTime() - Date.now();
+  if (ms <= 0) return { label: 'expired', urgent: true };
+  const m = Math.floor(ms / 60000);
+  if (m < 60) return { label: `${m}m left`, urgent: m < 30 };
+  return { label: `${Math.floor(m / 60)}h left`, urgent: false };
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs = 70000) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timer);
+  }
 }
 
 export default function QueueTab() {
@@ -53,9 +82,11 @@ export default function QueueTab() {
   const load = useCallback(async (status: StatusTab) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/queue?status=${status}`);
+      const res = await fetchWithTimeout(`/api/admin/queue?status=${status}`, {}, 20000);
       const data = await res.json();
       setItems(data.items ?? []);
+    } catch (e) {
+      setLastResult(e instanceof DOMException && e.name === "AbortError" ? "Error: queue request timed out" : `Error: ${String(e)}`);
     } finally {
       setLoading(false);
     }
@@ -68,9 +99,11 @@ export default function QueueTab() {
   async function reject(id: string) {
     setRejecting(id);
     try {
-      await fetch(`/api/admin/queue/${id}`, { method: "DELETE" });
+      await fetchWithTimeout(`/api/admin/queue/${id}`, { method: "DELETE" }, 20000);
       setItems((prev) => prev.filter((i) => i.id !== id));
       setLastResult("Rejected");
+    } catch (e) {
+      setLastResult(e instanceof DOMException && e.name === "AbortError" ? "Error: reject timed out" : `Error: ${String(e)}`);
     } finally {
       setRejecting(null);
     }
@@ -80,7 +113,7 @@ export default function QueueTab() {
     setPublishing(id);
     setLastResult(null);
     try {
-      const res = await fetch(`/api/admin/queue/${id}`, { method: "POST" });
+      const res = await fetchWithTimeout(`/api/admin/queue/${id}`, { method: "POST" }, 290000);
       const data = await res.json();
       if (data.error) {
         setLastResult(`Error: ${data.error}`);
@@ -93,6 +126,8 @@ export default function QueueTab() {
         );
         setItems((prev) => prev.filter((i) => i.id !== id));
       }
+    } catch (e) {
+      setLastResult(e instanceof DOMException && e.name === "AbortError" ? "Error: publish timed out" : `Error: ${String(e)}`);
     } finally {
       setPublishing(null);
     }
@@ -102,10 +137,12 @@ export default function QueueTab() {
     if (!confirm(`Delete all ${items.length} pending items? This cannot be undone.`)) return;
     setClearing(true);
     try {
-      const res = await fetch("/api/admin/queue", { method: "DELETE" });
+      const res = await fetchWithTimeout("/api/admin/queue", { method: "DELETE" }, 30000);
       const data = await res.json();
       setItems([]);
       setLastResult(`Cleared ${data.deleted} items`);
+    } catch (e) {
+      setLastResult(e instanceof DOMException && e.name === "AbortError" ? "Error: clear timed out" : `Error: ${String(e)}`);
     } finally {
       setClearing(false);
     }
@@ -167,7 +204,7 @@ export default function QueueTab() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-white/[0.06] bg-zinc-900/60">
-                {["Score", "Title", "Source", "Age", "Actions"].map((h) => (
+                {["Score", "Title", "Persona", "Source", "Age / Expires", "Actions"].map((h) => (
                   <th key={h} className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-zinc-600">{h}</th>
                 ))}
               </tr>
@@ -184,25 +221,39 @@ export default function QueueTab() {
                       <ScoreBadge score={item.score} />
                     </td>
                     <td className="px-4 py-3 max-w-[340px]">
-                      <div className="flex items-start gap-2">
-                        <span className="mt-0.5 text-sm">{CATEGORY_EMOJI[item.source_category] ?? "📰"}</span>
-                        <div className="min-w-0">
-                          <p className="line-clamp-2 text-xs font-medium text-zinc-200">
-                            {item.title ?? <span className="italic text-zinc-600">No title</span>}
-                          </p>
-                          {item.error_text && (
-                            <p className="mt-0.5 truncate text-[10px] text-red-400">{item.error_text}</p>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                          {item.urgency === 'breaking' && (
+                            <span className="rounded bg-red-500/15 px-1.5 py-0.5 text-[9px] font-bold text-red-400 uppercase">🔥 Breaking</span>
                           )}
-                          <a
-                            href={item.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="mt-0.5 block truncate text-[10px] text-zinc-600 hover:text-zinc-400"
-                          >
-                            {item.url.replace(/^https?:\/\//, "").slice(0, 60)}
-                          </a>
+                          {item.article_type === 'continuation' && (
+                            <span className="rounded bg-indigo-500/15 px-1.5 py-0.5 text-[9px] font-bold text-indigo-400">↩ continuation</span>
+                          )}
                         </div>
+                        <p className="line-clamp-2 text-xs font-medium text-zinc-200">
+                          {item.title ?? <span className="italic text-zinc-600">No title</span>}
+                        </p>
+                        {item.error_text && (
+                          <p className="mt-0.5 truncate text-[10px] text-red-400">{item.error_text}</p>
+                        )}
+                        <a
+                          href={item.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-0.5 block truncate text-[10px] text-zinc-600 hover:text-zinc-400"
+                        >
+                          {item.url.replace(/^https?:\/\//, "").slice(0, 60)}
+                        </a>
                       </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {item.assigned_persona ? (
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${PERSONA_COLOR[item.assigned_persona] ?? "bg-zinc-700 text-zinc-400"}`}>
+                          {PERSONA_SHORT[item.assigned_persona] ?? item.assigned_persona}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-zinc-700">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span className="rounded bg-white/[0.05] px-1.5 py-0.5 text-[10px] text-zinc-400">
@@ -211,9 +262,14 @@ export default function QueueTab() {
                     </td>
                     <td className="px-4 py-3 text-[11px] tabular-nums text-zinc-600">
                       <div>{timeAgo(item.queued_at)}</div>
-                      {item.pub_date && (
-                        <div className="text-zinc-700">pub {timeAgo(item.pub_date)}</div>
-                      )}
+                      {item.expires_at && (() => {
+                        const exp = expiresIn(item.expires_at);
+                        return (
+                          <div className={exp.urgent ? "font-semibold text-red-400" : "text-zinc-700"}>
+                            ⏱ {exp.label}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-3">
                       {activeStatus === "pending" && (
@@ -242,13 +298,29 @@ export default function QueueTab() {
                         </div>
                       )}
                       {activeStatus === "error" && (
-                        <button
-                          onClick={() => reject(item.id)}
-                          disabled={busy}
-                          className="rounded border border-white/[0.06] px-2.5 py-1 text-[11px] text-zinc-500 transition hover:border-red-500/20 hover:text-red-400"
-                        >
-                          Remove
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => publishNow(item.id)}
+                            disabled={busy}
+                            title="Retry"
+                            className="rounded border border-emerald-500/20 bg-emerald-500/5 px-2.5 py-1 text-[11px] font-semibold text-emerald-400 transition hover:bg-emerald-500/15 disabled:cursor-wait disabled:opacity-40"
+                          >
+                            {isPublishing ? (
+                              <span className="flex items-center gap-1">
+                                <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border border-current border-t-transparent" />
+                                Retrying…
+                              </span>
+                            ) : "↻ Retry"}
+                          </button>
+                          <button
+                            onClick={() => reject(item.id)}
+                            disabled={busy}
+                            title="Remove"
+                            className="rounded border border-white/[0.06] px-2.5 py-1 text-[11px] text-zinc-500 transition hover:border-red-500/20 hover:text-red-400"
+                          >
+                            {isRejecting ? "…" : "✕"}
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>

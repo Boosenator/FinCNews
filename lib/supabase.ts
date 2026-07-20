@@ -41,7 +41,7 @@ export type PipelineStep = {
   // collect-specific
   perSource?: Array<{ name: string; category: string; count: number; error?: boolean }>;
   scoredItems?: Array<{ title: string; score: number }>;
-  scoreDistribution?: { below45: number; s45_60: number; s60_80: number; above80: number };
+  scoreDistribution?: { below60: number; s60_80: number; above80: number };
   dedupBreakdown?: { urlDuped: number; belowScore: number; semanticDuped: number };
   // generate-specific
   articleSteps?: Array<{
@@ -50,6 +50,17 @@ export type PipelineStep = {
     durationMs: number;
     note?: string;
   }>;
+};
+
+export type CoverageLogRow = {
+  id:             string;
+  title:          string;
+  excerpt:        string | null;
+  slug:           string;
+  persona_id:     string | null;
+  generation_type: 'rss' | 'proactive' | null;
+  source_url:     string | null;
+  published_at:   string;
 };
 
 export type RunLog = {

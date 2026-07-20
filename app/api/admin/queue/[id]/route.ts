@@ -3,6 +3,8 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { generateSingle } from "@/lib/automation";
 import { isAuthed } from "@/lib/auth";
 
+export const maxDuration = 300;
+
 // DELETE — reject (remove from queue)
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   if (!isAuthed(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

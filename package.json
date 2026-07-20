@@ -6,16 +6,20 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "telegraph:add-telegram-link": "node scripts/add-telegram-link-to-telegraph.mjs",
     "lint": "next lint"
   },
   "dependencies": {
     "@portabletext/react": "^6.2.0",
+    "@resvg/resvg-js": "^2.6.2",
     "@sanity/client": "^7.22.0",
     "@supabase/supabase-js": "^2.105.4",
+    "jsonrepair": "^3.14.0",
     "next": "14.2.23",
     "next-intl": "^4.11.2",
     "react": "^18",
-    "react-dom": "^18"
+    "react-dom": "^18",
+    "resend": "^6.12.4"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.19",

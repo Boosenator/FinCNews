@@ -10,6 +10,10 @@ type IncomingArticle = {
   sourceUrl?: string;
   coverImage?: unknown;
   tags?: string[];
+  // persona byline fields (optional — RSS articles set these)
+  persona?: string;
+  authorName?: string;
+  authorAvatar?: string;
   translations?: {
     en?: {
       title?: string;
@@ -58,6 +62,9 @@ export async function POST(req: NextRequest) {
     sourceUrl: article.sourceUrl,
     coverImage: article.coverImage,
     tags: article.tags,
+    ...(article.persona     ? { persona:     article.persona }     : {}),
+    ...(article.authorName  ? { authorName:  article.authorName }  : {}),
+    ...(article.authorAvatar ? { authorAvatar: article.authorAvatar } : {}),
     translations: {
       en: {
         ...en,

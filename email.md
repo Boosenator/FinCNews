@@ -1,188 +1,201 @@
 # FinCNews — Email Setup Guide
 
-> Домен `finc.news` на Vercel NS — DNS записи додаємо через Vercel CLI або Dashboard.
+> Домен `finc.news` на Vercel NS — DNS записи через Vercel CLI або Dashboard.
+> Відправка — через `e.finc.news` (Resend), отримання — `finc.news` (ImprovMX).
 
 ---
 
-## ⚠️ Проблема в коді
+## Статус реалізації
 
-Всі email-адреси на сайті зараз `@fincnews.com`, але домен — `finc.news`.
-Після налаштування пошти потрібно замінити адреси в коді (список файлів — в кінці).
-
----
-
-## Частина 1 — Отримання пошти
-
-### Варіант A: ImprovMX *(безкоштовно, найпростіше)*
-
-Форвардить `@finc.news` → на будь-який Gmail/ящик. Відповідати — з Gmail.
-
-**Крок 1 — Зареєструватись:**
-[improvmx.com](https://improvmx.com) → Add domain → `finc.news`
-
-ImprovMX покаже два MX-записи для додавання.
-
-**Крок 2 — Додати MX в Vercel DNS:**
-```bash
-vercel dns add finc.news @ MX mx1.improvmx.com 10
-vercel dns add finc.news @ MX mx2.improvmx.com 20
-```
-
-Або в Vercel Dashboard → Domains → finc.news → DNS Records → Add.
-
-**Крок 3 — Додати aliases в ImprovMX:**
-```
-editorial  →  твій_gmail@gmail.com
-privacy    →  твій_gmail@gmail.com
-legal      →  твій_gmail@gmail.com
-ads        →  твій_gmail@gmail.com
-```
-
-**Крок 4 — Gmail "Send as" (щоб відповідати з editorial@finc.news):**
-Gmail → Settings → Accounts → "Send mail as" → Add address → `editorial@finc.news`
-→ SMTP-сервер: `smtp.improvmx.com`, порт 587, логін/пароль з ImprovMX
-
-**Плюси:** безкоштовно, 5 хвилин, нічого нового вчити  
-**Мінуси:** форвард, не повноцінний ящик
+| Крок | Що | Статус |
+|------|----|--------|
+| 1 | Resend Inbound + MX в Vercel (замінено ImprovMX) | 🔜 DNS + Resend Dashboard |
+| 2 | SPF + DMARC | ✅ Done |
+| 3 | Оновити email в коді (`@fincnews.com` → `@finc.news`) | ✅ Done |
+| 4 | Resend: домен `e.finc.news` верифіковано, API key в Vercel | ✅ Done |
+| 5 | Supabase: таблиці `subscribers` + `email_logs` | ✅ Done |
+| 6 | Форма підписки (floating bar) | ✅ Done |
+| 7 | DOI флоу (`/api/subscribe` → confirm email → `/api/confirm`) | ✅ Done |
+| 8 | Email templates (confirmation, welcome, breaking, digest) | ✅ Done |
+| 9 | Email tab в адмінці (stats, logs, subscriber list, unsubscribed) | ✅ Done |
+| 10 | `e.finc.news` → redirect на `finc.news` (next.config) | ✅ Done |
+| 11 | Plain-text версія листів + підвищення контрасту | ✅ Done |
+| 12 | `List-Unsubscribe` + `List-Unsubscribe-Post` headers (RFC 8058) | ✅ Done |
+| — | `e.finc.news` A-запис + Vercel domain (веб-редірект) | 🔜 Pending — треба vercel dns add + Vercel Domains |
+| — | Breaking alert: підключити тригер (n8n або API route) | 🔜 Pending |
+| — | Weekly digest: cron + pull статей із Sanity | 🔜 Pending |
+| — | Підписна форма: A/B тест позиціонування | 🔜 Optional |
 
 ---
 
-### Варіант B: Zoho Mail *(безкоштовно, повноцінний ящик)*
+## Deliverability — SpamAssassin аудит (2026-06-04)
 
-Повноцінний `editorial@finc.news` з веб-інтерфейсом. До 5 ящиків безкоштовно.
+**Результат: Score -1.4** (нижче -5 = spam; нижче 0 = добре)
 
-**Крок 1:**
-[zoho.com/mail](https://www.zoho.com/mail/) → Add Domain → `finc.news`
+| Правило | Скор | Що зроблено |
+|---------|------|-------------|
+| `DKIM_SIGNED` / `DKIM_VALID` / `DKIM_VALID_AU` | ✅ | DKIM через Resend на `e.finc.news` |
+| `SPF_PASS` | ✅ | SPF на `e.finc.news` |
+| `HTML_FONT_LOW_CONTRAST` | ⚠️ → ✅ | Виправлено: MUTED підвищено з `#52525b` (2.4:1) до `#a1a1aa` (7.3:1) |
+| `HTML_IMAGE_ONLY_28` | ⚠️ → ✅ | Виправлено: більше тексту в листах + plain-text версія |
+| `FROM_FMBLA_NEWDOM28` | ⏳ | Домен < 28 днів. Зникне автоматично ~2026-06-18 |
+| `SPF_HELO_NONE` | ℹ️ | Resend/AWS інфраструктура, не контролюється |
 
-**Крок 2 — MX записи в Vercel:**
-```bash
-vercel dns add finc.news @ MX mx.zoho.com 10
-vercel dns add finc.news @ MX mx2.zoho.com 20
-vercel dns add finc.news @ MX mx3.zoho.com 50
-```
-
-**Крок 3 — TXT для підтвердження домену:**
-Zoho надасть TXT-рядок типу `zoho-verification=xxxxx`:
-```bash
-vercel dns add finc.news @ TXT "zoho-verification=xxxxx"
-```
-
-**Крок 4:** Створити ящики `editorial`, `privacy`, `legal`, `ads`
-
-**Плюси:** безкоштовно, можна відправляти, свій домен  
-**Мінуси:** не Gmail-інтерфейс
+### Що виправлено в коді
+- `lib/emails.ts`: колір `FOOTER` = `#a1a1aa` замість `#52525b`
+- `lib/emails.ts`: confirmation email містить опис сервісу + 2 bullet-секції
+- `lib/emails.ts`: всі функції тепер повертають `{ html, text }` — додана plain-text версія
+- `lib/emails.ts`: `listUnsubscribeHeaders(token, baseUrl)` — хелпер для RFC 8058 заголовків
+- `app/api/subscribe/route.ts` + `confirm/route.ts`: відправляють `html` + `text`
+- `app/api/confirm/route.ts`: welcome email містить `List-Unsubscribe` + `List-Unsubscribe-Post` headers
 
 ---
 
-### Варіант C: Google Workspace *($6/місяць)*
+## Архітектура
 
-Повноцінний Gmail з `@finc.news`. Найзручніше, але платно.
+### Sending domain: `e.finc.news`
+- SPF: `v=spf1 include:_spf.resend.com ~all` (на `e`)
+- DKIM: CNAME записи від Resend (на `resend._domainkey.e`)
+- DMARC: `v=DMARC1; p=quarantine; rua=mailto:tech@e.finc.news` (на `_dmarc.e`)
 
-**Крок 1:** [workspace.google.com](https://workspace.google.com) → Start free trial → домен `finc.news`
+### From адреси
+- `tech@e.finc.news` — транзакційні (DOI confirmation, welcome)
+- `news@e.finc.news` — розсилки (breaking alerts, weekly digest)
 
-**Крок 2 — MX в Vercel:**
-```bash
-vercel dns add finc.news @ MX aspmx.l.google.com 1
-vercel dns add finc.news @ MX alt1.aspmx.l.google.com 5
-vercel dns add finc.news @ MX alt2.aspmx.l.google.com 5
-vercel dns add finc.news @ MX alt3.aspmx.l.google.com 10
-vercel dns add finc.news @ MX alt4.aspmx.l.google.com 10
+### DOI флоу
+```
+Юзер вводить email у NewsletterBar
+  → POST /api/subscribe
+    → Supabase: запис зі status='pending', confirm_token=uuid
+    → Resend: sends confirmation email з посиланням
+    → email_logs: запис (type='confirmation', status='sent'|'failed')
+  → Юзер кликає посилання
+    → GET /api/confirm?token=xxx
+      → Supabase: status → 'confirmed', confirmed_at = now()
+      → Resend: sends welcome email
+      → email_logs: запис (type='welcome')
+      → redirect → /subscribed
 ```
 
-**Рекомендація:** один ящик `hello@finc.news` + email aliases (editorial, privacy, legal, ads) — замість 4 платних ящиків.
+### Відписка
+```
+Посилання в листі → GET /api/unsubscribe?token=xxx
+  → Supabase: status → 'unsubscribed'
+  → redirect → /unsubscribed
+```
+
+### List-Unsubscribe (RFC 8058)
+Додано до всіх листів крім confirmation (там ще немає підтвердженого підписника):
+```
+List-Unsubscribe: <mailto:tech@e.finc.news?subject=unsubscribe>, <https://finc.news/api/unsubscribe?token=TOKEN>
+List-Unsubscribe-Post: List-Unsubscribe=One-Click
+```
+Gmail і Outlook показують нативну кнопку "Unsubscribe" поряд з адресою відправника.
+
+### Supabase таблиці
+- `subscribers` — email, status, confirm_token, confirmed_at, unsubscribed_at (migration_006)
+- `email_logs` — type, recipient, status, resend_id, sent_at (migration_007)
 
 ---
 
-## Частина 2 — Налаштувати відправку (SPF + DKIM)
+## Що залишилось зробити
 
-Незалежно від провайдера — додай SPF щоб листи не потрапляли в спам:
+### Breaking alerts
+Готовий шаблон `breakingEmail()` в `lib/emails.ts`.
+Потрібно підключити тригер — наприклад в n8n після публікації статті з тегом `breaking`:
 
-**ImprovMX:**
-```bash
-vercel dns add finc.news @ TXT "v=spf1 include:spf.improvmx.com ~all"
+```typescript
+import { breakingEmail } from "@/lib/emails";
+import { EMAIL_FROM_NEWS } from "@/lib/config";
+
+const { html, text } = breakingEmail({ headline, excerpt, articleUrl, token, baseUrl });
+await resend.emails.send({ from: EMAIL_FROM_NEWS, to: subscriberEmail, subject: headline, html, text });
 ```
 
-**Zoho:**
-```bash
-vercel dns add finc.news @ TXT "v=spf1 include:zoho.com ~all"
-```
+Або через Resend Broadcasts для масової відправки.
 
-**Google Workspace:**
-```bash
-vercel dns add finc.news @ TXT "v=spf1 include:_spf.google.com ~all"
-```
+### Weekly digest
+Готовий шаблон `digestEmail()` в `lib/emails.ts`.
+Потрібно:
+1. Cron job (Vercel Cron або n8n) — щоп'ятниці
+2. Pull топ-статей із Sanity за тиждень
+3. Витягнути всіх `confirmed` підписників із Supabase
+4. Відправити через `news@e.finc.news`
 
-**DMARC (додати в будь-якому випадку):**
+### e.finc.news web redirect
+Щоб `https://e.finc.news` редіректило на `finc.news`:
 ```bash
-vercel dns add finc.news _dmarc TXT "v=DMARC1; p=quarantine; rua=mailto:editorial@finc.news"
+vercel dns add finc.news e A 76.76.21.21
 ```
+Потім додати `e.finc.news` як домен у Vercel Project Settings → Domains.
+Redirect вже налаштовано в `next.config.mjs`.
 
 ---
 
-## Частина 3 — Оновити адреси в коді
+## Частина 1 — Отримання пошти (Resend Inbound)
 
-Після налаштування пошти — замінити в цих файлах `@fincnews.com` → `@finc.news`:
+> ImprovMX замінено на Resend Inbound. Пошта `@finc.news` → Resend → webhook → пересилається на Gmail.
 
-- `app/(site)/about/page.tsx` — editorial, ads
-- `app/(site)/editorial-policy/page.tsx` — editorial
-- `app/(site)/privacy-policy/page.tsx` — privacy (×4)
-- `app/(site)/terms-and-conditions/page.tsx` — legal (×2)
+### Як це працює
 
-Адреси:
 ```
-editorial@fincnews.com  →  editorial@finc.news
-privacy@fincnews.com    →  privacy@finc.news
-legal@fincnews.com      →  legal@finc.news
-ads@fincnews.com        →  ads@finc.news
+Хтось пише на editorial@finc.news
+  → MX record фінансує на inbound.resend.com
+  → Resend приймає лист
+  → POST /api/webhook/inbound-email?secret=...
+    → webhook перевіряє secret
+    → resend.emails.send() пересилає на INBOUND_FORWARD_TO
+    → ти бачиш у Gmail з subject "[editorial@finc.news] Оригінальна тема"
+    → replyTo = оригінальний відправник (відповідаєш прямо йому)
 ```
+
+### Кроки налаштування (одноразово)
+
+**1. Resend Dashboard → Domains → Add Domain**
+- Додати `finc.news` (окремо від `e.finc.news`) як inbound domain
+- Resend покаже MX record: `inbound.resend.com` priority 10
+
+**2. Vercel DNS — оновити MX записи для `finc.news`**
+```bash
+# Видалити старі ImprovMX записи:
+vercel dns rm finc.news MX "mx.improvmx.com"
+vercel dns rm finc.news MX "mx2.improvmx.com"
+
+# Додати Resend inbound:
+vercel dns add finc.news @ MX "inbound.resend.com" 10
+```
+Або через Vercel Dashboard → Project → Domains → DNS Records.
+
+**3. Resend Dashboard → Domains → finc.news → Inbound → Add Route**
+- Match: `*@finc.news` (або конкретні адреси)
+- Webhook URL: `https://finc.news/api/webhook/inbound-email?secret=<RESEND_INBOUND_SECRET>`
+
+**4. Env vars (Vercel + `.env.local`)**
+```
+RESEND_INBOUND_SECRET=<generate: openssl rand -hex 32>
+INBOUND_FORWARD_TO=boosyonya@gmail.com
+```
+
+### Адреси що форвардяться
+```
+editorial@finc.news  →  INBOUND_FORWARD_TO
+privacy@finc.news    →  INBOUND_FORWARD_TO
+legal@finc.news      →  INBOUND_FORWARD_TO
+ads@finc.news        →  INBOUND_FORWARD_TO
+tech@finc.news       →  INBOUND_FORWARD_TO
+```
+Усі інші адреси (`@finc.news`) ігноруються (spam trap захист).
+
+### Файли
+
+| Файл | Роль |
+|------|------|
+| `app/api/webhook/inbound-email/route.ts` | Приймає Resend inbound POST, пересилає на Gmail |
 
 ---
 
-## Частина 4 — Розсилка дайджестів (майбутнє)
-
-### Рекомендація: Resend
+## Частина 2 — Розсилка (Resend)
 
 [resend.com](https://resend.com) — ідеально для Next.js, безкоштовно 3000 листів/місяць.
 
-**Крок 1 — Підключити домен:**
-Resend Dashboard → Domains → Add → `finc.news`
-Resend покаже DKIM-записи:
-```bash
-vercel dns add finc.news resend._domainkey TXT "p=MIGfMA0GC..."
-```
-
-**Крок 2:**
-```bash
-RESEND_API_KEY=re_xxxxxxxxxx  # додати у Vercel env vars
-npm install resend @react-email/components
-```
-
-**Крок 3 — API route для дайджесту:**
-```typescript
-// app/api/digest/route.ts
-import { Resend } from 'resend';
-const resend = new Resend(process.env.RESEND_API_KEY);
-
-await resend.emails.send({
-  from: 'FinCNews Digest <digest@finc.news>',
-  to: subscribers,
-  subject: `FinCNews Weekly — ${new Date().toLocaleDateString('en', { month: 'long', day: 'numeric' })}`,
-  react: <DigestEmail articles={topArticles} />,
-});
-```
-
-**Крок 4 — Підписна форма:**
-Проста форма на сайті → зберігає email в Supabase таблицю `subscribers` → Resend бере список звідти.
-
----
-
-## Рекомендований план
-
-| Крок | Що | Час | Вартість |
-|------|----|-----|---------|
-| ~~1~~ | ~~ImprovMX + MX в Vercel~~ | ~~10 хв~~ | ✅ Done |
-| 2 | SPF + DMARC | 5 хв | Безкоштовно |
-| 3 | Оновити email в коді | 5 хв | — |
-| 4 | Resend DKIM + API key | 10 хв | Безкоштовно |
-| 5 | Підписна форма на сайті | — | Безкоштовно |
-| 6 | Шаблон дайджесту + cron | — | Безкоштовно |
+`RESEND_API_KEY` — додати в `.env.local` та Vercel env vars.

@@ -1,0 +1,537 @@
+import { callClaude, parseClaudeJson, PERSONA_NAME } from '@/lib/personas/shared';
+import { supabaseAdmin } from '@/lib/supabase';
+import { buildVerifiedHistory } from '@/lib/personas/verified-history';
+
+// ── Per-persona article structures ────────────────────────────────────────────
+
+const PERSONA_ARTICLE_STRUCTURE: Record<string, string> = {
+  'elena-voss':  '## Context / ## What Changed / ## Macro Implications / ## What to Watch',
+  'marcus-webb': '## The Signal / ## On-Chain Context / ## Historical Precedent / ## What to Watch',
+  'leo-cruz':    '## The Narrative Shift / ## What the Data Shows / ## Where This Has Been Before / ## The Signal to Watch',
+};
+
+// ── Persona system prompts (RSS-adapted voice) ────────────────────────────────
+
+const PERSONA_SYSTEM: Record<string, string> = {
+  'elena-voss': `You are Elena Voss, macro analyst at finc.news.
+12 years in traditional finance (fixed income Deutsche Bank, macro at European family office). You came to crypto in 2021 through a client allocation — you remain skeptical of the timeline, not of the asset.
+
+CORE BELIEF: BTC is a risk asset. Macro context IS the crypto trade.
+
+WHEN COVERING NEWS: Frame everything through the macro lens — rate cycle, DXY, credit conditions, Fed policy. Even protocol news gets the TradFi treatment. Connect the news event to the broader macro environment with precision.
+
+VOICE RULES:
+- Open with the macro context or data point — precise number or exact quote
+- Cite economic calendar dates in conclusion ("Watch: [date] — [event]")
+- Use: "However", "Notably", "This matters because", "Historically"
+- Never: "moon", "ape in", speculation beyond data
+- When uncertain: "the data doesn't resolve this yet"
+- Max 500 words, markdown headers
+
+CRITICAL: If an ACTIVE DIRECTIVE specifies how the article must open, follow it exactly. Never open with a section heading (## Context, ## What Changed, or any other). Never start with "Earlier we reported". Begin directly with your thesis sentence unless the directive specifies otherwise.
+
+EDITORIAL DIRECTIVE is injected in context — treat as direct instruction.`,
+
+  'marcus-webb': `You are Marcus Webb, on-chain data analyst at finc.news.
+8 years institutional finance, 6 years crypto. 4 years hedge fund on-chain surveillance. You crossed into crypto because the data was more honest than equity markets. You never guess.
+
+CORE BELIEF: Markets are flows. Everything leaves an on-chain trace.
+
+WHEN COVERING NEWS: Interpret events through the on-chain lens. Cite exchange data, miner behavior, or network metrics from the VERIFIED HISTORICAL RECORD in context. Never fabricate specific on-chain values, z-scores, dates, or prices not present in the provided data.
+
+VOICE RULES:
+- Open with a specific metric, value, and its deviation from norm
+- Second paragraph: last time this happened (date, price context, what followed)
+- Third paragraph: corroborating signal (exchange flows, mempool, dominance)
+- Close: "What to watch: if [metric] [crosses] [threshold], [implication]"
+- Always cite source inline: "(CoinGlass)", "(mempool.space)", "(Glassnode)"
+- Never: "could", "might", "bullish", "bearish", "interesting", "exciting"
+- Max 400 words, Bloomberg terminal voice
+
+EDITORIAL DIRECTIVE is injected in context — treat as direct instruction.`,
+
+  'leo-cruz': `You are Leo Cruz, narrative analyst at finc.news.
+Former Reddit mod turned crypto analyst. You understand how retail thinks — the memes, the cycles, the FOMO. You are the desk's cultural translator.
+
+CORE BELIEF: Price follows narrative. Find the story shift, find the trade.
+
+WHEN COVERING NEWS: Zoom in on sentiment dynamics and narrative implications. How will the market interpret this emotionally? What belief does this event confirm or shatter? Where does the current narrative break?
+
+VOICE RULES:
+- Open with a hook — the narrative angle, not the headline fact
+- Second paragraph: what retail/social data shows about current sentiment
+- Third paragraph: historical narrative precedent — when did this story play before?
+- Close: "The signal to watch: [narrative trigger that would confirm/deny the shift]"
+- Use: sharp observations, cultural references, specific sentiment data when available
+- Never: purely technical analysis, dry data reporting
+- Max 450 words, conversational but sharp
+
+CRITICAL: If an ACTIVE DIRECTIVE specifies an opening format (e.g. data-first, σ calculations, specific sentence structure), that REPLACES your default hook opening entirely. The directive is a hard format override — ignore default section headers when it conflicts.
+
+EDITORIAL DIRECTIVE is injected in context — treat as direct instruction.`,
+};
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+export type DeskArticle = {
+  title:           string;
+  excerpt:         string;
+  body:            string;
+  metaTitle:       string;
+  metaDescription: string;
+  tags:            string[];
+  category:        string;
+  telegramText:    string;
+};
+
+export type VictorDecision = {
+  decision:           'approve' | 'edit' | 'block';
+  edit_instruction:   string | null;
+  reason:             string;
+  directive_followed: boolean;
+};
+
+export type DeskGenerateResult = {
+  article:        DeskArticle;
+  victorDecision: VictorDecision;
+  steps:          Array<{ name: string; status: 'ok' | 'error' | 'skip'; durationMs: number; note?: string }>;
+};
+
+type PersonaContext = {
+  recentArticles:  string;
+  activeDirective: string | null;
+  verifiedHistory: string;
+};
+
+// ── Load persona context from DB ──────────────────────────────────────────────
+
+async function loadPersonaContext(personaId: string): Promise<PersonaContext> {
+  const db = supabaseAdmin();
+
+  const [{ data: memories }, { data: directives }, verifiedHistory] = await Promise.all([
+    db.from('persona_memory')
+      .select('content, metadata')
+      .eq('persona_id', personaId)
+      .eq('memory_type', 'article')
+      .order('created_at', { ascending: false })
+      .limit(5),
+    db.from('editorial_directives')
+      .select('directive')
+      .eq('persona_id', personaId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+      .limit(1),
+    buildVerifiedHistory(db, personaId),
+  ]);
+
+  const recentArticles = (memories ?? [])
+    .map((m, i) => {
+      const meta = m.metadata as { title?: string; slug?: string; source?: string } | null;
+      return `${i + 1}. "${meta?.title ?? m.content.slice(0, 80)}"${meta?.source === 'rss' ? ' [rss]' : ''}`;
+    })
+    .join('\n') || 'No prior articles.';
+
+  const activeDirective = directives?.[0]?.directive ?? null;
+
+  return { recentArticles, activeDirective, verifiedHistory };
+}
+
+// ── Step 7a: Angle discovery ──────────────────────────────────────────────────
+
+async function discoverAngle(opts: {
+  item:           { title: string; snippet: string };
+  personaId:      string;
+  recentArticles: string;
+  articleType:    'new' | 'continuation';
+  continuationOf: string | null;
+}): Promise<string> {
+  const personaName = PERSONA_NAME[opts.personaId] ?? opts.personaId;
+
+  const prompt = `You are the editorial research assistant for finc.news.
+
+TASK: Find the most interesting angle for ${personaName} to take on this story.
+
+NEWS ITEM:
+Title: "${opts.item.title}"
+Snippet: "${opts.item.snippet}"
+
+${opts.articleType === 'continuation' && opts.continuationOf
+  ? `CONTINUATION OF: "${opts.continuationOf}" — this story continues a previous article. Find what's NEW.`
+  : ''}
+
+${personaName}'s RECENT ARTICLES (avoid repeating these angles):
+${opts.recentArticles}
+
+Respond with ONE sentence: the specific editorial angle ${personaName} should take.
+Be concrete — name the exact lens, comparison, metric, or narrative hook.
+Do NOT be generic ("cover the story"). Be specific.`;
+
+  try {
+    const res    = await callClaude({ model: 'claude-sonnet-4-6', max_tokens: 150, messages: [{ role: 'user', content: prompt }] });
+    const json   = await res.json() as { content: { text: string }[] };
+    return (json.content[0]?.text ?? '').trim();
+  } catch {
+    return `${personaName} analysis of: ${opts.item.title}`;
+  }
+}
+
+// ── Step 7b: Draft generation ─────────────────────────────────────────────────
+
+async function generateDraft(opts: {
+  item:            { title: string; snippet: string; pubDate?: string };
+  personaId:       string;
+  category:        string;
+  angle:           string;
+  activeDirective: string | null;
+  continuationOf:  string | null;
+  verifiedHistory: string;
+}): Promise<DeskArticle> {
+  const system  = PERSONA_SYSTEM[opts.personaId] ?? PERSONA_SYSTEM['leo-cruz'];
+  const date    = opts.item.pubDate?.slice(0, 10) ?? new Date().toISOString().slice(0, 10);
+
+  const continuationNote = opts.continuationOf
+    ? `CONTINUATION: This is a follow-up to your previous article "${opts.continuationOf}". Reference it explicitly ("Earlier we reported that...") and focus on what is NEW.`
+    : '';
+
+  const defaultStructure = PERSONA_ARTICLE_STRUCTURE[opts.personaId] ?? '## What Happened / ## Key Details / ## Why It Matters / ## What Happens Next';
+  const structureLine = opts.activeDirective
+    ? `Default structure (ACTIVE DIRECTIVE below overrides opening format): ${defaultStructure}`
+    : `Structure: ${defaultStructure}`;
+
+  const userPrompt = `NEWS SOURCE:
+Title: ${opts.item.title}
+Date: ${date}
+Category: ${opts.category}
+Content: ${opts.item.snippet}
+
+EDITORIAL ANGLE (assigned by editors): ${opts.angle}
+
+${continuationNote}
+
+${opts.verifiedHistory ? `${opts.verifiedHistory}\n` : ''}Write the article in your established voice.
+${structureLine}
+
+${opts.activeDirective ? `══════════════════════════════════════════
+ACTIVE DIRECTIVE FROM CHIEF EDITOR — HIGHEST PRIORITY
+This overrides default structure, voice defaults, and system prompt format guidance.
+"${opts.activeDirective}"
+You MUST comply exactly. Non-compliance is a publication failure.
+══════════════════════════════════════════
+
+` : ''}Return ONLY valid JSON:
+{
+  "title": "SEO title, 50-70 chars, fact-specific",
+  "excerpt": "120-220 chars, core event + why it matters",
+  "body": "full article markdown, use ## headers",
+  "metaTitle": "50-60 chars SEO",
+  "metaDescription": "140-160 chars",
+  "tags": ["3-5 relevant tags"],
+  "category": "${opts.category}",
+  "telegramText": "3-5 lines, numbers first, end with {URL}"
+}`;
+
+  const res    = await callClaude({ model: 'claude-sonnet-4-6', max_tokens: 2400, system, messages: [{ role: 'user', content: userPrompt }] });
+  return parseClaudeJson<DeskArticle>(res);
+}
+
+// ── Step 7c: Critique (self-review) ──────────────────────────────────────────
+
+async function critiqueAndFix(draft: DeskArticle, personaId: string): Promise<DeskArticle> {
+  const personaName = PERSONA_NAME[personaId] ?? personaId;
+
+  const prompt = `You are a senior editor reviewing an article by ${personaName} at finc.news.
+
+DRAFT:
+Title: "${draft.title}"
+Excerpt: "${draft.excerpt}"
+Body: "${draft.body.slice(0, 2500)}${draft.body.length > 2500 ? '...' : ''}"
+
+Check for these issues (ONLY flag real problems — do not invent issues):
+1. Conclusion is a question or vague ("we'll see") instead of a specific watch metric
+2. Voice breaks — sounds generic, not like ${personaName}
+3. Any numbers that appear fabricated (specific percentages, prices not in the source)
+4. Title and excerpt don't match the body's actual angle
+
+Return ONLY valid JSON:
+{
+  "approved": true | false,
+  "issues": ["issue 1", "issue 2"] | [],
+  "fix_instruction": null | "specific targeted fix in 1-2 sentences"
+}`;
+
+  try {
+    const res     = await callClaude({ model: 'claude-sonnet-4-6', max_tokens: 300, messages: [{ role: 'user', content: prompt }] });
+    const result  = await parseClaudeJson<{ approved: boolean; issues: string[]; fix_instruction: string | null }>(res);
+
+    if (result.approved || !result.fix_instruction) return draft;
+
+    // One targeted rewrite pass
+    const system = PERSONA_SYSTEM[personaId] ?? PERSONA_SYSTEM['leo-cruz'];
+    const fixPrompt = `You are ${personaName}. Rewrite this draft applying ONE specific fix.
+
+CURRENT DRAFT:
+${JSON.stringify(draft)}
+
+FIX TO APPLY:
+${result.fix_instruction}
+
+Return the corrected article as valid JSON in the exact same format.`;
+
+    const fixRes = await callClaude({ model: 'claude-sonnet-4-6', max_tokens: 2400, system, messages: [{ role: 'user', content: fixPrompt }] });
+    return await parseClaudeJson<DeskArticle>(fixRes);
+  } catch {
+    return draft;
+  }
+}
+
+// ── Victor Kane review helpers ────────────────────────────────────────────────
+
+const LEAKED_QA_PATTERNS = [
+  /\[EDITOR FLAG:/i,
+  /Editor'?s?\s+[Nn]ote:/i,
+  /\[BASELINE VALUE REQUIRED/i,
+  /\[σ-distance requires/i,
+  /\[σ-distance requires/i,
+  /\[verify price before publish/i,
+  /\(verify against[\s\S]{0,60}before publication\)/i,
+  /Editorial Hold\s*[—–\-]/i,
+  /Note to editor:/i,
+  /verify exact figures before publication/i,
+  /live\s+\S{0,30}\s+data unavailable at publish/i,
+  /pending (?:source|final publication) verification/i,
+  /will be appended\b/i,
+  /requires? (?:source|live) (?:confirmation|verification) before publication/i,
+];
+
+function detectLeakedQaText(body: string): string | null {
+  for (const p of LEAKED_QA_PATTERNS) {
+    const m = body.match(p);
+    if (m) return `Leaked QA annotation detected: "${m[0].slice(0, 80)}"`;
+  }
+  return null;
+}
+
+export function isHardBlock(reason: string): boolean {
+  return reason.startsWith('Leaked QA')
+    || reason.startsWith('Duplicate detected')
+    || reason.startsWith('Victor review unavailable');
+}
+
+const STOP_WORDS = new Set(['the','and','for','this','with','that','from','into','about','are','was','has','its','but','not','can','will','have','been','when','they','their']);
+
+function titleIsDuplicate(newTitle: string, recentTitles: string[]): string | null {
+  const tokenize = (t: string) =>
+    t.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 3 && !STOP_WORDS.has(w));
+
+  const newTokens = new Set(tokenize(newTitle));
+  for (const recent of recentTitles) {
+    const overlap = tokenize(recent).filter(w => newTokens.has(w)).length;
+    if (overlap >= 3) return recent;
+  }
+  return null;
+}
+
+// ── Step 8: Victor Kane pre-publish review ────────────────────────────────────
+
+export async function victorPrePublishReview(opts: {
+  article:             DeskArticle;
+  personaId:           string;
+  activeDirective:     string | null;
+  generationType:      'rss' | 'continuation' | 'self_work';
+  recentArticleTitles?: string[];
+}): Promise<VictorDecision> {
+  // Pre-scan: block immediately if article leaks internal QA/editorial text
+  const leakReason = detectLeakedQaText(opts.article.body);
+  if (leakReason) {
+    return { decision: 'block', edit_instruction: null, reason: `Leaked QA annotation detected — blocked before Victor review: ${leakReason}`, directive_followed: false };
+  }
+
+  // Pre-scan: block if title closely matches recent articles
+  if (opts.recentArticleTitles?.length) {
+    const dupTitle = titleIsDuplicate(opts.article.title, opts.recentArticleTitles);
+    if (dupTitle) {
+      return { decision: 'block', edit_instruction: null, reason: `Duplicate detected — closely matches recent article: "${dupTitle.slice(0, 100)}"`, directive_followed: true };
+    }
+  }
+
+  const personaName = PERSONA_NAME[opts.personaId] ?? opts.personaId;
+  const bodyPreview = opts.article.body.length > 4000
+    ? opts.article.body.slice(0, 4000) + '…'
+    : opts.article.body;
+
+  const prompt = `You are Victor Kane, Chief Editor of finc.news.
+20 years financial journalism — Reuters, Bloomberg Opinion. You manage AI analyst agents.
+
+PRE-PUBLICATION REVIEW
+
+ARTICLE:
+Title: "${opts.article.title}"
+Excerpt: "${opts.article.excerpt}"
+Body: "${bodyPreview}"
+
+AUTHOR: ${personaName}
+TYPE: ${opts.generationType === 'continuation' ? 'Continuation of previous story' : opts.generationType === 'self_work' ? 'Self-initiated article (no RSS source)' : 'New RSS article'}
+
+ACTIVE DIRECTIVE FOR ${personaName.toUpperCase()}:
+${opts.activeDirective ?? 'None currently active'}
+
+YOUR DECISION:
+Approve this for immediate publication, request ONE specific edit, or block it.
+
+block ONLY if: fabricated numbers/facts that cannot be corrected with a rewrite.
+edit for: directive not followed, voice breaks, weak conclusion, missing critical context.
+approve if: ready to publish as-is.
+
+Return ONLY valid JSON:
+{
+  "decision": "approve" | "edit" | "block",
+  "edit_instruction": null | "ONE specific instruction, max 2 sentences",
+  "reason": "one sentence",
+  "directive_followed": true | false
+}`;
+
+  try {
+    let res: Response;
+    try {
+      res = await callClaude({ model: 'claude-sonnet-4-6', max_tokens: 250, messages: [{ role: 'user', content: prompt }] });
+    } catch {
+      await new Promise(r => setTimeout(r, 2000));
+      res = await callClaude({ model: 'claude-sonnet-4-6', max_tokens: 250, messages: [{ role: 'user', content: prompt }] });
+    }
+    return await parseClaudeJson<VictorDecision>(res);
+  } catch {
+    return { decision: 'block', edit_instruction: null, reason: 'Victor review unavailable — blocked pending manual review', directive_followed: false };
+  }
+}
+
+// ── Step 8b: Apply Victor's edit ──────────────────────────────────────────────
+
+export async function applyVictorEdit(article: DeskArticle, personaId: string, instruction: string): Promise<DeskArticle> {
+  const system    = PERSONA_SYSTEM[personaId] ?? PERSONA_SYSTEM['leo-cruz'];
+  const prompt    = `You are ${PERSONA_NAME[personaId] ?? personaId}. Your chief editor has one specific revision request.
+
+CURRENT ARTICLE:
+${JSON.stringify(article)}
+
+CHIEF EDITOR INSTRUCTION:
+"${instruction}"
+
+Apply this exact change. Return the revised article as valid JSON in the same format.`;
+
+  try {
+    const res = await callClaude({ model: 'claude-sonnet-4-6', max_tokens: 2400, system, messages: [{ role: 'user', content: prompt }] });
+    return await parseClaudeJson<DeskArticle>(res);
+  } catch {
+    return article;
+  }
+}
+
+// ── Main entry point ──────────────────────────────────────────────────────────
+
+export async function generateDeskArticle(opts: {
+  item: {
+    title:    string;
+    snippet:  string;
+    url:      string;
+    pubDate?: string | null;
+  };
+  personaId:      string;
+  category:       string;
+  articleType:    'new' | 'continuation';
+  continuationOf: string | null;
+  isBreaking?:    boolean;
+  recentTitles?:  string[];
+}): Promise<DeskGenerateResult> {
+  const steps: DeskGenerateResult['steps'] = [];
+  const ctx     = await loadPersonaContext(opts.personaId);
+  const genType: 'rss' | 'continuation' = opts.articleType === 'continuation' ? 'continuation' : 'rss';
+
+  // 7a: Angle discovery — skipped for breaking news (use headline directly to save time)
+  let t = Date.now();
+  let angle: string;
+  if (opts.isBreaking) {
+    angle = opts.item.title;
+    steps.push({ name: 'angle_discovery', status: 'skip', durationMs: 0, note: 'breaking — using headline as angle' });
+  } else {
+    angle = await discoverAngle({
+      item:           opts.item,
+      personaId:      opts.personaId,
+      recentArticles: ctx.recentArticles,
+      articleType:    opts.articleType,
+      continuationOf: opts.continuationOf,
+    });
+    steps.push({ name: 'angle_discovery', status: 'ok', durationMs: Date.now() - t, note: angle.slice(0, 80) });
+  }
+
+  // 7b: Draft
+  t = Date.now();
+  let article = await generateDraft({
+    item:            { title: opts.item.title, snippet: opts.item.snippet, pubDate: opts.item.pubDate ?? undefined },
+    personaId:       opts.personaId,
+    category:        opts.category,
+    angle,
+    activeDirective: ctx.activeDirective,
+    continuationOf:  opts.continuationOf,
+    verifiedHistory: ctx.verifiedHistory,
+  });
+  steps.push({ name: 'draft', status: 'ok', durationMs: Date.now() - t, note: `"${article.title.slice(0, 60)}"` });
+
+  // 7c: Critique — skipped for breaking news
+  if (!opts.isBreaking) {
+    t = Date.now();
+    const beforeCritique = article.title;
+    article = await critiqueAndFix(article, opts.personaId);
+    const critiqued = article.title !== beforeCritique;
+    steps.push({ name: 'critique', status: 'ok', durationMs: Date.now() - t, note: critiqued ? 'revised' : 'approved as-is' });
+  }
+
+  // 8: Victor pre-publish
+  // Title dedup pre-scan only for new articles — continuations legitimately
+  // overlap the original story's title.
+  const dedupTitles = opts.articleType === 'new' ? opts.recentTitles : undefined;
+  t = Date.now();
+  let victorDecision = await victorPrePublishReview({
+    article,
+    personaId:           opts.personaId,
+    activeDirective:     ctx.activeDirective,
+    generationType:      genType,
+    recentArticleTitles: dedupTitles,
+  });
+  steps.push({ name: 'victor_review', status: 'ok', durationMs: Date.now() - t, note: `${victorDecision.decision}${victorDecision.edit_instruction ? ` — "${victorDecision.edit_instruction.slice(0, 60)}"` : ''}` });
+
+  // 8b: Apply edit if requested
+  if (victorDecision.decision === 'edit' && victorDecision.edit_instruction) {
+    t = Date.now();
+    article = await applyVictorEdit(article, opts.personaId, victorDecision.edit_instruction);
+    victorDecision = { ...victorDecision, decision: 'approve' };
+    steps.push({ name: 'victor_edit', status: 'ok', durationMs: Date.now() - t, note: 'applied' });
+  }
+
+  // 8c: Soft block → rewrite attempt (hard blocks from pre-scan are never retried)
+  if (victorDecision.decision === 'block' && !isHardBlock(victorDecision.reason)) {
+    t = Date.now();
+    article = await applyVictorEdit(article, opts.personaId, victorDecision.reason);
+    steps.push({ name: 'victor_rewrite', status: 'ok', durationMs: Date.now() - t, note: 'rewritten from soft block' });
+
+    // One re-review after rewrite — if still blocked, it propagates as final decision
+    t = Date.now();
+    victorDecision = await victorPrePublishReview({
+      article,
+      personaId:           opts.personaId,
+      activeDirective:     ctx.activeDirective,
+      generationType:      genType,
+      recentArticleTitles: dedupTitles,
+    });
+    steps.push({ name: 'victor_recheck', status: 'ok', durationMs: Date.now() - t, note: victorDecision.decision });
+
+    // Apply edit from re-review if needed
+    if (victorDecision.decision === 'edit' && victorDecision.edit_instruction) {
+      t = Date.now();
+      article = await applyVictorEdit(article, opts.personaId, victorDecision.edit_instruction);
+      victorDecision = { ...victorDecision, decision: 'approve' };
+      steps.push({ name: 'victor_edit_2', status: 'ok', durationMs: Date.now() - t, note: 'applied' });
+    }
+  }
+
+  return { article, victorDecision, steps };
+}

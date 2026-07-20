@@ -1,5 +1,6 @@
 import { createClient } from "@sanity/client";
 import type { Category } from "@/lib/i18n";
+import { buildTopicArticleFilter } from "@/lib/topic-matching";
 
 export type ArticleTranslation = {
   title: string;
@@ -14,6 +15,8 @@ export type PortableTextBlock = {
   _type: "block";
   _key?: string;
   style?: string;
+  listItem?: "bullet" | "number";
+  level?: number;
   children?: Array<{
     _type: "span";
     _key?: string;
@@ -32,7 +35,21 @@ export type Article = {
   coverImage?: { url?: string; alt?: string };
   tags?: string[];
   telegraphUrl?: string;
+  persona?: string;
+  authorName?: string;
+  authorAvatar?: string;
   en: ArticleTranslation;
+};
+
+export type TopicHub = {
+  _id: string;
+  slug: string;
+  title: string;
+  description?: string;
+  updatedAt?: string;
+  keywords?: string[];
+  body?: PortableTextBlock[] | string;
+  faqs?: Array<{ question: string; answer: string }>;
 };
 
 const projectId =
@@ -67,6 +84,9 @@ const projection = `
   sourceUrl,
   tags,
   telegraphUrl,
+  persona,
+  authorName,
+  authorAvatar,
   "coverImage": { "url": coverImage.asset->url, "alt": coverImage.alt },
   "en": translations.en
 `;
@@ -77,6 +97,26 @@ export async function getArticles(category?: Category): Promise<Article[]> {
     ? `*[_type == "article" && category == $category && defined(translations.en.title)] | order(publishedAt desc)[0...24] {${projection}}`
     : `*[_type == "article" && defined(translations.en.title)] | order(publishedAt desc)[0...24] {${projection}}`;
   return sanity.fetch<Article[]>(query, { category }, { next: { revalidate: 60 } });
+}
+
+export async function getArticlesPage(category: Category, page: number, pageSize: number): Promise<Article[]> {
+  if (!sanity) return [];
+  const start = Math.max(0, (page - 1) * pageSize);
+  const end = start + pageSize;
+  return sanity.fetch<Article[]>(
+    `*[_type == "article" && category == $category && defined(translations.en.title)]
+     | order(publishedAt desc)[$start...$end] {${projection}}`,
+    { category, start, end },
+    { next: { revalidate: 60 } },
+  );
+}
+
+export async function getArticleCount(category?: Category): Promise<number> {
+  if (!sanity) return 0;
+  const filter = category
+    ? `_type == "article" && category == $category && defined(translations.en.title)`
+    : `_type == "article" && defined(translations.en.title)`;
+  return sanity.fetch<number>(`count(*[${filter}])`, { category }, { next: { revalidate: 300 } });
 }
 
 export async function getArticle(slug: string): Promise<Article | null> {
@@ -108,6 +148,63 @@ export async function findArticleByTopic(topic: string): Promise<{ slug: string;
       translations.en.title match $pattern
     )] | order(publishedAt desc)[0] { "slug": slug.current, category }`,
     { pattern },
+    { next: { revalidate: 300 } },
+  );
+}
+
+export async function getTopicHubs(): Promise<TopicHub[]> {
+  if (!sanity) return [];
+  return sanity.fetch<TopicHub[]>(
+    `*[_type == "topicHub" && defined(slug.current)] | order(title asc) {
+      _id,
+      "slug": slug.current,
+      title,
+      description,
+      updatedAt,
+      keywords,
+      body,
+      faqs
+    }`,
+    {},
+    { next: { revalidate: 300 } },
+  );
+}
+
+export async function getTopicHub(slug: string): Promise<TopicHub | null> {
+  if (!sanity) return null;
+  return sanity.fetch<TopicHub | null>(
+    `*[_type == "topicHub" && slug.current == $slug][0] {
+      _id,
+      "slug": slug.current,
+      title,
+      description,
+      updatedAt,
+      keywords,
+      body,
+      faqs
+    }`,
+    { slug },
+    { next: { revalidate: 300 } },
+  );
+}
+
+export async function getArticlesByPersona(personaId: string, limit = 24): Promise<Article[]> {
+  if (!sanity) return [];
+  return sanity.fetch<Article[]>(
+    `*[_type == "article" && persona == $personaId && defined(translations.en.title)]
+     | order(publishedAt desc)[0...$limit] {${projection}}`,
+    { personaId, limit },
+    { next: { revalidate: 120 } },
+  );
+}
+
+export async function getArticlesForTopic(keywords: string[], limit = 12): Promise<Article[]> {
+  if (!sanity || keywords.length === 0) return [];
+  const { filter, params } = buildTopicArticleFilter(keywords);
+  return sanity.fetch<Article[]>(
+    `*[_type == "article" && defined(translations.en.title) && (${filter})]
+     | order(publishedAt desc)[0...$limit] {${projection}}`,
+    { ...params, limit },
     { next: { revalidate: 300 } },
   );
 }

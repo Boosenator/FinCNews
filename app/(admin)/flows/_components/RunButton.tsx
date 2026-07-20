@@ -16,6 +16,16 @@ type Result = {
   error?: string;
 };
 
+async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs = 70000) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
 const ACTIONS: { key: Action; label: string; endpoint: string; color: string }[] = [
   { key: "collect", label: "Collect RSS", endpoint: "/api/admin/collect", color: "border-white/[0.12] text-zinc-300 hover:border-cyan-400/40 hover:text-cyan-300" },
   { key: "generate", label: "Generate Articles", endpoint: "/api/admin/generate", color: "border-white/[0.12] text-zinc-300 hover:border-emerald-400/40 hover:text-emerald-300" },
@@ -30,13 +40,14 @@ export default function RunButton() {
     setRunning(action);
     setLast(null);
     try {
-      const res = await fetch(endpoint, { method: "POST" });
+      const res = await fetchWithTimeout(endpoint, { method: "POST" });
       const data = await res.json();
       setLast({ action, result: data });
     } catch (e) {
-      setLast({ action, result: { error: String(e) } });
+      setLast({ action, result: { error: e instanceof DOMException && e.name === "AbortError" ? "Request timed out" : String(e) } });
+    } finally {
+      setRunning(null);
     }
-    setRunning(null);
   }
 
   function summary(action: Action, result: Result): string {
